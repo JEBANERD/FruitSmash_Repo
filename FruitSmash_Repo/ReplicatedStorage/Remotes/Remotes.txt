@@ -1,0 +1,12 @@
+-- Remote Events (ReplicatedStorage/Remotes)
+
+RemoteEvent: "FruitSmashed"         -- Fired when a fruit is successfully hit or destroyed.
+RemoteEvent: "GameOverEvent"        -- Signals that the game has ended.
+RemoteEvent: "IntermissionEvent"    -- Triggers between rounds or levels.
+RemoteEvent: "PlayerSwing"          -- Fired when the player performs a swing action.
+RemoteEvent: "QuitRequested"        -- Sent when a player requests to quit or leave the game.
+RemoteEvent: "RequestFastStart"     -- Used to skip waiting and start the next round faster.
+RemoteEvent: "RestartRequested"     -- Sent when a restart is requested by the player or system.
+RemoteEvent: "RoundPointsAdd"       -- Updates or adds player points for a round.
+RemoteEvent: "RoundUpdate"          -- Broadcasts round state changes or progress updates.
+RemoteEvent: "StartCountdown"       -- Starts the countdown sequence before gameplay begins.
