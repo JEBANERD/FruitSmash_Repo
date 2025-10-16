@@ -6,6 +6,9 @@ local Players = game:GetService("Players")
 local Debris = game:GetService("Debris")
 local Workspace = game:GetService("Workspace")
 
+local Modules = RS:WaitForChild("Modules")
+local ShieldState = require(Modules:WaitForChild("ShieldState"))
+
 local Motion = require(RS:WaitForChild("ProjectileMotion"))
 local Presets = require(RS:WaitForChild("ProjectilePresets"))
 
@@ -121,45 +124,36 @@ end
 local function verifyShieldExpiry()
 	task.delay(SHIELD_DURATION + 0.25, function()
 		local activeFound = false
-		for _, t in ipairs(getAllTargets()) do
-			local flag = t:FindFirstChild("ShieldActive")
-			if flag and flag.Value then
-				activeFound = true
-				break
-			end
-		end
-		if not activeFound then
-			if TargetShieldGlobal and TargetShieldGlobal.Value then
-				TargetShieldGlobal.Value = false
-			end
-			for _, t in ipairs(getAllTargets()) do
-				local flag = t:FindFirstChild("ShieldActive")
-				if flag then flag.Value = false end
-			end
-			print("[AutoFire] ✅ Shield auto-cleared (local + global).")
-		end
-	end)
+	for _, t in ipairs(getAllTargets()) do
+                        if ShieldState.Get(t) then
+                                activeFound = true
+                                break
+                        end
+                end
+                if not activeFound and TargetShieldGlobal and TargetShieldGlobal.Value then
+                        TargetShieldGlobal.Value = false
+                        print("[AutoFire] ✅ Shield auto-cleared (global flag reset).")
+                end
+        end)
 end
 
 -- Real-time sync listener: ensures all turrets match global state immediately
 if TargetShieldGlobal then
-	TargetShieldGlobal.Changed:Connect(function(newVal)
-		if newVal then
-			print("[AutoFire] 🛡️ Global shield active — syncing local flags.")
-			for _, t in ipairs(getAllTargets()) do
-				local flag = t:FindFirstChild("ShieldActive")
-				if flag then flag.Value = true end
-			end
-			verifyShieldExpiry()
-		else
-			print("[AutoFire] 🔓 Global shield deactivated — clearing all lanes.")
-			for _, t in ipairs(getAllTargets()) do
-				local flag = t:FindFirstChild("ShieldActive")
-				if flag then flag.Value = false end
-			end
-		end
-	end)
-end
+        TargetShieldGlobal.Changed:Connect(function(newVal)
+                if newVal then
+                        print("[AutoFire] 🛡️ Global shield active — syncing local flags.")
+                        for _, t in ipairs(getAllTargets()) do
+                                ShieldState.Set(t, true)
+                        end
+                        verifyShieldExpiry()
+                else
+                        print("[AutoFire] 🔓 Global shield deactivated — clearing all lanes.")
+                        for _, t in ipairs(getAllTargets()) do
+                                ShieldState.Set(t, false)
+                        end
+                end
+        end)
+end	
 
 -- === Lane-aware target (fallback to Workspace.Target)
 local function getLaneAndTarget()
@@ -223,14 +217,13 @@ end
 local function applyDamageToTarget(target, health, dmg)
 	if not target or not health then return end
 
-	local shieldFlag = target:FindFirstChild("ShieldActive")
-	local globalActive = TargetShieldGlobal and TargetShieldGlobal.Value
-
-	if (shieldFlag and shieldFlag.Value) or globalActive then
-		print("[AutoFire] 🔵 Hit blocked by active shield!")
-		local hitbox = target:FindFirstChild("Hitbox")
-		if hitbox then
-			local originalColor = hitbox.Color
+	local shieldUp = ShieldState.Get(target)
+    local globalActive = TargetShieldGlobal and TargetShieldGlobal.Value
+    if shieldUp or globalActive then
+            print("[AutoFire] 🔵 Hit blocked by active shield!")
+            local hitbox = target:FindFirstChild("Hitbox")
+            if hitbox then
+                    local originalColor = hitbox.Color
 			hitbox.Color = SHIELD_FLASH_COLOR
 			task.delay(SHIELD_FLASH_TIME, function()
 				if hitbox and hitbox.Parent then
@@ -252,6 +245,7 @@ local function applyDamageToTarget(target, health, dmg)
 		if GameActive then GameActive.Value = false end
 	end
 end
+
 
 -- ===== Fire Logic =====
 local function chooseFruitName()
