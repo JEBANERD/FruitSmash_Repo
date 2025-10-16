@@ -5,6 +5,10 @@ local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
+local Modules = RS:WaitForChild("Modules")
+local ShieldState = require(Modules:WaitForChild("ShieldState"))
+local PowerupEffects = require(script.Parent:WaitForChild("PowerupEffects"))
+
 -- === CONFIG ===
 local DEFAULT_COUNTDOWN = 10
 local FAST_COUNTDOWN = 3
@@ -128,24 +132,23 @@ end
 
 -- === NEW: Reset all shield states globally & locally ===
 local function resetAllShields()
-	TargetShieldFlag.Value = false
-	local lanes = Workspace:FindFirstChild("Lanes")
-	if lanes then
-		for _, lane in ipairs(lanes:GetChildren()) do
-			local t = lane:FindFirstChild("Target")
-			if t then
-				local shieldFlag = t:FindFirstChild("ShieldActive")
-				if shieldFlag then
-					shieldFlag.Value = false
-				end
-				local shieldBubble = t:FindFirstChild("TargetShieldBubble")
-				if shieldBubble then
-					shieldBubble:Destroy()
-				end
-			end
-		end
-	end
-	print("[RoundDirector] 🛡️ All shields reset (local + global).")
+        PowerupEffects.ClearAllShields()
+        TargetShieldFlag.Value = false
+
+        local lanes = Workspace:FindFirstChild("Lanes")
+        if lanes then
+                for _, lane in ipairs(lanes:GetChildren()) do
+                        local t = lane:FindFirstChild("Target")
+                        if t then
+                                ShieldState.Set(t, false)
+                                local shieldBubble = t:FindFirstChild("TargetShieldBubble")
+                                if shieldBubble then
+                                        shieldBubble:Destroy()
+                                end
+                        end
+                end
+        end
+        print("[RoundDirector] 🛡️ All shields reset (local + global).")
 end
 -- Just after creating TargetShieldFlag
 TargetShieldFlag.Changed:Connect(function(newVal)
@@ -195,14 +198,11 @@ local function resetAllTargetsHP()
 				health.Value = max.Value
 			end
 			-- 🩹 Clear shields on reset
-			local shieldFlag = target:FindFirstChild("ShieldActive")
-			if shieldFlag then
-				shieldFlag.Value = false
-			end
-			local shieldBubble = target:FindFirstChild("TargetShieldBubble")
-			if shieldBubble then
-				shieldBubble:Destroy()
-			end
+                        ShieldState.Set(target, false)
+                        local shieldBubble = target:FindFirstChild("TargetShieldBubble")
+                        if shieldBubble then
+                                shieldBubble:Destroy()
+                        end
 		end
 	end
 	TargetShieldFlag.Value = false
@@ -385,3 +385,4 @@ RestartRequested.OnServerEvent:Connect(function(plr: Player)
 
 	beginRound(DEFAULT_COUNTDOWN, { resetTargets = false })
 end)
+
