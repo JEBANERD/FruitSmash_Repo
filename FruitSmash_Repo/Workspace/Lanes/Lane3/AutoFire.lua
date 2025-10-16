@@ -8,7 +8,7 @@ local Workspace = game:GetService("Workspace")
 
 local Modules = RS:WaitForChild("Modules")
 local ShieldState = require(Modules:WaitForChild("ShieldState"))
-
+␊
 local Motion = require(RS:WaitForChild("ProjectileMotion"))
 local Presets = require(RS:WaitForChild("ProjectilePresets"))
 
@@ -26,11 +26,16 @@ local ActiveProjectiles = Workspace:FindFirstChild("ActiveProjectiles") or Insta
 ActiveProjectiles.Name = "ActiveProjectiles"
 
 -- ===== Tunables =====
+local DEBUG_TURRET = false
+
 local FIRE_INTERVAL_BASE = 3.0
 local FIRE_INTERVAL_RANDOMNESS = 0.6
 local FRUITS = { "Apple", "Banana", "Orange", "Grape", "Pineapple" }
 local BARREL_SPAWN_BACKOFF = 1.0
 local INVERT_FORWARD = false
+
+local FIRE_COOLDOWN_BASE = 0.6
+local FIRE_COOLDOWN_MIN = 0.15
 
 -- Flight / lifetime
 local MAXTIME_MULT = 1.35
@@ -139,7 +144,7 @@ end
 
 -- Real-time sync listener: ensures all turrets match global state immediately
 if TargetShieldGlobal then
-        TargetShieldGlobal.Changed:Connect(function(newVal)
+        track(TargetShieldGlobal.Changed:Connect(function(newVal)
                 if newVal then
                         print("[AutoFire] 🛡️ Global shield active — syncing local flags.")
                         for _, t in ipairs(getAllTargets()) do
@@ -152,12 +157,12 @@ if TargetShieldGlobal then
                                 ShieldState.Set(t, false)
                         end
                 end
-        end)
-end	
+        end))
+end
 
 -- === Lane-aware target (fallback to Workspace.Target)
 local function getLaneAndTarget()
-	local lanes = Workspace:FindFirstChild("Lanes")
+        local lanes = Workspace:FindFirstChild("Lanes")
 	local lane = turret:FindFirstAncestorWhichIsA("Folder")
 	if lanes and lane and lane.Parent == lanes then
 		local t = lane:FindFirstChild("Target")
@@ -267,107 +272,186 @@ end
 
 -- ===== One Shot =====
 local function fireOnce()
-	if not GameActive.Value then return end
+        if not GameActive.Value then return false end
 
-	local lane, target, hitbox, health = getLaneAndTarget()
-	if not target or not hitbox or not health then return end
+        local lane, target, hitbox, health = getLaneAndTarget()
+        if not target or not hitbox or not health then return false end
 
-	local muzzleCF = getMuzzleCF()
-	if not muzzleCF then return end
+        local muzzleCF = getMuzzleCF()
+        if not muzzleCF then return false end
 
-	local fruitName = chooseFruitName()
-	local template = resolveTemplate(fruitName)
-	if not template then return end
+        local fruitName = chooseFruitName()
+        local template = resolveTemplate(fruitName)
+        if not template then return false end
 
-	local proj = template:Clone()
-	proj:SetAttribute("FruitName", fruitName)
+        local proj = template:Clone()
+        proj:SetAttribute("FruitName", fruitName)
 
-	local preset = Presets[fruitName] or Presets._Default
-	local damage = preset.Damage or 10
-	proj:SetAttribute("Damage", damage)
-	proj:SetAttribute("Lifetime", 60)
+        local preset = Presets[fruitName] or Presets._Default
+        local damage = preset.Damage or 10
+        proj:SetAttribute("Damage", damage)
+        proj:SetAttribute("Lifetime", 60)
 
-	if proj:IsA("Model") then ensurePrimaryPart(proj) end
-	proj.Parent = ActiveProjectiles
+        if proj:IsA("Model") then ensurePrimaryPart(proj) end
+        proj.Parent = ActiveProjectiles
 
-	local startPos = muzzleCF.Position
-	local endPos   = hitbox.Position
+        local startPos = muzzleCF.Position
+        local endPos   = hitbox.Position
 
-	local speed = preset.Speed or 10
-	local path  = normalizePath(preset.Path or "Linear")
+        local speed = preset.Speed or 10
+        local path  = normalizePath(preset.Path or "Linear")
 
-	local dist    = (endPos - startPos).Magnitude
-	local raw     = dist / math.max(speed, 0.01)
-	local maxTime = math.clamp(raw * MAXTIME_MULT + MAXTIME_PAD, MAXTIME_MIN, MAXTIME_MAX)
-	local cleanup = math.clamp(maxTime + CLEANUP_PAD, CLEANUP_MIN, CLEANUP_MAX)
+        local dist    = (endPos - startPos).Magnitude
+        local raw     = dist / math.max(speed, 0.01)
+        local maxTime = math.clamp(raw * MAXTIME_MULT + MAXTIME_PAD, MAXTIME_MIN, MAXTIME_MAX)
+        local cleanup = math.clamp(maxTime + CLEANUP_PAD, CLEANUP_MIN, CLEANUP_MAX)
 
-	local ignore = buildIgnoreList({proj})
-	addCommonIgnores(ignore)
-	addAttributeIgnores(ignore)
+        local ignore = buildIgnoreList({proj})
+        addCommonIgnores(ignore)
+        addAttributeIgnores(ignore)
 
-	local function onHit(hitInst)
-		local isTargetHit = hitInst and hitInst:IsDescendantOf(target) or false
-		if not isTargetHit then
-			local rootPart = proj:IsA("Model") and proj.PrimaryPart or (proj:IsA("BasePart") and proj or nil)
-			if rootPart then
-				local d = (rootPart.Position - hitbox.Position).Magnitude
-				if d <= PROX_HIT_TOLERANCE then
-					isTargetHit = true
-				end
-			end
-		end
+        local function onHit(hitInst)
+                local isTargetHit = hitInst and hitInst:IsDescendantOf(target) or false
+                if not isTargetHit then
+                        local rootPart = proj:IsA("Model") and proj.PrimaryPart or (proj:IsA("BasePart") and proj or nil)
+                        if rootPart then
+                                local d = (rootPart.Position - hitbox.Position).Magnitude
+                                if d <= PROX_HIT_TOLERANCE then
+                                        isTargetHit = true
+                                end
+                        end
+                end
 
-		if isTargetHit then
-			applyDamageToTarget(target, health, damage)
-		end
+                if isTargetHit then
+                        applyDamageToTarget(target, health, damage)
+                end
 
-		Debris:AddItem(proj, 0)
-	end
+                Debris:AddItem(proj, 0)
+        end
 
-	Motion.Launch(proj, startPos, endPos, {
-		Speed = speed,
-		Path = path,
-		ControlOffset = preset.ControlOffset,
-		Amplitude = preset.Amplitude,
-		Frequency = preset.Frequency,
-		MaxTime = maxTime,
-		IgnoreInstances = ignore,
-		OnHit = onHit,
-	})
+        Motion.Launch(proj, startPos, endPos, {
+                Speed = speed,
+                Path = path,
+                ControlOffset = preset.ControlOffset,
+                Amplitude = preset.Amplitude,
+                Frequency = preset.Frequency,
+                MaxTime = maxTime,
+                IgnoreInstances = ignore,
+                OnHit = onHit,
+        })
 
-	Debris:AddItem(proj, cleanup)
+        Debris:AddItem(proj, cleanup)
+        return true
 end
 
 -- ===== Fire Modes =====
 local fireTrigger = turret:FindFirstChild("FireTrigger")
 if not fireTrigger then
-	fireTrigger = Instance.new("BindableEvent")
-	fireTrigger.Name = "FireTrigger"
-	fireTrigger.Parent = turret
+        fireTrigger = Instance.new("BindableEvent")
+        fireTrigger.Name = "FireTrigger"
+        fireTrigger.Parent = turret
 end
 
-fireTrigger.Event:Connect(function()
-	if GameActive.Value then
-		fireOnce()
-	end
-end)
+local nextFireTime = 0
 
--- Auto-fire loop
-task.spawn(function()
-	while turret.Parent do
-		if not GameActive.Value then
-			local conn
-			conn = GameActive.Changed:Connect(function()
-				if GameActive.Value and conn then conn:Disconnect() end
-			end)
-			repeat task.wait(0.05) until GameActive.Value
-		end
+local function computeCooldownSeconds()
+        local baseAttr = turret:GetAttribute("FireCooldown")
+        local base = (typeof(baseAttr) == "number" and baseAttr) or FIRE_COOLDOWN_BASE
+        local scale = intensityFactor()
+        local cooldown = base / math.max(scale, 0.5)
+        return math.max(FIRE_COOLDOWN_MIN, cooldown)
+end
 
-		fireOnce()
+local function setNextFireAttribute(value)
+        if not turret then return end
+        local ok, err = pcall(function()
+                turret:SetAttribute("NextFireTime", value)
+        end)
+        if not ok and DEBUG_TURRET then
+                warn("[AutoFire] Failed to set NextFireTime", err)
+        end
+end
 
-		local jitter = (math.random() * 2 - 1) * FIRE_INTERVAL_RANDOMNESS
-		local waitBase = math.max(0.1, FIRE_INTERVAL_BASE + jitter)
-		local waitTime = waitBase / intensityFactor()
-		task.wait(waitTime)
-	end
-end)
+local function beginCooldown()
+        local cooldown = computeCooldownSeconds()
+        nextFireTime = os.clock() + cooldown
+        setNextFireAttribute(nextFireTime)
+        if DEBUG_TURRET then
+                print(string.format("[AutoFire] ⏳ cooldown %.2fs", cooldown))
+        end
+        return cooldown
+end
+
+local connections = {}
+local cleaned = false
+
+local function track(conn)
+        table.insert(connections, conn)
+        return conn
+end
+
+local function clearCooldown()
+        nextFireTime = 0
+        setNextFireAttribute(nil)
+end
+
+local function cleanup()
+        if cleaned then return end
+        cleaned = true
+        for _, conn in ipairs(connections) do
+                if conn.Connected then
+                        conn:Disconnect()
+                end
+        end
+        table.clear(connections)
+        clearCooldown()
+end
+
+if turret.Destroying then
+        track(turret.Destroying:Connect(cleanup))
+end
+
+track(turret.AncestryChanged:Connect(function()
+        if not turret:IsDescendantOf(Workspace) then
+                cleanup()
+        end
+end))
+
+track(GameActive.Changed:Connect(function()
+        if not GameActive.Value then
+                clearCooldown()
+                if DEBUG_TURRET then
+                        print("[AutoFire] 💤 cooldown cleared (round inactive)")
+                end
+        end
+end))
+
+track(fireTrigger.Event:Connect(function()
+        if not GameActive.Value then return end
+        local now = os.clock()
+        if now < nextFireTime then
+                if DEBUG_TURRET then
+                        local remaining = math.max(0, nextFireTime - now)
+                        print(string.format("[AutoFire] 🔁 trigger ignored (%.2fs remaining)", remaining))
+                end
+                return
+        end
+
+        if DEBUG_TURRET then
+                print("[AutoFire] 🔔 trigger received")
+        end
+
+        beginCooldown()
+        local fired = fireOnce()
+        if not fired then
+                        if DEBUG_TURRET then
+                                print("[AutoFire] ⚠️ firing aborted, cooldown cleared")
+                        end
+                        clearCooldown()
+        end
+end))
+
+if script.Destroying then
+        track(script.Destroying:Connect(cleanup))
+end
+
