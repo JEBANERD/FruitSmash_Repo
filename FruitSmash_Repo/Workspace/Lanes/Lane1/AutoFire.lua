@@ -8,9 +8,32 @@ local Workspace = game:GetService("Workspace")
 
 local Modules = RS:WaitForChild("Modules")
 local ShieldState = require(Modules:WaitForChild("ShieldState"))
-␊
+
 local Motion = require(RS:WaitForChild("ProjectileMotion"))
 local Presets = require(RS:WaitForChild("ProjectilePresets"))
+
+local _connections = {}
+local function track(conn)
+        table.insert(_connections, conn)
+        return conn
+end
+
+local function cleanupConnections()
+        for i = #_connections, 1, -1 do
+                local conn = _connections[i]
+                if conn then
+                        local ok, err = pcall(function()
+                                if conn.Disconnect then
+                                        conn:Disconnect()
+                                end
+                        end)
+                        if not ok then
+                                warn("[AutoFire] Failed to disconnect connection:", err)
+                        end
+                end
+                _connections[i] = nil
+        end
+end
 
 local Remotes = RS:FindFirstChild("Remotes")
 local GameOverEvent = Remotes and Remotes:FindFirstChild("GameOverEvent")
@@ -144,7 +167,8 @@ end
 
 -- Real-time sync listener: ensures all turrets match global state immediately
 if TargetShieldGlobal then
-        track(TargetShieldGlobal.Changed:Connect(function(newVal)
+        track(TargetShieldGlobal:GetPropertyChangedSignal("Value"):Connect(function()
+                local newVal = TargetShieldGlobal.Value
                 if newVal then
                         print("[AutoFire] 🛡️ Global shield active — syncing local flags.")
                         for _, t in ipairs(getAllTargets()) do
@@ -382,13 +406,7 @@ local function beginCooldown()
         return cooldown
 end
 
-local connections = {}
 local cleaned = false
-
-local function track(conn)
-        table.insert(connections, conn)
-        return conn
-end
 
 local function clearCooldown()
         nextFireTime = 0
@@ -396,16 +414,11 @@ local function clearCooldown()
 end
 
 local function cleanup()
-        if cleaned then return end
+    if cleaned then return end
         cleaned = true
-        for _, conn in ipairs(connections) do
-                if conn.Connected then
-                        conn:Disconnect()
-                end
-        end
-        table.clear(connections)
+        cleanupConnections()
         clearCooldown()
-end
+end    
 
 if turret.Destroying then
         track(turret.Destroying:Connect(cleanup))
@@ -454,4 +467,5 @@ end))
 if script.Destroying then
         track(script.Destroying:Connect(cleanup))
 end
+
 
