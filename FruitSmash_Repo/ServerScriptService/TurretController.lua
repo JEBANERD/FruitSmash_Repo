@@ -15,6 +15,7 @@ local RoundGoal = RoundState:WaitForChild("RoundGoal")
 -- Debug / test toggles
 local DEBUG_LOG_FIRE = false
 local SINGLE_TRACK_TEST = false
+local DEBUG_TURRET = false
 
 -- Base timing
 local STEP_BASE_SECONDS = 3.8
@@ -107,8 +108,8 @@ end
 
 -- === Lane Discovery ===
 local function collectTurrets()
-	local list = {}
-	local lanes = Workspace:FindFirstChild("Lanes")
+        local list = {}
+        local lanes = Workspace:FindFirstChild("Lanes")
 
 	if lanes and lanes:IsA("Folder") then
 		for _, lane in ipairs(lanes:GetChildren()) do
@@ -155,26 +156,40 @@ local function collectTurrets()
 		end)
 	end
 
-	for i, info in ipairs(list) do
-		if info.model then
-			info.model:SetAttribute("SlotIndex", i)
-		end
-	end
-	return list
+ for i, info in ipairs(list) do
+                if info.model then
+                        info.model:SetAttribute("SlotIndex", i)
+                end
+        end
+        return list
 end
 
 -- === Firing ===
 local function fireTurret(info)
-	if not info or not info.model or not info.model.Parent then return end
-	if not GameActive.Value then return end
-	if info.trigger then
-		info.trigger:Fire()
-	end
-	if DEBUG_LOG_FIRE then
-		local slot = info.model:GetAttribute("SlotIndex") or "?"
-		print(("[TC] Fired slot %s"):format(tostring(slot)))
-	end
-end
+        if not info or not info.model or not info.model.Parent then return end
+        if not GameActive.Value then return end
+        local now = os.clock()
+        local nextAllowed = info.model:GetAttribute("NextFireTime")
+        if typeof(nextAllowed) == "number" and nextAllowed > now then
+                if DEBUG_TURRET then
+                        local remaining = math.max(0, nextAllowed - now)
+                        local slot = info.model:GetAttribute("SlotIndex") or "?"
+                        print(string.format("[TurretController] ⏱️ slot %s cooling down (%.2fs left)", slot, remaining))
+                end
+                return
+        end
+        if info.trigger then
+                info.trigger:Fire()
+        end
+        if DEBUG_LOG_FIRE then
+                local slot = info.model:GetAttribute("SlotIndex") or "?"
+                print(("[TC] Fired slot %s"):format(tostring(slot)))
+        end
+        if DEBUG_TURRET then
+                local slot = info.model:GetAttribute("SlotIndex") or "?"
+                print(string.format("[TurretController] 🔥 fired slot %s", slot))
+        end
+end	
 
 -- === Pattern Generation ===
 local PATTERN = { 1 }
@@ -249,9 +264,9 @@ task.defer(function()
 end)
 
 -- === Pacing Track Runner ===
-local function runTrack(trackId, turrets, startIndex, stopSignal)
-	local cursor
-	if ENABLE_CURSOR_CUBE and turrets[1] then
+local function runTrack(trackId, turrets, startIndex, stopSignal)␊
+        local cursor
+        if ENABLE_CURSOR_CUBE and turrets[1] then
 		local tpl = RS:FindFirstChild(CURSOR_TEMPLATE_NAME)
 		if tpl and tpl:IsA("BasePart") then
 			cursor = tpl:Clone()
@@ -266,15 +281,12 @@ local function runTrack(trackId, turrets, startIndex, stopSignal)
 	end
 
 	local idx = startIndex or 1
-	while not stopSignal.stop do
-		waitUntilActive()
-		if stopSignal.stop then break end
-
-		local n = #PATTERN
-		if n == 0 or #turrets == 0 then
-			task.wait(0.1)
-			continue
-		end
+        if DEBUG_TURRET then
+                print(string.format("[TurretController] ▶️ track %d started", trackId))
+        end
+        while not stopSignal.stop do
+                waitUntilActive()
+                if stopSignal.stop then break end
 
 		local digit = PATTERN[((idx - 1) % n) + 1]
 		local pickIndex = ((digit - 1) % #turrets) + 1
@@ -297,9 +309,18 @@ local function runTrack(trackId, turrets, startIndex, stopSignal)
 			if stopSignal.stop or not GameActive.Value then break end
 			task.wait(0.05)
 		end
-	end
 
-	if cursor then cursor:Destroy() end
+
+
+
+
+		
+end
+
+        if cursor then cursor:Destroy() end
+        if DEBUG_TURRET then
+                print(string.format("[TurretController] ⏹️ track %d stopped", trackId))
+        end
 end
 
 -- === Manager Loop ===
@@ -309,28 +330,49 @@ task.spawn(function()
 	local lastScan = os.clock()
 	local tracks = {}
 
-	local function killAllTracks()
-		for _, t in ipairs(tracks) do
-			t.stop.stop = true
-		end
-		for _, t in ipairs(tracks) do
-			if t.thread and coroutine.status(t.thread) ~= "dead" then
+	local function resetCooldowns()
+                for _, info in ipairs(turrets) do
+                        if info.model then
+                                info.model:SetAttribute("NextFireTime", nil)
+                        end
+                end
+        end
+
+        local function killAllTracks()
+                for _, t in ipairs(tracks) do
+                        t.stop.stop = true
+                end
+                for _, t in ipairs(tracks) do
+                        if t.thread and coroutine.status(t.thread) ~= "dead" then
 				for _ = 1, 15 do
 					if coroutine.status(t.thread) == "dead" then break end
 					task.wait(0.02)
 				end
 			end
 		end
-		tracks = {}
-	end
+                if DEBUG_TURRET and #tracks > 0 then
+                        print(string.format("[TurretController] ❌ cleared %d tracks", #tracks))
+                end
+                resetCooldowns()
+                tracks = {}
+        end
 
-	while true do
-		waitUntilActive()
+        while true do
+                if not GameActive.Value then
+                        if #tracks > 0 then
+                                killAllTracks()
+                        end
+                        waitUntilActive()
+                        turrets = collectTurrets()
+                        lastScan = os.clock()
+                end
 
-		if (os.clock() - lastScan) >= RESCAN_LANES_EVERY then
-			turrets = collectTurrets()
-			lastScan = os.clock()
-		end
+                waitUntilActive()
+
+                if (os.clock() - lastScan) >= RESCAN_LANES_EVERY then
+                        turrets = collectTurrets()
+                        lastScan = os.clock()
+                end
 
 		local desired = TRACKS_BASE +
 			(TRACKS_PER_INTENSITY * math.max(0, intensityFactor() - 1)) +
@@ -339,21 +381,25 @@ task.spawn(function()
 
 		if SINGLE_TRACK_TEST then desired = 1 end
 
-		if #tracks ~= desired then
-			killAllTracks()
-			for i = 1, desired do
-				local stopSignal = { stop = false }
-				local co = coroutine.create(function()
-					task.wait(staggerDelay())
-					runTrack(i, turrets, i, stopSignal)
-				end)
-				table.insert(tracks, { thread = co, stop = stopSignal })
-				coroutine.resume(co)
-			end
-		end
+	if #tracks ~= desired then
+                        killAllTracks()
+                        for i = 1, desired do
+                                local stopSignal = { stop = false }
+                                local co = coroutine.create(function()
+                                        task.wait(staggerDelay())
+                                        runTrack(i, turrets, i, stopSignal)
+                                end)
+                                table.insert(tracks, { thread = co, stop = stopSignal })
+                                coroutine.resume(co)
+                                if DEBUG_TURRET then
+                                        print(string.format("[TurretController] ➕ spawned track %d/%d", i, desired))
+                                end
+                        end
+                end
 
-		task.wait(0.15)
-	end
+                task.wait(0.15)
+        end	
 end)
 
 print("[TurretController] Combo sequencer active with rhythmic pacing.")
+
