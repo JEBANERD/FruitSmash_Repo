@@ -12,26 +12,47 @@ local ShieldState = require(Modules:WaitForChild("ShieldState"))
 local Motion = require(RS:WaitForChild("ProjectileMotion"))
 local Presets = require(RS:WaitForChild("ProjectilePresets"))
 
-local _connections = {}
+local runtimeConnections = {}
+local lifetimeConnections = {}
+
+local function safeDisconnect(conn, label)
+        if conn and conn.Disconnect then
+                local ok, err = pcall(function()
+                        conn:Disconnect()
+                end)
+                if not ok then
+                        warn(string.format("[AutoFire] Failed to disconnect %s connection:", label or "tracked"), err)
+                end
+        end
+end
+
 local function track(conn)
-        table.insert(_connections, conn)
+        if conn then
+                table.insert(runtimeConnections, conn)
+        end
         return conn
 end
 
 local function cleanupConnections()
-        for i = #_connections, 1, -1 do
-                local conn = _connections[i]
-                if conn then
-                        local ok, err = pcall(function()
-                                if conn.Disconnect then
-                                        conn:Disconnect()
-                                end
-                        end)
-                        if not ok then
-                                warn("[AutoFire] Failed to disconnect connection:", err)
-                        end
-                end
-                _connections[i] = nil
+        for i = #runtimeConnections, 1, -1 do
+                local conn = runtimeConnections[i]
+                safeDisconnect(conn, "runtime")
+                runtimeConnections[i] = nil
+        end
+end
+
+local function trackLifetime(conn)
+        if conn then
+                table.insert(lifetimeConnections, conn)
+        end
+        return conn
+end
+
+local function cleanupLifetimeConnections()
+        for i = #lifetimeConnections, 1, -1 do
+                local conn = lifetimeConnections[i]
+                safeDisconnect(conn, "lifetime")
+                lifetimeConnections[i] = nil
         end
 end
 
@@ -131,8 +152,45 @@ local function addAttributeIgnores(ignore)
 end
 
 -- === SHIELD UTILITIES ===
+local TARGET_SHIELD_ATTRIBUTE_NAME = "TargetShieldGlobal"
 local TargetShieldGlobal = RS:FindFirstChild("TargetShieldActive")
+local TargetShieldAttributeSource = nil
 local SHIELD_DURATION = 15 -- must match PowerupEffects
+
+if TargetShieldGlobal and not TargetShieldGlobal:IsA("ValueBase") then
+        if TargetShieldGlobal:GetAttribute(TARGET_SHIELD_ATTRIBUTE_NAME) ~= nil then
+                TargetShieldAttributeSource = TargetShieldGlobal
+                TargetShieldGlobal = nil
+        else
+                warn("[AutoFire] TargetShieldActive is not a ValueBase and lacks attribute fallback; global shield sync disabled.")
+        end
+elseif not TargetShieldGlobal then
+        if RS:GetAttribute(TARGET_SHIELD_ATTRIBUTE_NAME) ~= nil then
+                TargetShieldAttributeSource = RS
+        end
+end
+
+local function readGlobalShieldState()
+        if TargetShieldGlobal and TargetShieldGlobal:IsA("ValueBase") then
+                return TargetShieldGlobal.Value == true
+        elseif TargetShieldAttributeSource then
+                return TargetShieldAttributeSource:GetAttribute(TARGET_SHIELD_ATTRIBUTE_NAME) == true
+        end
+        return false
+end
+
+local function setGlobalShieldState(active)
+        local ok, err = pcall(function()
+                if TargetShieldGlobal and TargetShieldGlobal:IsA("ValueBase") then
+                        TargetShieldGlobal.Value = active and true or false
+                elseif TargetShieldAttributeSource then
+                        TargetShieldAttributeSource:SetAttribute(TARGET_SHIELD_ATTRIBUTE_NAME, active and true or false)
+                end
+        end)
+        if not ok then
+                warn("[AutoFire] Failed to update global shield state:", err)
+        end
+end
 
 local function getAllTargets()
 	local out = {}
@@ -150,37 +208,54 @@ end
 
 -- Ensures both local and global flags toggle off after duration
 local function verifyShieldExpiry()
-	task.delay(SHIELD_DURATION + 0.25, function()
-		local activeFound = false
-	for _, t in ipairs(getAllTargets()) do
+        task.delay(SHIELD_DURATION + 0.25, function()
+                local activeFound = false
+                for _, t in ipairs(getAllTargets()) do
                         if ShieldState.Get(t) then
                                 activeFound = true
                                 break
                         end
                 end
-                if not activeFound and TargetShieldGlobal and TargetShieldGlobal.Value then
-                        TargetShieldGlobal.Value = false
+                if not activeFound and readGlobalShieldState() then
+                        setGlobalShieldState(false)
                         print("[AutoFire] ✅ Shield auto-cleared (global flag reset).")
                 end
         end)
 end
 
--- Real-time sync listener: ensures all turrets match global state immediately
-if TargetShieldGlobal then
-        track(TargetShieldGlobal:GetPropertyChangedSignal("Value"):Connect(function()
-                local newVal = TargetShieldGlobal.Value
-                if newVal then
-                        print("[AutoFire] 🛡️ Global shield active — syncing local flags.")
-                        for _, t in ipairs(getAllTargets()) do
-                                ShieldState.Set(t, true)
-                        end
-                        verifyShieldExpiry()
-                else
-                        print("[AutoFire] 🔓 Global shield deactivated — clearing all lanes.")
-                        for _, t in ipairs(getAllTargets()) do
-                                ShieldState.Set(t, false)
-                        end
+local lastGlobalShieldState = nil
+
+local function applyGlobalShieldState(active)
+        local isActive = active == true
+        if lastGlobalShieldState == isActive then
+                return
+        end
+        lastGlobalShieldState = isActive
+
+        if isActive then
+                print("[AutoFire] 🛡️ Global shield active — syncing local flags.")
+                for _, t in ipairs(getAllTargets()) do
+                        ShieldState.Set(t, true)
                 end
+                verifyShieldExpiry()
+        else
+                print("[AutoFire] 🔓 Global shield deactivated — clearing all lanes.")
+                for _, t in ipairs(getAllTargets()) do
+                        ShieldState.Set(t, false)
+                end
+        end
+end
+
+-- Real-time sync listener: ensures all turrets match global state immediately
+if TargetShieldGlobal and TargetShieldGlobal:IsA("ValueBase") then
+        applyGlobalShieldState(TargetShieldGlobal.Value == true)
+        trackLifetime(TargetShieldGlobal.Changed:Connect(function(newVal)
+                applyGlobalShieldState(newVal == true)
+        end))
+elseif TargetShieldAttributeSource then
+        applyGlobalShieldState(TargetShieldAttributeSource:GetAttribute(TARGET_SHIELD_ATTRIBUTE_NAME) == true)
+        trackLifetime(TargetShieldAttributeSource:GetAttributeChangedSignal(TARGET_SHIELD_ATTRIBUTE_NAME):Connect(function()
+                applyGlobalShieldState(TargetShieldAttributeSource:GetAttribute(TARGET_SHIELD_ATTRIBUTE_NAME) == true)
         end))
 end
 
@@ -378,8 +453,8 @@ end
 
 local nextFireTime = 0
 
-local function computeCooldownSeconds()
-        local baseAttr = turret:GetAttribute("FireCooldown")
+local function computeCooldownSeconds()␊
+        local baseAttr = turret:GetAttribute("FireCooldown")␊
         local base = (typeof(baseAttr) == "number" and baseAttr) or FIRE_COOLDOWN_BASE
         local scale = intensityFactor()
         local cooldown = base / math.max(scale, 0.5)
@@ -406,66 +481,99 @@ local function beginCooldown()
         return cooldown
 end
 
-local cleaned = false
-
 local function clearCooldown()
         nextFireTime = 0
         setNextFireAttribute(nil)
 end
 
-local function cleanup()
-    if cleaned then return end
-        cleaned = true
+local running = false
+local finalized = false
+
+local function stopAuto()
         cleanupConnections()
         clearCooldown()
-end    
-
-if turret.Destroying then
-        track(turret.Destroying:Connect(cleanup))
+        running = false
 end
 
-track(turret.AncestryChanged:Connect(function()
-        if not turret:IsDescendantOf(Workspace) then
-                cleanup()
-        end
-end))
-
-track(GameActive.Changed:Connect(function()
-        if not GameActive.Value then
-                clearCooldown()
-                if DEBUG_TURRET then
-                        print("[AutoFire] 💤 cooldown cleared (round inactive)")
-                end
-        end
-end))
-
-track(fireTrigger.Event:Connect(function()
-        if not GameActive.Value then return end
-        local now = os.clock()
-        if now < nextFireTime then
-                if DEBUG_TURRET then
-                        local remaining = math.max(0, nextFireTime - now)
-                        print(string.format("[AutoFire] 🔁 trigger ignored (%.2fs remaining)", remaining))
-                end
+local function startAuto()
+        if finalized or running then
                 return
         end
 
-        if DEBUG_TURRET then
-                print("[AutoFire] 🔔 trigger received")
-        end
+        running = true
 
-        beginCooldown()
-        local fired = fireOnce()
-        if not fired then
+        track(fireTrigger.Event:Connect(function()
+                if finalized or not GameActive.Value then
+                        return
+                end
+
+                local now = os.clock()
+                if now < nextFireTime then
+                        if DEBUG_TURRET then
+                                local remaining = math.max(0, nextFireTime - now)
+                                print(string.format("[AutoFire] 🔁 trigger ignored (%.2fs remaining)", remaining))
+                        end
+                        return
+                end
+
+                if DEBUG_TURRET then
+                        print("[AutoFire] 🔔 trigger received")
+                end
+
+                beginCooldown()
+                local fired = fireOnce()
+                if not fired then
                         if DEBUG_TURRET then
                                 print("[AutoFire] ⚠️ firing aborted, cooldown cleared")
                         end
                         clearCooldown()
+                end
+        end))
+end
+
+local function finalCleanup()
+        if finalized then
+                return
+        end
+        finalized = true
+        stopAuto()
+        cleanupLifetimeConnections()
+end
+
+if turret.Destroying then
+        trackLifetime(turret.Destroying:Connect(finalCleanup))
+end
+
+trackLifetime(turret.AncestryChanged:Connect(function()
+        if not turret:IsDescendantOf(Workspace) then
+                finalCleanup()
+        end
+end))
+
+trackLifetime(GameActive.Changed:Connect(function()
+        if finalized then
+                return
+        end
+
+        if GameActive.Value then
+                startAuto()
+        else
+                if DEBUG_TURRET then
+                        print("[AutoFire] 💤 cooldown cleared (round inactive)")
+                end
+                stopAuto()
         end
 end))
 
 if script.Destroying then
-        track(script.Destroying:Connect(cleanup))
+        trackLifetime(script.Destroying:Connect(finalCleanup))
 end
+
+if GameActive.Value then
+        startAuto()
+else
+        stopAuto()
+end
+
 
 
