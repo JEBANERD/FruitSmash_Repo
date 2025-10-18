@@ -100,10 +100,13 @@ local function buildBaseDependencies()
     local gameServerFolder = script.Parent
     local economyFolder = script.Parent.Parent:FindFirstChild("Economy")
 
+    local obstaclesFolder = gameServerFolder:FindFirstChild("Obstacles")
+
     baseDependencies = {
         TurretController = safeRequire(gameServerFolder:FindFirstChild("TurretControllerServer")),
         ArenaServer = safeRequire(gameServerFolder:FindFirstChild("ArenaServer")),
         EconomyServer = economyFolder and safeRequire(economyFolder:FindFirstChild("EconomyServer")) or nil,
+        SawbladeObstacle = obstaclesFolder and safeRequire(obstaclesFolder:FindFirstChild("Obstacle_SawbladeServer")) or nil,
     }
 
     return baseDependencies
@@ -142,6 +145,28 @@ local function tryCall(target, methodName, ...)
     end
 
     return result
+end
+
+local function getArenaInstance(arenaServer, arenaId)
+    if not arenaServer then
+        return nil
+    end
+
+    if type(arenaServer.GetArenaInstance) == "function" then
+        local ok, result = pcall(arenaServer.GetArenaInstance, arenaServer, arenaId)
+        if ok and result then
+            return result
+        end
+    end
+
+    if type(arenaServer.GetArenaState) == "function" then
+        local ok, state = pcall(arenaServer.GetArenaState, arenaServer, arenaId)
+        if ok and state then
+            return state.instance or state.arena or state.model
+        end
+    end
+
+    return nil
 end
 
 local function connectSignal(signal, handler)
@@ -376,8 +401,17 @@ local function updateSpikes(state)
     tryCall(state.dependencies.ArenaServer, "EnableSpikes", state.arenaId, enabled)
 end
 
+local function updateSawbladeObstacle(state)
+    if not state or not state.dependencies then
+        return
+    end
+
+    tryCall(state.dependencies.SawbladeObstacle, "SetLevel", state.arenaId, state.level)
+end
+
 local function runLevel(state)
     updateSpikes(state)
+    updateSawbladeObstacle(state)
 
     if not runPrep(state) then
         return false
@@ -393,6 +427,7 @@ local function runLevel(state)
 
     state.level += 1
     unlockLanesIfNeeded(state)
+    updateSawbladeObstacle(state)
 
     return state.running
 end
@@ -430,12 +465,21 @@ function RoundDirectorServer.Start(arenaId, options)
         running = true,
         dependencies = dependencies,
         options = resolvedOptions,
+        arenaInstance = nil,
     }
+
+    state.arenaInstance = getArenaInstance(state.dependencies.ArenaServer, state.arenaId)
 
     stateByArena[arenaId] = state
 
+    tryCall(state.dependencies.SawbladeObstacle, "BindArena", state.arenaId, {
+        arena = state.arenaInstance,
+        level = state.level,
+    })
+
     unlockLanesIfNeeded(state)
     tryCall(state.dependencies.ArenaServer, "SetLaneCount", state.arenaId, state.activeLanes)
+    updateSawbladeObstacle(state)
 
     task.spawn(runLoop, state)
 
@@ -448,6 +492,7 @@ function RoundDirectorServer.Stop(arenaId)
         return
     end
 
+    tryCall(state.dependencies.SawbladeObstacle, "UnbindArena", arenaId)
     state.running = false
     if stateByArena[arenaId] == state then
         stateByArena[arenaId] = nil
