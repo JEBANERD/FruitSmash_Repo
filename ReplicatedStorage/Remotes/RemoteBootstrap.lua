@@ -38,6 +38,9 @@ local Remotes = {
 
     -- Fired when a player has been knocked out and needs to be handled by systems.
     PlayerKO = getOrCreateRemote("PlayerKO"),
+
+    -- Fired whenever target health or shield values change for an arena.
+    RE_TargetHP = getOrCreateRemote("RE_TargetHP"),
 }
 
 print("[RemoteBootstrap] RemoteEvents initialized")
