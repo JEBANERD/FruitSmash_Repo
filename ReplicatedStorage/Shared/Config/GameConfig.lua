@@ -21,6 +21,16 @@ C.Lanes = {
     ExpansionTemporaryRatePenalty = 0.10, -- reduce per-lane rate by 10% just after unlock
 }
 
+-- == Round Flow ==
+C.Rounds = {
+    PrepSeconds = 30,              -- default pre-round timer
+    PrepFloorButtonSeconds = 3,    -- when players trigger the arena button
+    InterWaveSeconds = 6,          -- downtime between waves
+    WaveDurationSeconds = 45,      -- active wave window
+    WavesPerLevel = 5,             -- waves required before leveling up
+    SpikeLevelInterval = 10,       -- enable spikes every 10th level
+}
+
 -- == Targets ==
 C.Targets = {
     StartHP = 200,
