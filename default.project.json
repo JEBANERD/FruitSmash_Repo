@@ -1,0 +1,38 @@
+{
+  "name": "FruitSmash_V2",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Shared": { "$className": "Folder", "$path": "src/Shared" },
+      "Remotes": { "$className": "Folder" }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "GameServer":   { "$className": "Folder", "$path": "src/Server/GameServer" },
+      "Combat":       { "$className": "Folder", "$path": "src/Server/Combat" },
+      "Economy":      { "$className": "Folder", "$path": "src/Server/Economy" },
+      "Data":         { "$className": "Folder", "$path": "src/Server/Data" },
+      "Shop":         { "$className": "Folder", "$path": "src/Server/Shop" },
+      "Monetization": { "$className": "Folder", "$path": "src/Server/Monetization" }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Controllers": { "$className": "Folder", "$path": "src/Client/Controllers" }
+      }
+    },
+    "StarterGui": {
+      "$className": "StarterGui",
+      "HUD":          { "$className": "Folder", "$path": "src/Client/UI/HUD" },
+      "WorldScreens": { "$className": "Folder", "$path": "src/Client/UI/WorldScreens" },
+      "Lobby":        { "$className": "Folder", "$path": "src/Client/UI/Lobby" }
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "ArenaTemplates": { "$className": "Folder", "$path": "src/ServerStorage/ArenaTemplates" }
+    },
+    "SoundService": { "$className": "SoundService" }
+  }
+}
