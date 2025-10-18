@@ -1,38 +1,25 @@
 {
-  "name": "FruitSmash_V2",
+  "name": "FruitSmash_Repo",
   "tree": {
     "$className": "DataModel",
-    "ReplicatedStorage": {
-      "$className": "ReplicatedStorage",
-      "Shared": { "$className": "Folder", "$path": "src/Shared" },
-      "Remotes": { "$className": "Folder" }
-    },
-    "ServerScriptService": {
-      "$className": "ServerScriptService",
-      "GameServer":   { "$className": "Folder", "$path": "src/Server/GameServer" },
-      "Combat":       { "$className": "Folder", "$path": "src/Server/Combat" },
-      "Economy":      { "$className": "Folder", "$path": "src/Server/Economy" },
-      "Data":         { "$className": "Folder", "$path": "src/Server/Data" },
-      "Shop":         { "$className": "Folder", "$path": "src/Server/Shop" },
-      "Monetization": { "$className": "Folder", "$path": "src/Server/Monetization" }
-    },
+
+    "ReplicatedStorage": { "$path": "ReplicatedStorage" },
+
+    "ServerScriptService": { "$path": "ServerScriptService" },
+
+    "StarterGui": { "$path": "StarterGui" },
+
+    "StarterPack": { "$path": "StarterPack" },
+
     "StarterPlayer": {
       "$className": "StarterPlayer",
-      "StarterPlayerScripts": {
-        "$className": "StarterPlayerScripts",
-        "Controllers": { "$className": "Folder", "$path": "src/Client/Controllers" }
-      }
+      "StarterPlayerScripts": { "$path": "StarterPlayer/StarterPlayerScripts" }
     },
-    "StarterGui": {
-      "$className": "StarterGui",
-      "HUD":          { "$className": "Folder", "$path": "src/Client/UI/HUD" },
-      "WorldScreens": { "$className": "Folder", "$path": "src/Client/UI/WorldScreens" },
-      "Lobby":        { "$className": "Folder", "$path": "src/Client/UI/Lobby" }
-    },
-    "ServerStorage": {
-      "$className": "ServerStorage",
-      "ArenaTemplates": { "$className": "Folder", "$path": "src/ServerStorage/ArenaTemplates" }
-    },
+
+    "ServerStorage": { "$path": "ServerStorage" },
+
+    "Workspace": { "$path": "Workspace" },
+
     "SoundService": { "$className": "SoundService" }
   }
 }
