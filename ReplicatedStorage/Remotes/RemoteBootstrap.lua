@@ -41,6 +41,9 @@ local Remotes = {
 
     -- Fired whenever target health or shield values change for an arena.
     RE_TargetHP = getOrCreateRemote("RE_TargetHP"),
+
+    -- Fired whenever a player's coins or points change.
+    RE_CoinPointDelta = getOrCreateRemote("RE_CoinPointDelta"),
 }
 
 print("[RemoteBootstrap] RemoteEvents initialized")

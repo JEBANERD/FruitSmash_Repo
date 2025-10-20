@@ -98,7 +98,10 @@ local function buildBaseDependencies()
     end
 
     local gameServerFolder = script.Parent
-    local economyFolder = script.Parent.Parent:FindFirstChild("Economy")
+    local economyFolder = gameServerFolder:FindFirstChild("Economy")
+    if not economyFolder then
+        economyFolder = script.Parent.Parent:FindFirstChild("Economy")
+    end
 
     local obstaclesFolder = gameServerFolder:FindFirstChild("Obstacles")
 
