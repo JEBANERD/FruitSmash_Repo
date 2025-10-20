@@ -45,7 +45,7 @@ local Remotes = {
     -- Fired whenever target health or shield values change for an arena.
     RE_TargetHP = getOrCreateRemote("RE_TargetHP"),
 
-    -- Fired when coin or point balances change for a player.
+
     RE_CoinPointDelta = getOrCreateRemote("RE_CoinPointDelta"),
 }
 
