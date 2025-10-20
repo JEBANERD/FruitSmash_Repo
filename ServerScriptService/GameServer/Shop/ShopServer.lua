@@ -451,4 +451,38 @@ end
 
 ShopServer.Init()
 
+function ShopServer.GetProfileAndInventory(player: Player)
+    if typeof(player) ~= "Instance" or not player:IsA("Player") then
+        return nil, nil, nil
+    end
+
+    local profile = getProfile(player)
+    if not profile then
+        return nil, nil, nil
+    end
+
+    local data, inventory = ensureInventory(profile)
+    if not data or not inventory then
+        return nil, nil, nil
+    end
+
+    return profile, data, inventory
+end
+
+function ShopServer.MarkProfileDirty(player: Player, profile: any)
+    markProfileDirty(player, profile)
+end
+
+function ShopServer.UpdateQuickbarForPlayer(player: Player, data: any, inventory: any)
+    updateQuickbar(player, data, inventory)
+end
+
+function ShopServer.ApplyMeleeToInventory(inventory: any, item: any)
+    return applyMeleePurchase(inventory, item)
+end
+
+function ShopServer.BuildQuickbarState(data: any, inventory: any)
+    return buildQuickbarState(data, inventory)
+end
+
 return ShopServer
