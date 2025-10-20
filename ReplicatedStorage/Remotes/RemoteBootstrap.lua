@@ -27,6 +27,9 @@ local Remotes = {
     -- Fired when the game flow begins to signal all clients the match is starting.
     GameStart = getOrCreateRemote("GameStart"),
 
+    -- Fired by clients when attempting to register a melee swing hit on a fruit.
+    RE_MeleeHitAttempt = getOrCreateRemote("RE_MeleeHitAttempt"),
+
     -- Fired when a wave of enemies or objectives has been completed.
     WaveComplete = getOrCreateRemote("WaveComplete"),
 
@@ -41,6 +44,9 @@ local Remotes = {
 
     -- Fired whenever target health or shield values change for an arena.
     RE_TargetHP = getOrCreateRemote("RE_TargetHP"),
+
+    -- Fired when coin or point balances change for a player.
+    RE_CoinPointDelta = getOrCreateRemote("RE_CoinPointDelta"),
 }
 
 print("[RemoteBootstrap] RemoteEvents initialized")
