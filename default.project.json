@@ -5,7 +5,35 @@
 
     "ReplicatedStorage": { "$path": "ReplicatedStorage" },
 
-    "ServerScriptService": { "$path": "ServerScriptService" },
+    "ServerScriptService": {
+  "$className": "ServerScriptService",
+
+  "GameServer": {
+    "$className": "Folder",
+    "$path": "ServerScriptService/GameServer"
+  },
+  "Combat": {
+    "$className": "Folder",
+    "$path": "ServerScriptService/Combat"
+  },
+  "Data": {
+    "$className": "Folder",
+    "$path": "ServerScriptService/Data"
+  },
+  "Economy": {
+    "$className": "Folder",
+    "$path": "ServerScriptService/Economy"
+  },
+  "Monetization": {
+    "$className": "Folder",
+    "$path": "ServerScriptService/Monetization"
+  },
+  "Shop": {
+    "$className": "Folder",
+    "$path": "ServerScriptService/Shop"
+  }
+},
+
 
     "StarterGui": { "$path": "StarterGui" },
 
