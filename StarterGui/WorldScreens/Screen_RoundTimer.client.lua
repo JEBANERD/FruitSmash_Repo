@@ -8,40 +8,40 @@ local TARGET_GUI_NAME = "WS_RoundTimer"
 
 local surfaceGui = WorkspaceService:FindFirstChild(TARGET_GUI_NAME, true)
 if not surfaceGui or not surfaceGui:IsA("SurfaceGui") then
-    return
+	return
 end
 
 local textLabel = surfaceGui:FindFirstChildWhichIsA("TextLabel", true)
 if not textLabel then
-    return
+	return
 end
 
 local defaultText = textLabel.Text
 
 local function getRemotesFolder(): Folder?
-    local folder = ReplicatedStorage:FindFirstChild("Remotes")
-    if folder and folder:IsA("Folder") then
-        return folder
-    end
+	local folder = ReplicatedStorage:FindFirstChild("Remotes")
+	if folder and folder:IsA("Folder") then
+		return folder
+	end
 
-    local ok, result = pcall(function()
-        return ReplicatedStorage:WaitForChild("Remotes", 5)
-    end)
-    if ok and result and result:IsA("Folder") then
-        return result
-    end
+	local ok, result = pcall(function()
+		return ReplicatedStorage:WaitForChild("Remotes", 5)
+	end)
+	if ok and result and result:IsA("Folder") then
+		return result
+	end
 
-    return nil
+	return nil
 end
 
 local remotesFolder = getRemotesFolder()
 if not remotesFolder then
-    return
+	return
 end
 
 local prepRemote = remotesFolder:FindFirstChild("RE_PrepTimer")
 if not prepRemote or not prepRemote:IsA("RemoteEvent") then
-    return
+	return
 end
 
 local connections: { RBXScriptConnection } = {}
@@ -50,136 +50,136 @@ local cleaned = false
 local countdownToken = 0
 
 local function cleanup()
-    if cleaned then
-        return
-    end
-    cleaned = true
-    running = false
-    countdownToken += 1
+	if cleaned then
+		return
+	end
+	cleaned = true
+	running = false
+	countdownToken += 1
 
-    for _, connection in ipairs(connections) do
-        if connection and connection.Disconnect then
-            connection:Disconnect()
-        end
-    end
-    table.clear(connections)
+	for _, connection in ipairs(connections) do
+		if connection and connection.Disconnect then
+			connection:Disconnect()
+		end
+	end
+	table.clear(connections)
 end
 
 script.Destroying:Connect(cleanup)
 
 local localPlayer = Players.LocalPlayer
 if localPlayer then
-    local ancestryConnection = localPlayer.AncestryChanged:Connect(function(_, parent)
-        if parent == nil then
-            cleanup()
-        end
-    end)
-    table.insert(connections, ancestryConnection)
+	local ancestryConnection = localPlayer.AncestryChanged:Connect(function(_, parent)
+		if parent == nil then
+			cleanup()
+		end
+	end)
+	table.insert(connections, ancestryConnection)
 end
 
 local function formatTime(seconds: number): string
-    seconds = math.max(0, math.floor(seconds))
-    local minutes = math.floor(seconds / 60)
-    local remainder = seconds % 60
+	seconds = math.max(0, math.floor(seconds))
+	local minutes = math.floor(seconds / 60)
+	local remainder = seconds % 60
 
-    if minutes > 0 then
-        return string.format("%d:%02d", minutes, remainder)
-    end
+	if minutes > 0 then
+		return string.format("%d:%02d", minutes, remainder)
+	end
 
-    return tostring(remainder)
+	return tostring(remainder)
 end
 
 local function setDisplay(seconds: number?)
-    if typeof(seconds) ~= "number" then
-        textLabel.Text = defaultText
-        return
-    end
+	if typeof(seconds) ~= "number" then
+		textLabel.Text = defaultText
+		return
+	end
 
-    textLabel.Text = formatTime(seconds)
+	textLabel.Text = formatTime(seconds)
 end
 
 local function startCountdown(seconds: number)
-    local numeric = tonumber(seconds)
-    if not numeric then
-        return
-    end
+	local numeric = tonumber(seconds)
+	if not numeric then
+		return
+	end
 
-    numeric = math.max(0, math.floor(numeric))
+	numeric = math.max(0, math.floor(numeric))
 
-    countdownToken += 1
-    local token = countdownToken
+	countdownToken += 1
+	local token = countdownToken
 
-    setDisplay(numeric)
+	setDisplay(numeric)
 
-    if numeric <= 0 then
-        return
-    end
+	if numeric <= 0 then
+		return
+	end
 
-    task.spawn(function()
-        local remaining = numeric
-        while running and countdownToken == token and remaining > 0 do
-            task.wait(1)
-            if not running or countdownToken ~= token then
-                break
-            end
+	task.spawn(function()
+		local remaining = numeric
+		while running and countdownToken == token and remaining > 0 do
+			task.wait(1)
+			if not running or countdownToken ~= token then
+				break
+			end
 
-            remaining -= 1
-            if remaining < 0 then
-                remaining = 0
-            end
+			remaining -= 1
+			if remaining < 0 then
+				remaining = 0
+			end
 
-            setDisplay(remaining)
-        end
-    end)
+			setDisplay(remaining)
+		end
+	end)
 end
 
 local prepConnection = prepRemote.OnClientEvent:Connect(function(firstArg, secondArg)
-    if not running then
-        return
-    end
+	if not running then
+		return
+	end
 
-    local seconds: number? = nil
-    local stop = false
+	local seconds: number? = nil
+	local stop = false
 
-    if typeof(firstArg) == "table" then
-        local payload = firstArg
-        if payload.seconds ~= nil then
-            seconds = tonumber(payload.seconds)
-        end
-        if payload.stop ~= nil then
-            stop = payload.stop and true or false
-        end
-    else
-        if typeof(firstArg) == "number" then
-            seconds = firstArg
-        elseif typeof(firstArg) == "string" then
-            seconds = tonumber(firstArg)
-        end
+	if typeof(firstArg) == "table" then
+		local payload = firstArg
+		if payload.seconds ~= nil then
+			seconds = tonumber(payload.seconds)
+		end
+		if payload.stop ~= nil then
+			stop = payload.stop and true or false
+		end
+	else
+		if typeof(firstArg) == "number" then
+			seconds = firstArg
+		elseif typeof(firstArg) == "string" then
+			seconds = tonumber(firstArg)
+		end
 
-        if typeof(secondArg) == "boolean" then
-            stop = secondArg
-        elseif typeof(secondArg) == "table" and secondArg.stop ~= nil then
-            stop = secondArg.stop and true or false
-        end
-    end
+		if typeof(secondArg) == "boolean" then
+			stop = secondArg
+		elseif typeof(secondArg) == "table" and secondArg.stop ~= nil then
+			stop = secondArg.stop and true or false
+		end
+	end
 
-    if stop then
-        countdownToken += 1
-        if seconds ~= nil then
-            setDisplay(seconds)
-        else
-            setDisplay(nil)
-        end
-        return
-    end
+	if stop then
+		countdownToken += 1
+		if seconds ~= nil then
+			setDisplay(seconds)
+		else
+			setDisplay(nil)
+		end
+		return
+	end
 
-    if seconds == nil then
-        return
-    end
+	if seconds == nil then
+		return
+	end
 
-    startCountdown(seconds)
+	startCountdown(seconds)
 end)
 
 if prepConnection then
-    table.insert(connections, prepConnection)
+	table.insert(connections, prepConnection)
 end
