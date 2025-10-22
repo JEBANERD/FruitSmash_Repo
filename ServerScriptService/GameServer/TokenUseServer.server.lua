@@ -1,148 +1,143 @@
 --!strict
 -- TokenUseServer.server.lua
--- Minimal server handler so Quickbar can invoke token usage with server validation.
+-- Handles RF_UseToken requests with guard-validated payloads and delegates
+-- execution to TokenEffectsServer.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local Guard = require(ServerScriptService:WaitForChild("Moderation"):WaitForChild("GuardServer"))
 local Remotes = require(ReplicatedStorage.Remotes.RemoteBootstrap)
 local TokenEffectsServer = require(script.Parent:WaitForChild("TokenEffectsServer"))
 
-local gameServerFolder = ServerScriptService:WaitForChild("GameServer")
-local QuickbarServer = require(gameServerFolder:WaitForChild("QuickbarServer"))
-local ShopServer = require(gameServerFolder:WaitForChild("Shop"):WaitForChild("ShopServer"))
+local useTokenRemote: RemoteFunction? = Remotes and Remotes.RF_UseToken or nil
 
-local ShopConfig = require(ReplicatedStorage.Shared.Config.ShopConfig)
-local shopItems = (type(ShopConfig.All) == "function" and ShopConfig.All()) or ShopConfig.Items or {}
+local MAX_EFFECT_NAME_LENGTH = 64
+local MAX_SLOT_INDEX = 24
 
--- Use a map type for arbitrary metadata instead of `table`
-export type Meta = { [string]: any }
-
-export type UseTokenPayload = {
-    effect: string?,
-    slot: number?,
-    meta: Meta?,
+export type UseTokenRequest = {
+	effect: string?,
+	slot: number?,
 }
 
-local rf: RemoteFunction = Remotes.RF_UseToken
-
-rf.OnServerInvoke = function(player: Player, payload: UseTokenPayload?)
-        if typeof(player) ~= "Instance" or not player:IsA("Player") then
-                return { ok = false, err = "InvalidPlayer" }
-        end
-
-        local slotIndex: number? = nil
-        local requestedEffect: string? = nil
-
-        if typeof(payload) == "number" then
-                slotIndex = payload
-        elseif typeof(payload) == "table" then
-                slotIndex = payload.slot or payload.index
-                if typeof(payload.effect) == "string" then
-                        requestedEffect = payload.effect
-                end
-        else
-                return { ok = false, err = "BadPayload" }
-        end
-
-        if typeof(slotIndex) ~= "number" or slotIndex < 1 then
-                return { ok = false, err = "NoSlot" }
-        end
-
-        local profile, data, inventory = ShopServer.GetProfileAndInventory(player)
-        if not profile or not data or not inventory then
-                return { ok = false, err = "NoInventory" }
-        end
-
-        local quickbarState = QuickbarServer.BuildState(data, inventory)
-        local tokenEntry = quickbarState.tokens[slotIndex]
-        if typeof(tokenEntry) ~= "table" or typeof(tokenEntry.Id) ~= "string" then
-                return { ok = false, err = "EmptySlot" }
-        end
-
-        local tokenId = tokenEntry.Id
-        local counts = inventory.TokenCounts
-        if typeof(counts) ~= "table" then
-                counts = {}
-                inventory.TokenCounts = counts
-        end
-
-        local currentCount = if typeof(counts[tokenId]) == "number" then counts[tokenId] else tonumber(counts[tokenId]) or 0
-        if currentCount <= 0 then
-                return { ok = false, err = "OutOfToken" }
-        end
-
-        local itemInfo = shopItems[tokenId]
-        local effect = requestedEffect
-        if typeof(effect) ~= "string" or effect == "" then
-                if typeof(itemInfo) == "table" and typeof(itemInfo.Effect) == "string" then
-                        effect = itemInfo.Effect
-                else
-                        effect = tokenId
-                end
-        end
-
-        print(("[TokenUse] %s consumed %s (slot=%d, effect=%s)")
-                :format(player.Name, tokenId, slotIndex, tostring(effect)))
-
-        counts[tokenId] = math.max(currentCount - 1, 0)
-        ShopServer.MarkProfileDirty(player, profile)
-
-        local newState = QuickbarServer.Refresh(player, data, inventory)
-
-        if Remotes.RE_Notice then
-                Remotes.RE_Notice:FireClient(player, { msg = "Token used: " .. tostring(effect), kind = "info" })
-        end
-
-        return {
-                ok = true,
-                tokenId = tokenId,
-                effect = effect,
-                remaining = counts[tokenId],
-                quickbar = newState,
-        }
 local function parsePayload(payload: any): (string?, number?)
-    if payload == nil then
-        return nil, nil
-    end
+	if payload == nil then
+		return nil, nil
+	end
 
-    local effectName: string? = nil
-    local slotIndex: number? = nil
+	local effectName: string? = nil
+	local slotIndex: number? = nil
+	local payloadType = typeof(payload)
 
-    if typeof(payload) == "number" then
-        slotIndex = payload
-    elseif typeof(payload) == "table" then
-        effectName = payload.effect or payload.Effect
-        slotIndex = payload.slot or payload.Slot or payload.index or payload.Index
-    elseif typeof(payload) == "string" then
-        effectName = payload
-    end
+	if payloadType == "number" then
+		slotIndex = payload
+	elseif payloadType == "string" then
+		effectName = payload
+	elseif payloadType == "table" then
+		local effectCandidate = payload.effect or payload.Effect or payload.id or payload.Id
+		if typeof(effectCandidate) == "string" and effectCandidate ~= "" then
+			effectName = effectCandidate
+		end
 
-    return effectName, slotIndex
+		local slotCandidate = payload.slot or payload.Slot or payload.index or payload.Index
+		if slotCandidate ~= nil then
+			if typeof(slotCandidate) == "number" then
+				slotIndex = slotCandidate
+			elseif typeof(slotCandidate) == "string" then
+				local numeric = tonumber(slotCandidate)
+				if numeric then
+					slotIndex = numeric
+				end
+			end
+		end
+	end
+
+	return effectName, slotIndex
 end
 
-rf.OnServerInvoke = function(player: Player, payload: UseTokenPayload?)
-    local effectName, slotIndex = parsePayload(payload)
+local function validateUseTokenPayload(_player: Player, payload: any)
+	local valueType = typeof(payload)
+	if payload ~= nil and valueType ~= "number" and valueType ~= "string" and valueType ~= "table" then
+		return false, "BadPayload"
+	end
 
-    local result = TokenEffectsServer.Use(player, effectName, slotIndex)
-    if typeof(result) ~= "table" then
-        return { ok = false, err = "NoResult" }
-    end
+	local effectName, slotIndex = parsePayload(payload)
 
-    if result.ok and Remotes.RE_Notice then
-        local messageEffect = result.effect or effectName or "token"
-        Remotes.RE_Notice:FireClient(player, {
-            msg = string.format("Token used: %s", tostring(messageEffect)),
-            kind = "info",
-        })
-    end
+	if slotIndex ~= nil then
+		local numericSlot = tonumber(slotIndex)
+		if not numericSlot then
+			return false, "BadSlot"
+		end
 
-    return result
+		numericSlot = math.floor(numericSlot)
+		if numericSlot < 1 or numericSlot > MAX_SLOT_INDEX then
+			return false, "BadSlot"
+		end
+
+		slotIndex = numericSlot
+	end
+
+	if effectName ~= nil then
+		if typeof(effectName) ~= "string" then
+			return false, "BadEffect"
+		end
+
+		if effectName == "" then
+			effectName = nil
+		elseif #effectName > MAX_EFFECT_NAME_LENGTH then
+			effectName = string.sub(effectName, 1, MAX_EFFECT_NAME_LENGTH)
+		end
+	end
+
+	if slotIndex == nil and effectName == nil then
+		return false, "BadPayload"
+	end
+
+	return true, {
+		effect = effectName,
+		slot = slotIndex,
+	}
+end
+
+local function handleUseToken(player: Player, request: UseTokenRequest?)
+	local effectName = request and request.effect or nil
+	local slotIndex = request and request.slot or nil
+
+	local result = TokenEffectsServer.Use(player, effectName, slotIndex)
+	if typeof(result) ~= "table" then
+		return { ok = false, err = "NoResult" }
+	end
+
+	if result.ok and Remotes.RE_Notice then
+		local messageEffect = result.effect or effectName or "token"
+		local okNotice, errNotice = pcall(Remotes.RE_Notice.FireClient, Remotes.RE_Notice, player, {
+			msg = string.format("Token used: %s", tostring(messageEffect)),
+			kind = "info",
+		})
+		if not okNotice then
+			warn(string.format("[TokenUseServer] Failed to send notice: %s", tostring(errNotice)))
+		end
+	end
+
+	return result
+end
+
+if useTokenRemote then
+	Guard.WrapRemote(useTokenRemote, {
+		remoteName = "RF_UseToken",
+		rateLimit = { maxCalls = 3, interval = 1 },
+		validator = validateUseTokenPayload,
+		rejectResponse = function(reason)
+			return { ok = false, err = reason }
+		end,
+	}, handleUseToken)
+else
+	warn("[TokenUseServer] RF_UseToken remote missing.")
 end
 
 Players.PlayerRemoving:Connect(function(player)
-    TokenEffectsServer.ExpireAll(player)
+	TokenEffectsServer.ExpireAll(player)
 end)
 
 print("[TokenUseServer] RF_UseToken handler ready.")
