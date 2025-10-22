@@ -1,9 +1,26 @@
 local FruitSpawnerServer = {}
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local FruitConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("FruitConfig"))
 local ArenaServer = require(script.Parent:WaitForChild("ArenaServer"))
+
+local ProjectileServer
+do
+    local combatFolder = ServerScriptService:FindFirstChild("Combat")
+    local projectileServerModule = combatFolder and combatFolder:FindFirstChild("ProjectileServer")
+    if projectileServerModule then
+        local ok, result = pcall(require, projectileServerModule)
+        if ok then
+            ProjectileServer = result
+        else
+            warn(string.format("[FruitSpawnerServer] Failed to require ProjectileServer: %s", result))
+        end
+    else
+        warn("[FruitSpawnerServer] ProjectileServer module is missing")
+    end
+end
 
 local ProjectileMotionServer
 local projectileModule = script.Parent:FindFirstChild("ProjectileMotionServer")
@@ -30,6 +47,57 @@ local function bindProjectile(instance, pathProfile)
     local ok, err = pcall(ProjectileMotionServer.Bind, instance, pathProfile)
     if not ok then
         warn(string.format("[FruitSpawnerServer] Failed to bind projectile for %s: %s", instance:GetFullName(), err))
+    end
+end
+
+local function describeInstance(instance)
+    if not instance then
+        return "<nil>"
+    end
+
+    local ok, fullName = pcall(function()
+        return instance:GetFullName()
+    end)
+
+    if ok then
+        return fullName
+    end
+
+    return tostring(instance)
+end
+
+local function setAttributeIfPresent(instance, name, value)
+    if instance and value ~= nil then
+        instance:SetAttribute(name, value)
+    end
+end
+
+local function configureProjectile(instance, stats, pathProfile)
+    if not instance then
+        return
+    end
+
+    if pathProfile then
+        setAttributeIfPresent(instance, "ArenaId", pathProfile.ArenaId)
+        setAttributeIfPresent(instance, "LaneId", pathProfile.LaneId)
+        setAttributeIfPresent(instance, "FruitId", pathProfile.FruitId)
+    end
+
+    bindProjectile(instance, pathProfile)
+
+    if ProjectileServer and type(ProjectileServer.Track) == "function" then
+        local params = {
+            ArenaId = pathProfile and pathProfile.ArenaId,
+            LaneId = pathProfile and pathProfile.LaneId,
+            FruitId = stats and stats.Id,
+            Speed = instance:GetAttribute("Speed") or (stats and stats.Speed),
+            Damage = instance:GetAttribute("Damage") or (stats and stats.Damage),
+        }
+
+        local ok, err = pcall(ProjectileServer.Track, instance, params)
+        if not ok then
+            warn(string.format("[FruitSpawnerServer] Failed to track projectile for %s: %s", describeInstance(instance), tostring(err)))
+        end
     end
 end
 
@@ -135,7 +203,7 @@ local function spawnSingleFruit(container, stats, originCFrame, pathProfile)
     local fruit = createFruitPart(stats, originCFrame)
     fruit.Parent = container
 
-    bindProjectile(fruit, pathProfile)
+    configureProjectile(fruit, stats, pathProfile)
 
     return fruit
 end
@@ -167,6 +235,10 @@ local function spawnGrapeBundle(container, stats, originCFrame, pathProfile)
     bundleModel.Name = stats.Id or "GrapeBundle"
     bundleModel.Parent = container
 
+    setAttributeIfPresent(bundleModel, "ArenaId", pathProfile and pathProfile.ArenaId)
+    setAttributeIfPresent(bundleModel, "LaneId", pathProfile and pathProfile.LaneId)
+    setAttributeIfPresent(bundleModel, "FruitId", stats and stats.Id)
+
     for index = 1, grapeCount do
         local offsets = Vector3.new(
             random:NextNumber(-0.5, 0.5),
@@ -186,7 +258,7 @@ local function spawnGrapeBundle(container, stats, originCFrame, pathProfile)
         grape.Parent = bundleModel
         bundleModel.PrimaryPart = bundleModel.PrimaryPart or grape
 
-        bindProjectile(grape, pathProfile)
+        configureProjectile(grape, stats, pathProfile)
     end
 
     return bundleModel
