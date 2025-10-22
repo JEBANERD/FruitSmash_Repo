@@ -33,18 +33,66 @@ C.Targets = {
 -- == Players ==
 C.Player = {
 	MaxHP = 100,
-	Sprint = {
-		Enabled = true,
-		BaseWalkSpeed   = 16, -- Roblox default
-		BaseSprintSpeed = 22, -- sprint speed without buffs
-		Stamina = {
-			Enabled = true,
-			DrainPerSecond = 18,
-			RegenPerSecond = 12,
-		},
-	},
-	SawbladeRespawnSeconds = 5,
-	MiniTurretHitDamage    = 25,
+        Sprint = {
+                Enabled = true,
+                BaseWalkSpeed   = 16, -- Roblox default
+                BaseSprintSpeed = 22, -- sprint speed without buffs
+                Stamina = {
+                        Enabled = true,
+                        DrainPerSecond = 18,
+                        RegenPerSecond = 12,
+                },
+        },
+        Settings = {
+                Defaults = {
+                        SprintToggle = false,
+                        AimAssistWindow = 0.75,
+                        CameraShakeStrength = 0.7,
+                        ColorblindPalette = "Off",
+                        TextScale = 1,
+                },
+                Limits = {
+                        AimAssistWindow = { Min = 0, Max = 1 },
+                        CameraShakeStrength = { Min = 0, Max = 1 },
+                        TextScale = { Min = 0.8, Max = 1.4 },
+                },
+                ColorblindPalettes = {
+                        {
+                                Id = "Off",
+                                Name = "Off",
+                                TintColor = Color3.fromRGB(255, 255, 255),
+                                Saturation = 0,
+                                Contrast = 0,
+                                Brightness = 0,
+                        },
+                        {
+                                Id = "Deuteranopia",
+                                Name = "Deuteranopia",
+                                TintColor = Color3.fromRGB(248, 246, 234),
+                                Saturation = -0.18,
+                                Contrast = 0.08,
+                                Brightness = 0.02,
+                        },
+                        {
+                                Id = "Protanopia",
+                                Name = "Protanopia",
+                                TintColor = Color3.fromRGB(234, 244, 255),
+                                Saturation = -0.14,
+                                Contrast = 0.07,
+                                Brightness = 0.01,
+                        },
+                        {
+                                Id = "Tritanopia",
+                                Name = "Tritanopia",
+                                TintColor = Color3.fromRGB(240, 255, 246),
+                                Saturation = -0.12,
+                                Contrast = 0.05,
+                                Brightness = 0.03,
+                        },
+                },
+        },
+        SawbladeRespawnSeconds = 5,
+        MiniTurretHitDamage    = 25,
 }
 
 -- == Melee & Durability ==

@@ -50,13 +50,15 @@ type RemoteRefs = {
         PlayerKO: RemoteEvent,
         RE_Notice: RemoteEvent,
         WaveComplete: RemoteEvent,
+        RE_SettingsPushed: RemoteEvent,
         RF_JoinQueue: RemoteFunction,
         RF_LeaveQueue: RemoteFunction,
         RF_UseToken: RemoteFunction,
+        RF_SaveSettings: RemoteFunction,
 }
 
 local Remotes: RemoteRefs = {
-	-- Match / flow
+        -- Match / flow
         GameStart           = getOrCreateEvent("GameStart"),
         RE_PrepTimer        = getOrCreateEvent("RE_PrepTimer"),
         RE_WaveChanged      = getOrCreateEvent("RE_WaveChanged"),
@@ -72,18 +74,22 @@ local Remotes: RemoteRefs = {
 	ShopOpen            = getOrCreateEvent("ShopOpen"),
 	PurchaseMade        = getOrCreateEvent("PurchaseMade"),
 
-	-- Player status / notices
-	PlayerKO            = getOrCreateEvent("PlayerKO"),
-	RE_Notice           = getOrCreateEvent("RE_Notice"),
+        -- Player status / notices
+        PlayerKO            = getOrCreateEvent("PlayerKO"),
+        RE_Notice           = getOrCreateEvent("RE_Notice"),
 
-	-- Misc progression
-	WaveComplete        = getOrCreateEvent("WaveComplete"),
+        -- Misc progression
+        WaveComplete        = getOrCreateEvent("WaveComplete"),
+
+        -- Settings / accessibility
+        RE_SettingsPushed   = getOrCreateEvent("RE_SettingsPushed"),
 
         -- Functions (client -> server request/response)
         RF_Purchase         = getOrCreateFunction("RF_Purchase"),
         RF_JoinQueue        = getOrCreateFunction("RF_JoinQueue"),
         RF_LeaveQueue       = getOrCreateFunction("RF_LeaveQueue"),
         RF_UseToken         = getOrCreateFunction("RF_UseToken"),
+        RF_SaveSettings     = getOrCreateFunction("RF_SaveSettings"),
 }
 
 table.freeze(Remotes)

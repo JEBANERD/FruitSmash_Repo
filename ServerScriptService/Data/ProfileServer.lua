@@ -53,8 +53,30 @@ local shopItems = (typeof(ShopConfigModule) == "table" and typeof((ShopConfigMod
     or (typeof(ShopConfigModule) == "table" and (ShopConfigModule :: any).Items)
     or {}
 
+local GameConfigModule = safeRequire(configFolder:FindFirstChild("GameConfig"))
+local GameConfig = if typeof(GameConfigModule) == "table" and typeof((GameConfigModule :: any).Get) == "function"
+        then (GameConfigModule :: any).Get()
+        else GameConfigModule
+
+local playerSection = if typeof(GameConfig) == "table" then (GameConfig :: any).Player else nil
+local settingsConfig = if typeof(playerSection) == "table" then (playerSection :: any).Settings else nil
+local settingsDefaultsConfig = if typeof(settingsConfig) == "table" then (settingsConfig :: any).Defaults else nil
+local settingsLimitsConfig = if typeof(settingsConfig) == "table" then (settingsConfig :: any).Limits else nil
+local settingsPalettesConfig = if typeof(settingsConfig) == "table" then (settingsConfig :: any).ColorblindPalettes else nil
+
+local paletteIds: {string} = {}
+local paletteLookup: {[string]: string} = {}
+
 type TokenCounts = { [string]: number }
 type OwnedMeleeMap = { [string]: boolean }
+
+type PlayerSettings = {
+        SprintToggle: boolean,
+        AimAssistWindow: number,
+        CameraShakeStrength: number,
+        ColorblindPalette: string,
+        TextScale: number,
+}
 
 type Inventory = {
     MeleeLoadout: {string},
@@ -68,6 +90,7 @@ type ProfileData = {
     Coins: number,
     Stats: { [string]: any },
     Inventory: Inventory,
+    Settings: PlayerSettings,
 }
 
 type Profile = {
@@ -75,6 +98,159 @@ type Profile = {
     UserId: number,
     Data: ProfileData,
 }
+
+if typeof(settingsPalettesConfig) == "table" then
+        for _, entry in ipairs(settingsPalettesConfig) do
+                if typeof(entry) == "table" then
+                        local idValue = (entry :: any).Id or (entry :: any).id or (entry :: any).Name or (entry :: any).name
+                        if typeof(idValue) == "string" and idValue ~= "" then
+                                local id = idValue
+                                if not paletteLookup[id] then
+                                        table.insert(paletteIds, id)
+                                end
+                                paletteLookup[id] = id
+                                paletteLookup[string.lower(id)] = id
+                        end
+                end
+        end
+end
+
+if #paletteIds == 0 then
+        table.insert(paletteIds, "Off")
+        paletteLookup["Off"] = "Off"
+        paletteLookup[string.lower("Off")] = "Off"
+end
+
+local function resolveLimit(key: string): (number?, number?)
+        if typeof(settingsLimitsConfig) ~= "table" then
+                return nil, nil
+        end
+
+        local entry = (settingsLimitsConfig :: any)[key]
+        if typeof(entry) ~= "table" then
+                return nil, nil
+        end
+
+        local minValue = (entry :: any).Min
+        local maxValue = (entry :: any).Max
+
+        local minNumeric = if typeof(minValue) == "number" then minValue else tonumber(minValue)
+        local maxNumeric = if typeof(maxValue) == "number" then maxValue else tonumber(maxValue)
+
+        return minNumeric, maxNumeric
+end
+
+local function clampSettingNumeric(value: number, key: string, fallback: number): number
+        local minValue, maxValue = resolveLimit(key)
+        local numeric = value
+        if typeof(numeric) ~= "number" then
+                numeric = fallback
+        end
+        if minValue then
+                numeric = math.max(minValue, numeric)
+        end
+        if maxValue then
+                numeric = math.min(maxValue, numeric)
+        end
+        return numeric
+end
+
+local function resolveNumericDefault(value: any, key: string, fallback: number): number
+        local numeric = if typeof(value) == "number" then value else tonumber(value)
+        if typeof(numeric) ~= "number" then
+                numeric = fallback
+        end
+        return clampSettingNumeric(numeric :: number, key, fallback)
+end
+
+local function resolvePaletteId(value: any, fallback: string): string
+        if typeof(value) == "string" and value ~= "" then
+                local direct = paletteLookup[value]
+                if direct then
+                        return direct
+                end
+                local lowered = string.lower(value)
+                local fromLower = paletteLookup[lowered]
+                if fromLower then
+                        return fromLower
+                end
+        end
+        return fallback
+end
+
+local defaultPaletteId = if paletteLookup["Off"] then "Off" else paletteIds[1]
+if typeof(settingsDefaultsConfig) == "table" then
+        defaultPaletteId = resolvePaletteId((settingsDefaultsConfig :: any).ColorblindPalette, defaultPaletteId)
+end
+if not paletteLookup[defaultPaletteId] then
+        defaultPaletteId = paletteIds[1]
+end
+
+local DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
+        SprintToggle = typeof(settingsDefaultsConfig) == "table" and (settingsDefaultsConfig :: any).SprintToggle == true or false,
+        AimAssistWindow = resolveNumericDefault(
+                typeof(settingsDefaultsConfig) == "table" and (settingsDefaultsConfig :: any).AimAssistWindow or nil,
+                "AimAssistWindow",
+                0.75
+        ),
+        CameraShakeStrength = resolveNumericDefault(
+                typeof(settingsDefaultsConfig) == "table" and (settingsDefaultsConfig :: any).CameraShakeStrength or nil,
+                "CameraShakeStrength",
+                0.7
+        ),
+        ColorblindPalette = resolvePaletteId(
+                typeof(settingsDefaultsConfig) == "table" and (settingsDefaultsConfig :: any).ColorblindPalette or nil,
+                defaultPaletteId
+        ),
+        TextScale = resolveNumericDefault(
+                typeof(settingsDefaultsConfig) == "table" and (settingsDefaultsConfig :: any).TextScale or nil,
+                "TextScale",
+                1
+        ),
+}
+
+local function copySettingsData(settings: PlayerSettings?): PlayerSettings
+        local source = settings or DEFAULT_PLAYER_SETTINGS
+        return {
+                SprintToggle = source.SprintToggle,
+                AimAssistWindow = source.AimAssistWindow,
+                CameraShakeStrength = source.CameraShakeStrength,
+                ColorblindPalette = source.ColorblindPalette,
+                TextScale = source.TextScale,
+        }
+end
+
+local function sanitizeSettingsData(raw: any): PlayerSettings
+        local sanitized = copySettingsData(nil)
+        if typeof(raw) ~= "table" then
+                return sanitized
+        end
+
+        if raw.SprintToggle ~= nil then
+                sanitized.SprintToggle = raw.SprintToggle == true
+        end
+
+        local aimValue = raw.AimAssistWindow or raw.AimAssist or raw.AimAssistRadius
+        if aimValue ~= nil then
+                sanitized.AimAssistWindow = resolveNumericDefault(aimValue, "AimAssistWindow", sanitized.AimAssistWindow)
+        end
+
+        local shakeValue = raw.CameraShakeStrength or raw.CameraShake
+        if shakeValue ~= nil then
+                sanitized.CameraShakeStrength = resolveNumericDefault(shakeValue, "CameraShakeStrength", sanitized.CameraShakeStrength)
+        end
+
+        local textScaleValue = raw.TextScale or raw.TextSize or raw.TextSizeScale
+        if textScaleValue ~= nil then
+                sanitized.TextScale = resolveNumericDefault(textScaleValue, "TextScale", sanitized.TextScale)
+        end
+
+        if raw.ColorblindPalette ~= nil then
+                sanitized.ColorblindPalette = resolvePaletteId(raw.ColorblindPalette, sanitized.ColorblindPalette)
+        end
+
+        return sanitized
+end
 
 local ProfileServer = {}
 
@@ -160,6 +336,7 @@ local function buildDefaultData(): ProfileData
             UtilityQueue = {},
             OwnedMelee = {},
         },
+        Settings = copySettingsData(nil),
     }
 
     if type(saveDefaults) == "table" then
@@ -180,6 +357,9 @@ local function buildDefaultData(): ProfileData
             data.Inventory.UtilityQueue = sanitizeStringList(inventory.UtilityQueue)
             data.Inventory.OwnedMelee = sanitizeOwnedMelee(inventory.OwnedMelee)
         end
+        if type(cloned.Settings) == "table" then
+            data.Settings = sanitizeSettingsData(cloned.Settings)
+        end
     end
 
     local stats = data.Stats
@@ -196,6 +376,8 @@ local function buildDefaultData(): ProfileData
     inventory.TokenCounts = inventory.TokenCounts or {}
     inventory.UtilityQueue = inventory.UtilityQueue or {}
     inventory.OwnedMelee = inventory.OwnedMelee or {}
+
+    data.Settings = sanitizeSettingsData(data.Settings)
 
     return data
 end
@@ -699,6 +881,7 @@ function ProfileServer.Serialize(player: Player): ProfileData
             UtilityQueue = sanitizeStringList(inventory.UtilityQueue),
             OwnedMelee = sanitizeOwnedMelee(inventory.OwnedMelee),
         },
+        Settings = copySettingsData(data.Settings),
     }
 
     return serialized
@@ -728,6 +911,9 @@ function ProfileServer.LoadSerialized(player: Player, serialized: ProfileData?)
             target.TokenCounts = sanitizeTokenCounts(inventory.TokenCounts)
             target.UtilityQueue = sanitizeStringList(inventory.UtilityQueue)
             target.OwnedMelee = sanitizeOwnedMelee(inventory.OwnedMelee)
+        end
+        if type(serialized.Settings) == "table" then
+            data.Settings = sanitizeSettingsData(serialized.Settings)
         end
     end
 

@@ -8,6 +8,13 @@ return {
       TotalWavesCleared = 0,
       TotalFruitSmashed = 0,
     },
+    Settings = {
+      SprintToggle = false,
+      AimAssistWindow = 0.75,
+      CameraShakeStrength = 0.7,
+      ColorblindPalette = "Off",
+      TextScale = 1,
+    },
     Cosmetics = {
       Trails = {},
       Emotes = {},
