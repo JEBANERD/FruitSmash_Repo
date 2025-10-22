@@ -4,6 +4,28 @@ local HUDServer = require(script.Parent:WaitForChild("HUDServer"))
 local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local telemetryTrack: ((string, { [string]: any }?) -> ())? = nil
+do
+    local analyticsFolder = ServerScriptService:FindFirstChild("Analytics")
+    local telemetryModule = analyticsFolder and analyticsFolder:FindFirstChild("TelemetryServer")
+    if telemetryModule and telemetryModule:IsA("ModuleScript") then
+        local ok, telemetry = pcall(require, telemetryModule)
+        if not ok then
+            warn(string.format("[RoundDirectorServer] Failed to require TelemetryServer: %s", tostring(telemetry)))
+        else
+            local trackFn = (telemetry :: any).Track
+            if typeof(trackFn) == "function" then
+                telemetryTrack = function(eventName: string, payload: { [string]: any }?)
+                    local success, err = pcall(trackFn, eventName, payload)
+                    if not success then
+                        warn(string.format("[RoundDirectorServer] Telemetry.Track failed: %s", tostring(err)))
+                    end
+                end
+            end
+        end
+    end
+end
+
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap"))
 local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig"))
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
@@ -66,6 +88,46 @@ local activeStates = {}
 local waveCompleteRemote = Remotes and Remotes.WaveComplete or nil
 local levelCompleteRemote = Remotes and Remotes.LevelComplete or nil
 local noticeRemote = Remotes and Remotes.RE_Notice or nil
+
+local function toTelemetryId(value)
+    local valueType = typeof(value)
+    if valueType == "string" then
+        if value == "" then
+            return nil
+        end
+        return value
+    elseif valueType == "number" or valueType == "boolean" then
+        return tostring(value)
+    end
+
+    return nil
+end
+
+local function getPartyIdFromState(state)
+    if typeof(state) ~= "table" then
+        return nil
+    end
+
+    local arenaState = state.arenaState
+    if typeof(arenaState) == "table" then
+        local primary = arenaState.partyId or arenaState.PartyId or arenaState.partyID
+        local converted = toTelemetryId(primary)
+        if converted then
+            return converted
+        end
+
+        local instance = arenaState.instance
+        if typeof(instance) == "Instance" then
+            local attribute = instance:GetAttribute("PartyId") or instance:GetAttribute("partyId")
+            converted = toTelemetryId(attribute)
+            if converted then
+                return converted
+            end
+        end
+    end
+
+    return nil
+end
 
 local function shallowCopy(dictionary)
     if typeof(dictionary) ~= "table" then
@@ -175,6 +237,28 @@ end
 
 local function logPhase(state)
     print(string.format("[RoundDirectorServer] arena=%s phase=%s level=%d wave=%d", state.arenaId, state.phase, state.level, state.wave))
+    if telemetryTrack then
+        local payload = {
+            arenaId = state.arenaId,
+            phase = state.phase,
+            level = state.level,
+            wave = state.wave,
+        }
+
+        local partyId = getPartyIdFromState(state)
+        if partyId then
+            payload.partyId = partyId
+        end
+
+        if state.phase == "Defeat" then
+            local reason = describeDefeatReason(state.defeatReason)
+            if reason then
+                payload.reason = reason
+            end
+        end
+
+        telemetryTrack("round_phase", payload)
+    end
 end
 
 local function broadcastWaveChange(state)
@@ -354,6 +438,10 @@ local function fireWaveCompleteEvent(state, success, metadata)
     end
 
     waveCompleteRemote:FireAllClients(payload)
+
+    if telemetryTrack then
+        telemetryTrack("wave_complete", payload)
+    end
 end
 
 local function fireLevelCompleteEvent(state, metadata)
@@ -547,6 +635,7 @@ local function triggerDefeat(state, reason)
     state.defeatReason = reason or state.defeatReason
     state.running = false
     state.phase = "Defeat"
+    state.finalOutcome = "defeat"
 
     state.waveOutcome = { status = "failure", reason = state.defeatReason }
     state.waveDeadline = nil
@@ -571,6 +660,31 @@ local function triggerDefeat(state, reason)
     end
 
     finalizeLevelSummary(state, "defeat", state.defeatReason)
+
+    if telemetryTrack then
+        local payload = {
+            arenaId = state.arenaId,
+            outcome = "defeat",
+            level = state.level,
+            wave = state.wave,
+        }
+
+        local partyId = getPartyIdFromState(state)
+        if partyId then
+            payload.partyId = partyId
+        end
+
+        local readableReason = describeDefeatReason(state.defeatReason)
+        if readableReason then
+            payload.reason = readableReason
+        end
+
+        if typeof(state.startedAt) == "number" then
+            payload.duration = math.max(0, os.clock() - state.startedAt)
+        end
+
+        telemetryTrack("match_end", payload)
+    end
 end
 
 if TargetHealthServer then
@@ -788,7 +902,32 @@ local function runShop(state)
         if not ok then
             warn(string.format("[RoundDirectorServer] MatchReturnService.ReturnArena failed: %s", tostring(shouldStop)))
         elseif shouldStop then
+            local reportOutcome = false
+            if state.finalOutcome == nil then
+                state.finalOutcome = "victory"
+                reportOutcome = true
+            end
             state.running = false
+
+            if telemetryTrack and reportOutcome then
+                local payload = {
+                    arenaId = state.arenaId,
+                    outcome = "victory",
+                    level = state.level,
+                    wave = state.wave,
+                }
+
+                local partyId = getPartyIdFromState(state)
+                if partyId then
+                    payload.partyId = partyId
+                end
+
+                if typeof(state.startedAt) == "number" then
+                    payload.duration = math.max(0, os.clock() - state.startedAt)
+                end
+
+                telemetryTrack("match_end", payload)
+            end
             return false
         end
     end
@@ -831,6 +970,26 @@ local function runLoop(state)
         if not runLevel(state) then
             break
         end
+    end
+
+    if telemetryTrack and state.finalOutcome == nil then
+        local payload = {
+            arenaId = state.arenaId,
+            outcome = "stopped",
+            level = state.level,
+            wave = state.wave,
+        }
+
+        local partyId = getPartyIdFromState(state)
+        if partyId then
+            payload.partyId = partyId
+        end
+
+        if typeof(state.startedAt) == "number" then
+            payload.duration = math.max(0, os.clock() - state.startedAt)
+        end
+
+        telemetryTrack("match_end", payload)
     end
 
     if activeStates[state.arenaId] == state then
@@ -877,9 +1036,30 @@ function RoundDirectorServer.Start(arenaId, options)
         waveStartedAt = nil,
         waveDeadline = nil,
         defeatReason = nil,
+        startedAt = os.clock(),
+        finalOutcome = nil,
     }
 
     activeStates[arenaId] = state
+
+    if telemetryTrack then
+        local payload = {
+            arenaId = arenaId,
+            level = startLevel,
+        }
+
+        local partyId = getPartyIdFromState(state)
+        if partyId then
+            payload.partyId = partyId
+        end
+
+        local players = gatherArenaPlayers(state)
+        if type(players) == "table" then
+            payload.playerCount = #players
+        end
+
+        telemetryTrack("match_start", payload)
+    end
 
     task.spawn(runLoop, state)
 
@@ -894,6 +1074,11 @@ function RoundDirectorServer.Abort(arenaId)
 
     state.aborted = true
     state.running = false
+    local reportOutcome = false
+    if state.finalOutcome == nil then
+        state.finalOutcome = "aborted"
+        reportOutcome = true
+    end
 
     if MatchReturnService and typeof(MatchReturnService.ReturnArena) == "function" then
         local ok, result = pcall(MatchReturnService.ReturnArena, arenaId, {
@@ -911,6 +1096,26 @@ function RoundDirectorServer.Abort(arenaId)
     broadcastWaveChange(state)
     activeStates[arenaId] = nil
     sendPrepTimer(state, 0)
+
+    if telemetryTrack and reportOutcome then
+        local payload = {
+            arenaId = arenaId,
+            outcome = "aborted",
+            level = state.level,
+            wave = state.wave,
+        }
+
+        local partyId = getPartyIdFromState(state)
+        if partyId then
+            payload.partyId = partyId
+        end
+
+        if typeof(state.startedAt) == "number" then
+            payload.duration = math.max(0, os.clock() - state.startedAt)
+        end
+
+        telemetryTrack("match_end", payload)
+    end
 end
 
 function RoundDirectorServer.SkipPrep(arenaId)
