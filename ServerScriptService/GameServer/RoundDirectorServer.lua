@@ -1,10 +1,28 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local HUDServer = require(script.Parent:WaitForChild("HUDServer"))
+local Players = game:GetService("Players")
+local ServerScriptService = game:GetService("ServerScriptService")
+
+local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap"))
 local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig"))
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 
 local ArenaServer = require(script.Parent:WaitForChild("ArenaServer"))
+
+local EconomyServer
+do
+    local economyFolder = ServerScriptService:FindFirstChild("Economy")
+    local economyModule = economyFolder and economyFolder:FindFirstChild("EconomyServer")
+    if economyModule then
+        local ok, result = pcall(require, economyModule)
+        if ok then
+            EconomyServer = result
+        else
+            warn(string.format("[RoundDirectorServer] Failed to require EconomyServer: %s", tostring(result)))
+        end
+    end
+end
 
 local TurretController
 local turretModule = script.Parent:FindFirstChild("TurretControllerServer")
@@ -55,6 +73,101 @@ local function broadcastWaveChange(state)
 
     local waveValue = state.phase == "Wave" and state.wave or 0
     HUDServer.WaveChanged(state.arenaId, waveValue, state.level, state.phase)
+end
+
+local function gatherArenaPlayers(state)
+    local recipients = {}
+    local seen = {}
+
+    local arenaState = state and state.arenaState
+    if type(arenaState) == "table" then
+        local statePlayers = arenaState.players
+        if type(statePlayers) == "table" then
+            for _, entry in pairs(statePlayers) do
+                local player = entry
+                if typeof(entry) == "table" then
+                    player = entry.player or entry.Player or entry.owner
+                end
+
+                if typeof(player) == "Instance" and player:IsA("Player") and not seen[player] then
+                    table.insert(recipients, player)
+                    seen[player] = true
+                end
+            end
+        end
+    end
+
+    local arenaId = state and state.arenaId
+    local partyId
+    if type(arenaState) == "table" then
+        partyId = arenaState.partyId or arenaState.PartyId or arenaState.partyID
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if not seen[player] then
+            local matches = false
+            if arenaId then
+                local playerArena = player:GetAttribute("ArenaId")
+                if playerArena and tostring(playerArena) == tostring(arenaId) then
+                    matches = true
+                end
+            end
+
+            if not matches and partyId then
+                local playerParty = player:GetAttribute("PartyId")
+                if playerParty and tostring(playerParty) == tostring(partyId) then
+                    matches = true
+                end
+            end
+
+            if matches then
+                table.insert(recipients, player)
+                seen[player] = true
+            end
+        end
+    end
+
+    if #recipients == 0 then
+        for _, player in ipairs(Players:GetPlayers()) do
+            table.insert(recipients, player)
+        end
+    end
+
+    return recipients
+end
+
+local function grantWaveBonus(state)
+    if not EconomyServer or typeof(EconomyServer.GrantWaveClear) ~= "function" then
+        return
+    end
+
+    local players = gatherArenaPlayers(state)
+    if #players == 0 then
+        return
+    end
+
+    local levelValue = state and state.level or 0
+    local ok, err = pcall(EconomyServer.GrantWaveClear, players, levelValue)
+    if not ok then
+        warn(string.format("[RoundDirectorServer] GrantWaveClear failed: %s", tostring(err)))
+    end
+end
+
+local function grantLevelBonus(state, level)
+    if not EconomyServer or typeof(EconomyServer.GrantLevelClear) ~= "function" then
+        return
+    end
+
+    local players = gatherArenaPlayers(state)
+    if #players == 0 then
+        return
+    end
+
+    local levelValue = level or (state and state.level) or 0
+    local ok, err = pcall(EconomyServer.GrantLevelClear, players, levelValue)
+    if not ok then
+        warn(string.format("[RoundDirectorServer] GrantLevelClear failed: %s", tostring(err)))
+    end
 end
 
 local function sendPrepTimer(state, seconds)
@@ -167,6 +280,10 @@ local function runWave(state, waveNumber)
         task.wait(0.1)
     end
 
+    if state.running then
+        grantWaveBonus(state)
+    end
+
     return state.running
 end
 
@@ -187,6 +304,8 @@ local function runShop(state)
     if not state.running then
         return false
     end
+
+    grantLevelBonus(state, state.level)
 
     state.level += 1
     updateArenaStateSnapshot(state)
