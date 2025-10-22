@@ -6,6 +6,16 @@ local TweenService = game:GetService("TweenService")
 local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig"))
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 
+local FlagsModule
+do
+    local ok, module = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Flags"))
+    end)
+    if ok and typeof(module) == "table" then
+        FlagsModule = module
+    end
+end
+
 local ObstacleConfig = (GameConfig.Obstacles and GameConfig.Obstacles.Sawblade) or {}
 local PlayerConfig = GameConfig.Player or {}
 
@@ -32,6 +42,16 @@ end
 local GameServerFolder = ServerScriptService:WaitForChild("GameServer")
 local LibrariesFolder = GameServerFolder:WaitForChild("Libraries")
 local ArenaAdapter = require(LibrariesFolder:WaitForChild("ArenaAdapter"))
+
+local function resolveObstaclesFlag(): boolean
+    if FlagsModule and typeof((FlagsModule :: any).IsEnabled) == "function" then
+        local ok, result = pcall((FlagsModule :: any).IsEnabled, "Obstacles")
+        if ok and typeof(result) == "boolean" then
+            return result
+        end
+    end
+    return true
+end
 
 local AudioBus
 do
@@ -71,6 +91,8 @@ end
 local SawbladeServer = {}
 local activeStates = {}
 local RoundDirectorServer
+
+local obstaclesFlagEnabled = resolveObstaclesFlag()
 
 local playerRespawnData = setmetatable({}, { __mode = "k" })
 local playerConnections = setmetatable({}, { __mode = "k" })
@@ -698,7 +720,7 @@ local function updateActivation(state)
 
     local level = tonumber(state.level) or 0
     local phase = state.phase
-    local shouldEnable = level >= ENABLE_LEVEL and phase == "Wave"
+    local shouldEnable = obstaclesFlagEnabled and level >= ENABLE_LEVEL and phase == "Wave"
 
     if shouldEnable == state.enabled then
         return
@@ -901,6 +923,19 @@ function SawbladeServer.UpdateRoundState(selfOrArenaId, arenaIdOrContext, maybeC
 
     refreshLanes(state)
     updateActivation(state)
+end
+
+local function applyObstaclesFlag(isEnabled: boolean)
+    obstaclesFlagEnabled = isEnabled and true or false
+    for _, state in pairs(activeStates) do
+        updateActivation(state)
+    end
+end
+
+if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
+    (FlagsModule :: any).OnChanged("Obstacles", function(isEnabled)
+        applyObstaclesFlag(isEnabled)
+    end)
 end
 
 return SawbladeServer

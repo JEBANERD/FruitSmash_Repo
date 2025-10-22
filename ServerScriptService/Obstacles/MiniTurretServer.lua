@@ -8,6 +8,16 @@ local ProjectileServer = require(ServerScriptService:WaitForChild("GameServer"):
 local ArenaAdapter = require(ServerScriptService:WaitForChild("Combat"):WaitForChild("ArenaAdapter"))
 local ArenaServer = require(ServerScriptService:WaitForChild("GameServer"):WaitForChild("ArenaServer"))
 
+local FlagsModule
+do
+    local ok, module = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Flags"))
+    end)
+    if ok and typeof(module) == "table" then
+        FlagsModule = module
+    end
+end
+
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 local ObstacleConfig = (GameConfig.Obstacles and GameConfig.Obstacles.MiniTurret) or {}
 local ObstaclesConfig = GameConfig.Obstacles or {}
@@ -34,6 +44,18 @@ local PROJECTILE_LIFETIME_BUFFER = 0.6
 local PROJECTILE_MIN_LIFETIME = 0.75
 local WAIT_STEP = 0.25
 local UP_VECTOR = Vector3.new(0, 1, 0)
+
+local function resolveObstaclesFlag(): boolean
+    if FlagsModule and typeof((FlagsModule :: any).IsEnabled) == "function" then
+        local ok, result = pcall((FlagsModule :: any).IsEnabled, "Obstacles")
+        if ok and typeof(result) == "boolean" then
+            return result
+        end
+    end
+    return true
+end
+
+local obstaclesFlagEnabled = resolveObstaclesFlag()
 
 local AudioBus
 do
@@ -771,6 +793,10 @@ local function isFiringEnabled(state)
 
     updateArenaState(state)
 
+    if not obstaclesFlagEnabled then
+        return false
+    end
+
     if state.level and state.level < ENABLE_LEVEL then
         return false
     end
@@ -1018,6 +1044,16 @@ end
 
 function MiniTurretServer.IsActive(arenaId)
     return activeStates[arenaId] ~= nil
+end
+
+local function applyObstaclesFlag(isEnabled: boolean)
+    obstaclesFlagEnabled = isEnabled and true or false
+end
+
+if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
+    (FlagsModule :: any).OnChanged("Obstacles", function(isEnabled)
+        applyObstaclesFlag(isEnabled)
+    end)
 end
 
 if typeof(ArenaAdapter.ArenaRemoved) == "RBXScriptSignal" then

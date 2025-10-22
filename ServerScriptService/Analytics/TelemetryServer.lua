@@ -1,5 +1,6 @@
 --!strict
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 
 type Dictionary = { [string]: any }
@@ -7,7 +8,28 @@ type Dictionary = { [string]: any }
 local TelemetryServer = {}
 
 local sinks: { (string, Dictionary) -> () } = {}
-local enabled = true
+
+local FlagsModule
+do
+    local ok, module = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Flags"))
+    end)
+    if ok and typeof(module) == "table" then
+        FlagsModule = module
+    end
+end
+
+local function resolveTelemetryFlag(): boolean
+    if FlagsModule and typeof((FlagsModule :: any).IsEnabled) == "function" then
+        local ok, result = pcall((FlagsModule :: any).IsEnabled, "Telemetry")
+        if ok and typeof(result) == "boolean" then
+            return result
+        end
+    end
+    return true
+end
+
+local enabled = resolveTelemetryFlag()
 
 local function sanitizeValue(value: any, depth: number): any
         if depth > 4 then
@@ -118,6 +140,12 @@ end
 
 function TelemetryServer.IsEnabled(): boolean
         return enabled
+end
+
+if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
+        (FlagsModule :: any).OnChanged("Telemetry", function(isEnabled)
+                TelemetryServer.SetEnabled(isEnabled)
+        end)
 end
 
 return TelemetryServer

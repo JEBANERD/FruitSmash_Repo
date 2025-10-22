@@ -7,6 +7,16 @@ local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitFo
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 local ObstacleConfig = (GameConfig.Obstacles and GameConfig.Obstacles.MiniTurret) or {}
 
+local FlagsModule
+do
+    local ok, module = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Flags"))
+    end)
+    if ok and typeof(module) == "table" then
+        FlagsModule = module
+    end
+end
+
 local MIN_INTERVAL = ObstacleConfig.FireIntervalMin or 2.5
 local MAX_INTERVAL = ObstacleConfig.FireIntervalMax or 3.5
 local DAMAGE = ObstacleConfig.Damage or 25
@@ -23,6 +33,18 @@ end
 
 local MiniTurretServer = {}
 local activeArenas = {}
+
+local function resolveObstaclesFlag(): boolean
+    if FlagsModule and typeof((FlagsModule :: any).IsEnabled) == "function" then
+        local ok, result = pcall((FlagsModule :: any).IsEnabled, "Obstacles")
+        if ok and typeof(result) == "boolean" then
+            return result
+        end
+    end
+    return true
+end
+
+local obstaclesFlagEnabled = resolveObstaclesFlag()
 
 local function getArenaModel(arenaId)
     if not arenaId then
@@ -268,6 +290,10 @@ local function scheduleDamage(humanoid, delayTime)
 end
 
 local function fireTurret(state, turretData)
+    if not obstaclesFlagEnabled then
+        return
+    end
+
     local cf = getTurretOriginCFrame(turretData.components)
     if not cf then
         return
@@ -310,6 +336,11 @@ local function runTurretLoop(state, turretData)
     turretData.loopThread = task.spawn(function()
         local rng = Random.new()
         while state.running and turretData.running do
+            if not obstaclesFlagEnabled then
+                task.wait(0.5)
+                continue
+            end
+
             local interval = rng:NextNumber(MIN_INTERVAL, MAX_INTERVAL)
             task.wait(interval)
 
@@ -500,6 +531,16 @@ end
 
 function MiniTurretServer.GetState(arenaId)
     return activeArenas[arenaId]
+end
+
+local function applyObstaclesFlag(isEnabled: boolean)
+    obstaclesFlagEnabled = isEnabled and true or false
+end
+
+if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
+    (FlagsModule :: any).OnChanged("Obstacles", function(isEnabled)
+        applyObstaclesFlag(isEnabled)
+    end)
 end
 
 return MiniTurretServer

@@ -41,6 +41,9 @@ local SaveService = if saveServiceModule then safeRequire(saveServiceModule) els
 local saveServiceLoadAsync = if SaveService and typeof((SaveService :: any).LoadAsync) == "function" then (SaveService :: any).LoadAsync else nil
 local saveServiceSaveAsync = if SaveService and typeof((SaveService :: any).SaveAsync) == "function" then (SaveService :: any).SaveAsync else nil
 local saveServiceUpdateAsync = if SaveService and typeof((SaveService :: any).UpdateAsync) == "function" then (SaveService :: any).UpdateAsync else nil
+local saveServiceRegisterCheckpoint = if SaveService and typeof((SaveService :: any).RegisterCheckpointProvider) == "function"
+    then (SaveService :: any).RegisterCheckpointProvider
+    else nil
 
 local SaveSchemaModule = safeRequire(typesFolder:FindFirstChild("SaveSchema"))
 local ShopConfigModule = safeRequire(configFolder:FindFirstChild("ShopConfig"))
@@ -969,20 +972,23 @@ function ProfileServer.ConsumeToken(player: Player, itemId: string): (boolean, s
     return true, nil
 end
 
-function ProfileServer.Serialize(player: Player): ProfileData
-    local profile = profilesByPlayer[player]
-    if not profile then
-        return buildDefaultData()
+local function serializeProfileData(profile: Profile?): ProfileData?
+    if typeof(profile) ~= "table" then
+        return nil
     end
 
     local data = profile.Data
+    if type(data) ~= "table" then
+        return nil
+    end
+
     local inventory = ensureInventory(data)
     local serialized: ProfileData = {
         Coins = if type(data.Coins) == "number" then data.Coins else 0,
         Stats = if type(data.Stats) == "table" then deepCopy(data.Stats) else {},
         Inventory = {
             MeleeLoadout = sanitizeStringList(inventory.MeleeLoadout),
-            ActiveMelee = if type(inventory.ActiveMelee) == "string" then inventory.ActiveMelee else nil,
+            ActiveMelee = if type(inventory.ActiveMelee) == "string" and inventory.ActiveMelee ~= "" then inventory.ActiveMelee else nil,
             TokenCounts = sanitizeTokenCounts(inventory.TokenCounts),
             UtilityQueue = sanitizeStringList(inventory.UtilityQueue),
             OwnedMelee = sanitizeOwnedMelee(inventory.OwnedMelee),
@@ -991,6 +997,16 @@ function ProfileServer.Serialize(player: Player): ProfileData
     }
 
     return serialized
+end
+
+function ProfileServer.Serialize(player: Player): ProfileData
+    local profile = profilesByPlayer[player]
+    local serialized = serializeProfileData(profile)
+    if serialized then
+        return serialized
+    end
+
+    return buildDefaultData()
 end
 
 function ProfileServer.LoadSerialized(player: Player, serialized: ProfileData?)
@@ -1183,6 +1199,32 @@ end)
 
 for _, player in ipairs(Players:GetPlayers()) do
     task.defer(handlePlayerAdded, player)
+end
+
+if saveServiceRegisterCheckpoint then
+    saveServiceRegisterCheckpoint(function(player: Player?, userId: number, payload: any?): any?
+        local profile: Profile? = nil
+        if player then
+            profile = profilesByPlayer[player]
+        end
+
+        if not profile and typeof(userId) == "number" and userId ~= 0 then
+            profile = profilesByUserId[userId]
+        end
+
+        if not profile then
+            return payload
+        end
+
+        local serialized = serializeProfileData(profile)
+        if not serialized then
+            return payload
+        end
+
+        local container = ensureSaveContainer(payload)
+        container.Profile = serialized
+        return container
+    end)
 end
 
 return ProfileServer
