@@ -11,6 +11,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local QuickbarServer = require(script.Parent.Parent:WaitForChild("QuickbarServer"))
+
 -- ---------- Utilities ----------
 
 local function safeRequire(instance: Instance?): any?
@@ -42,10 +44,6 @@ local configFolder = sharedFolder:WaitForChild("Config")
 local ShopConfig = require(configFolder:WaitForChild("ShopConfig"))
 local GameConfigModule = require(configFolder:WaitForChild("GameConfig"))
 local GameConfig = GameConfigModule.Get()
-
-local QuickbarConfig = (GameConfig.UI and GameConfig.UI.Quickbar) or {}
-local MELEE_SLOTS = QuickbarConfig.MeleeSlots or 2
-local TOKEN_SLOTS = QuickbarConfig.TokenSlots or 3
 
 -- ---------- PersistenceServer resolution (robust across layouts) ----------
 
@@ -103,7 +101,6 @@ end
 
 -- Example uses:
 local RF_RequestPurchase = getOrCreateRemote("RF_RequestPurchase", "RemoteFunction") :: RemoteFunction
-local RE_QuickbarUpdate = getOrCreateRemote("RE_QuickbarUpdate", "RemoteEvent") :: RemoteEvent
 local RE_Notice         = getOrCreateRemote("RE_Notice", "RemoteEvent") :: RemoteEvent
 
 -- ---------- Fallback profiles (when PersistenceServer is absent) ----------
@@ -291,64 +288,6 @@ local function applyUtilityPurchase(inventory: any, item: any): (boolean, string
 	return true, nil
 end
 
--- ---------- Quickbar ----------
-
-local function buildQuickbarState(data: any, inventory: any)
-	local state = {
-		coins = data.Coins or 0,
-		melee = {} :: { { Id: string, Active: boolean } },
-		tokens = {} :: { { Id: string, Count: number, StackLimit: number? } },
-		utility = {} :: { { Id: string, Effect: any?, Applied: boolean? } },
-	}
-
-	-- Active melee first
-	if inventory.ActiveMelee then
-		table.insert(state.melee, { Id = inventory.ActiveMelee, Active = true })
-	end
-
-	-- Fill remaining melee slots
-	for _, id in ipairs(inventory.MeleeLoadout) do
-		if id ~= inventory.ActiveMelee then
-			table.insert(state.melee, { Id = id, Active = false })
-		end
-		if #state.melee >= MELEE_SLOTS then break end
-	end
-
-	-- Tokens: sort by Id for stable ordering
-	local tokenEntries = {}
-	for tokenId, count in pairs(inventory.TokenCounts) do
-		if (count or 0) > 0 then
-			table.insert(tokenEntries, {
-				Id = tokenId,
-				Count = count,
-				StackLimit = (ShopItems[tokenId] and ShopItems[tokenId].StackLimit) or nil,
-			})
-		end
-	end
-	table.sort(tokenEntries, function(a, b) return a.Id < b.Id end)
-	for _, entry in ipairs(tokenEntries) do
-		table.insert(state.tokens, entry)
-		if #state.tokens >= TOKEN_SLOTS then break end
-	end
-
-	-- Utility queue
-	for _, entry in ipairs(inventory.UtilityQueue) do
-		if typeof(entry) == "table" then
-			table.insert(state.utility, { Id = entry.Id, Effect = entry.Effect, Applied = entry.Applied })
-		else
-			table.insert(state.utility, { Id = entry })
-		end
-	end
-
-	return state
-end
-
-local function updateQuickbar(player: Player, data: any, inventory: any)
-	if RE_QuickbarUpdate then
-		RE_QuickbarUpdate:FireClient(player, buildQuickbarState(data, inventory))
-	end
-end
-
 -- ---------- Purchasing ----------
 
 local function processPurchase(player: Player, itemId: string)
@@ -415,15 +354,15 @@ local function processPurchase(player: Player, itemId: string)
 		return response
 	end
 
-	data.Coins = math.max((data.Coins or 0) - price, 0)
-	markProfileDirty(player, profile)
-	updateQuickbar(player, data, inventory)
+        data.Coins = math.max((data.Coins or 0) - price, 0)
+        markProfileDirty(player, profile)
+        local quickbarState = QuickbarServer.Refresh(player, data, inventory)
 
-	sendNotice(player, string.format("Purchased %s!", item.Name or item.Id), "info")
-	response["success"] = true
-	response["coins"] = data.Coins
-	response["kind"] = item.Kind
-	response["quickbar"] = buildQuickbarState(data, inventory)
+        sendNotice(player, string.format("Purchased %s!", item.Name or item.Id), "info")
+        response["success"] = true
+        response["coins"] = data.Coins
+        response["kind"] = item.Kind
+        response["quickbar"] = quickbarState or QuickbarServer.BuildState(data, inventory)
 	return response
 end
 
@@ -486,7 +425,7 @@ function ShopServer.MarkProfileDirty(player: Player, profile: any)
 end
 
 function ShopServer.UpdateQuickbarForPlayer(player: Player, data: any, inventory: any)
-	updateQuickbar(player, data, inventory)
+        QuickbarServer.Refresh(player, data, inventory)
 end
 
 function ShopServer.ApplyMeleeToInventory(inventory: any, item: any)
@@ -494,7 +433,14 @@ function ShopServer.ApplyMeleeToInventory(inventory: any, item: any)
 end
 
 function ShopServer.BuildQuickbarState(data: any, inventory: any)
-	return buildQuickbarState(data, inventory)
+        return QuickbarServer.BuildState(data, inventory)
 end
+
+QuickbarServer.RegisterInventoryResolver(function(player: Player)
+        local _, data, inventory = ShopServer.GetProfileAndInventory(player)
+        return data, inventory
+end)
+
+QuickbarServer.RefreshAll()
 
 return ShopServer

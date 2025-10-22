@@ -5,12 +5,35 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local Remotes = require(ReplicatedStorage.Remotes.RemoteBootstrap)
 
 -- Pull ShopConfig for proper Ids / effects
 local ShopConfig = require(ReplicatedStorage.Shared.Config.ShopConfig)
 local Items = (type(ShopConfig.All) == "function" and ShopConfig.All()) or ShopConfig.Items
+
+do
+        local gameServer = ServerScriptService:FindFirstChild("GameServer")
+        local quickbarModule = gameServer and gameServer:FindFirstChild("QuickbarServer")
+        if quickbarModule and quickbarModule:IsA("ModuleScript") then
+                local ok, quickbar = pcall(require, quickbarModule)
+                if ok and typeof(quickbar) == "table" then
+                        local isEnabled = (quickbar :: any).IsEnabled
+                        local active = false
+                        if typeof(isEnabled) == "function" then
+                                local okCall, result = pcall(isEnabled)
+                                active = okCall and result == true
+                        else
+                                active = true
+                        end
+                        if active then
+                                warn("[DevTest QuickbarFeeder] QuickbarServer is active; skipping sample feeder.")
+                                return
+                        end
+                end
+        end
+end
 
 type QuickbarMeleeEntry = { Id: string, Active: boolean? }
 type QuickbarTokenEntry = { Id: string, Count: number?, StackLimit: number? }
