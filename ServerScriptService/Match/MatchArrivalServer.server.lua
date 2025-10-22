@@ -6,6 +6,28 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local TAG = "[MatchArrival]"
 
+local telemetryTrack: ((string, { [string]: any }?) -> ())? = nil
+do
+    local analyticsFolder = ServerScriptService:FindFirstChild("Analytics")
+    local telemetryModule = analyticsFolder and analyticsFolder:FindFirstChild("TelemetryServer")
+    if telemetryModule and telemetryModule:IsA("ModuleScript") then
+        local ok, telemetry = pcall(require, telemetryModule)
+        if not ok then
+            warn(string.format("%s Failed to require TelemetryServer: %s", TAG, tostring(telemetry)))
+        else
+            local trackFn = (telemetry :: any).Track
+            if typeof(trackFn) == "function" then
+                telemetryTrack = function(eventName: string, payload: { [string]: any }?)
+                    local success, err = pcall(trackFn, eventName, payload)
+                    if not success then
+                        warn(string.format("%s Telemetry.Track failed: %s", TAG, tostring(err)))
+                    end
+                end
+            end
+        end
+    end
+end
+
 local noticeRemote: RemoteEvent? = nil
 
 local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
@@ -464,6 +486,24 @@ local function handlePlayerAdded(player: Player)
     player:SetAttribute("PartyId", partyId)
     player:SetAttribute("ArenaId", arenaId)
 
+    local sourcePlaceId
+    if typeof(joinData) == "table" then
+        local rawSource = joinData.SourcePlaceId or joinData.sourcePlaceId
+        if typeof(rawSource) == "number" then
+            sourcePlaceId = rawSource
+        end
+    end
+
+    if telemetryTrack then
+        telemetryTrack("session_start", {
+            player = player.Name,
+            userId = typeof(player.UserId) == "number" and player.UserId or nil,
+            partyId = partyId,
+            arenaId = arenaId,
+            sourcePlaceId = sourcePlaceId,
+        })
+    end
+
     if not arenaState and ArenaServer then
         local getState = (ArenaServer :: any).GetArenaState
         if typeof(getState) == "function" then
@@ -499,6 +539,15 @@ local function handlePlayerRemoving(player: Player)
     if context.connection then
         context.connection:Disconnect()
         context.connection = nil
+    end
+
+    if telemetryTrack then
+        telemetryTrack("session_end", {
+            player = player.Name,
+            userId = typeof(player.UserId) == "number" and player.UserId or nil,
+            partyId = context.partyId,
+            arenaId = context.arenaId,
+        })
     end
 
     deregisterArenaPlayer(context, player)

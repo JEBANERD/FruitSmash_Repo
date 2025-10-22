@@ -31,6 +31,24 @@ local function safeRequire(instance: Instance?): any?
         return result
 end
 
+local telemetryTrack: ((string, { [string]: any }?) -> ())? = nil
+do
+        local analyticsFolder = ServerScriptService:FindFirstChild("Analytics")
+        local telemetryModule = analyticsFolder and analyticsFolder:FindFirstChild("TelemetryServer")
+        local telemetry = safeRequire(telemetryModule)
+        if telemetry then
+                local trackFn = (telemetry :: any).Track
+                if typeof(trackFn) == "function" then
+                        telemetryTrack = function(eventName: string, payload: { [string]: any }?)
+                                local ok, err = pcall(trackFn, eventName, payload)
+                                if not ok then
+                                        warn(string.format("[ShopServer] Telemetry.Track failed: %s", tostring(err)))
+                                end
+                        end
+                end
+        end
+end
+
 local function findFirstChildPath(root: Instance, path: {string}): Instance?
         local current: Instance? = root
         for _, name in ipairs(path) do
@@ -681,6 +699,31 @@ local function processPurchase(player: Player, itemId: string)
                         stockLimit = response.stockLimit,
                         quickbar = response.quickbar,
                 })
+        end
+
+        if telemetryTrack then
+                local payload = {
+                        player = player.Name,
+                        userId = typeof(player.UserId) == "number" and player.UserId or nil,
+                        itemId = item.Id,
+                        kind = item.Kind,
+                        price = price,
+                        coinsRemaining = remainingCoins,
+                        stockRemaining = response.stockRemaining,
+                        stockLimit = response.stockLimit,
+                }
+
+                local arenaIdAttr = player:GetAttribute("ArenaId")
+                if arenaIdAttr ~= nil then
+                        payload.arenaId = arenaIdAttr
+                end
+
+                local partyIdAttr = player:GetAttribute("PartyId")
+                if partyIdAttr ~= nil then
+                        payload.partyId = partyIdAttr
+                end
+
+                telemetryTrack("shop_purchase", payload)
         end
 
         return response

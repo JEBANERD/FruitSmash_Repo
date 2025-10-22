@@ -36,6 +36,24 @@ local function safeRequire(instance: Instance?): any?
         return result
 end
 
+local telemetryTrack: ((string, { [string]: any }?) -> ())? = nil
+do
+        local analyticsFolder = ServerScriptService:FindFirstChild("Analytics")
+        local telemetryModule = analyticsFolder and analyticsFolder:FindFirstChild("TelemetryServer")
+        local telemetry = safeRequire(telemetryModule)
+        if telemetry then
+                local trackFn = (telemetry :: any).Track
+                if typeof(trackFn) == "function" then
+                        telemetryTrack = function(eventName: string, payload: { [string]: any }?)
+                                local ok, err = pcall(trackFn, eventName, payload)
+                                if not ok then
+                                        warn(string.format("[TokenEffects] Telemetry.Track failed: %s", tostring(err)))
+                                end
+                        end
+                end
+        end
+end
+
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local configFolder = sharedFolder:WaitForChild("Config")
 
@@ -743,6 +761,33 @@ function TokenEffectsServer.Use(player: Player, effectName: string?, slotIndex: 
 
                 if typeof(ShopServer.UpdateQuickbarForPlayer) == "function" then
                         ShopServer.UpdateQuickbarForPlayer(player, data, inventory)
+                end
+
+                if telemetryTrack then
+                        local payload = {
+                                player = player.Name,
+                                userId = typeof(player.UserId) == "number" and player.UserId or nil,
+                                tokenId = tokenId,
+                                effect = resolvedEffect,
+                                remaining = nextCount,
+                                slot = numericSlot,
+                        }
+
+                        local arenaIdAttr = player:GetAttribute("ArenaId")
+                        if arenaIdAttr ~= nil then
+                                payload.arenaId = arenaIdAttr
+                        end
+
+                        local partyIdAttr = player:GetAttribute("PartyId")
+                        if partyIdAttr ~= nil then
+                                payload.partyId = partyIdAttr
+                        end
+
+                        if refreshed then
+                                payload.refreshed = true
+                        end
+
+                        telemetryTrack("token_used", payload)
                 end
 
                 if refreshed then
