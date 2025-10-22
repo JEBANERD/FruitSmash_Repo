@@ -12,6 +12,7 @@ local playerGui: PlayerGui = localPlayer:WaitForChild("PlayerGui")
 local remotesModule = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap"))
 local saveRemote: RemoteFunction? = remotesModule and remotesModule.RF_SaveSettings or nil
 local pushRemote: RemoteEvent? = remotesModule and remotesModule.RE_SettingsPushed or nil
+local tutorialRemote: RemoteFunction? = remotesModule and remotesModule.RF_Tutorial or nil
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local configFolder = sharedFolder:WaitForChild("Config")
@@ -733,6 +734,105 @@ local function createPaletteRow()
   updatePaletteUI()
 end
 
+local function createTutorialResetRow()
+  local row = Instance.new("Frame")
+  row.Name = "TutorialResetRow"
+  row.BackgroundTransparency = 1
+  row.Size = UDim2.new(1, 0, 0, 78)
+  row.LayoutOrder = #contentFrame:GetChildren() + 1
+  row.Parent = contentFrame
+
+  local title = Instance.new("TextLabel")
+  title.BackgroundTransparency = 1
+  title.Size = UDim2.new(1, -150, 0, 22)
+  title.Font = Enum.Font.Gotham
+  title.TextSize = 16
+  title.TextColor3 = Color3.new(1, 1, 1)
+  title.TextXAlignment = Enum.TextXAlignment.Left
+  title.Text = "Tutorial"
+  title.Parent = row
+
+  local description = Instance.new("TextLabel")
+  description.BackgroundTransparency = 1
+  description.Size = UDim2.new(1, -160, 0, 44)
+  description.Position = UDim2.new(0, 0, 0, 26)
+  description.Font = Enum.Font.Gotham
+  description.TextSize = 14
+  description.TextColor3 = Color3.fromRGB(180, 180, 196)
+  description.TextXAlignment = Enum.TextXAlignment.Left
+  description.TextYAlignment = Enum.TextYAlignment.Top
+  description.TextWrapped = true
+  description.Text = "Replay the onboarding tips the next time you join."
+  description.Parent = row
+
+  local button = Instance.new("TextButton")
+  button.Name = "ResetTutorialButton"
+  button.AnchorPoint = Vector2.new(1, 0)
+  button.Position = UDim2.new(1, 0, 0, 30)
+  button.Size = UDim2.new(0, 150, 0, 36)
+  button.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
+  button.AutoButtonColor = false
+  button.TextColor3 = Color3.new(1, 1, 1)
+  button.Font = Enum.Font.GothamSemibold
+  button.TextSize = 15
+  button.Text = "Reset Tutorial"
+  button.Parent = row
+
+  local buttonCorner = Instance.new("UICorner")
+  buttonCorner.CornerRadius = UDim.new(0, 10)
+  buttonCorner.Parent = button
+
+  if not tutorialRemote then
+    button.Text = "Unavailable"
+    button.AutoButtonColor = false
+    button.TextTransparency = 0.4
+    button.Active = false
+    return
+  end
+
+  local busy = false
+  button.MouseButton1Click:Connect(function()
+    if busy then
+      return
+    end
+    busy = true
+    local originalText = button.Text
+    button.Text = "Resetting..."
+
+    task.spawn(function()
+      local success = false
+      local remote = tutorialRemote
+      if remote then
+        local ok, result = pcall(function()
+          return remote:InvokeServer({ action = "reset" })
+        end)
+        if ok and typeof(result) == "table" then
+          local completedValue = (result :: any).completed or (result :: any).Completed
+          if completedValue == false then
+            success = true
+          end
+        elseif not ok then
+          warn("[SettingsUI] Tutorial reset failed:", result)
+        end
+      end
+
+      task.defer(function()
+        if success then
+          button.Text = "Tutorial Reset"
+          task.delay(2, function()
+            if button.Parent then
+              button.Text = originalText
+            end
+          end)
+        else
+          button.Text = originalText
+        end
+        busy = false
+      end)
+    end)
+  end)
+end
+
 local function formatPercentage(value: number): string
   return string.format("%d%%", math.floor(math.clamp(value, 0, 1) * 100 + 0.5))
 end
@@ -756,6 +856,9 @@ createPaletteRow()
 
 createSectionLabel("UI")
 createSliderRow("Text Scale", "TextScale", clampValue("TextScale", 0.8, 0.8), clampValue("TextScale", 1.4, 1.4), 0.05, formatTextScale)
+
+createSectionLabel("Onboarding")
+createTutorialResetRow()
 
 applyColorblindPalette(currentSettings.ColorblindPalette)
 refreshAllText()

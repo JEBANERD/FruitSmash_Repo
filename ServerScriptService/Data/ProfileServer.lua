@@ -67,6 +67,8 @@ local settingsPalettesConfig = if typeof(settingsConfig) == "table" then (settin
 local paletteIds: {string} = {}
 local paletteLookup: {[string]: string} = {}
 
+local TUTORIAL_STAT_KEY = "TutorialCompleted"
+
 type TokenCounts = { [string]: number }
 type OwnedMeleeMap = { [string]: boolean }
 
@@ -371,6 +373,10 @@ local function buildDefaultData(): ProfileData
         stats.TotalPoints = 0
     end
 
+    if stats[TUTORIAL_STAT_KEY] ~= true then
+        stats[TUTORIAL_STAT_KEY] = false
+    end
+
     local inventory = data.Inventory
     inventory.MeleeLoadout = inventory.MeleeLoadout or {}
     inventory.TokenCounts = inventory.TokenCounts or {}
@@ -380,6 +386,16 @@ local function buildDefaultData(): ProfileData
     data.Settings = sanitizeSettingsData(data.Settings)
 
     return data
+end
+
+local function ensureTutorialStat(stats: { [string]: any }?): boolean
+    if type(stats) ~= "table" then
+        return false
+    end
+
+    local completed = stats[TUTORIAL_STAT_KEY] == true
+    stats[TUTORIAL_STAT_KEY] = completed
+    return completed
 end
 
 local function ensureStats(data: ProfileData): { [string]: any }
@@ -393,7 +409,35 @@ local function ensureStats(data: ProfileData): { [string]: any }
         stats.TotalPoints = 0
     end
 
+    ensureTutorialStat(stats)
+
     return stats
+end
+
+local tutorialAttrWarned = false
+
+local function syncTutorialAttribute(player: Player?, data: ProfileData?): boolean
+    local stats: { [string]: any }? = nil
+    if type(data) == "table" then
+        stats = ensureStats(data)
+    end
+
+    local completed = false
+    if stats then
+        completed = ensureTutorialStat(stats)
+    end
+
+    if player and player:IsA("Player") then
+        local ok, err = pcall(function()
+            player:SetAttribute(TUTORIAL_STAT_KEY, completed)
+        end)
+        if not ok and not tutorialAttrWarned then
+            tutorialAttrWarned = true
+            warn(string.format("[ProfileServer] Failed to set %s attribute for %s: %s", TUTORIAL_STAT_KEY, player.Name, tostring(err)))
+        end
+    end
+
+    return completed
 end
 
 local function ensureInventory(data: ProfileData): Inventory
@@ -646,6 +690,7 @@ local function ensureProfile(player: Player): Profile
         if not attributeConnections[player] then
             connectAttributeTracking(player, existing)
         end
+        syncTutorialAttribute(player, existing.Data)
         return existing
     end
 
@@ -658,6 +703,8 @@ local function ensureProfile(player: Player): Profile
 
     profilesByPlayer[player] = profile
     profilesByUserId[player.UserId] = profile
+
+    syncTutorialAttribute(player, data)
 
     connectAttributeTracking(player, profile)
 
@@ -919,6 +966,8 @@ function ProfileServer.LoadSerialized(player: Player, serialized: ProfileData?)
 
     profile.Data = data
 
+    syncTutorialAttribute(player, data)
+
     local inventory = ensureInventory(data)
     refreshQuickbar(player, data, inventory)
 
@@ -936,8 +985,22 @@ function ProfileServer.Reset(player: Player)
     end
 
     profile.Data = buildDefaultData()
+    syncTutorialAttribute(player, profile.Data)
     connectAttributeTracking(player, profile)
     refreshQuickbar(player, profile.Data, profile.Data.Inventory)
+end
+
+function ProfileServer.GetTutorialCompleted(player: Player): boolean
+    local profile = ProfileServer.Get(player)
+    return syncTutorialAttribute(player, profile.Data)
+end
+
+function ProfileServer.SetTutorialCompleted(player: Player, completed: boolean?): boolean
+    local profile = ProfileServer.Get(player)
+    local data = profile.Data
+    local stats = ensureStats(data)
+    stats[TUTORIAL_STAT_KEY] = completed == true
+    return syncTutorialAttribute(player, data)
 end
 
 local saveServiceLoadWarned = false
