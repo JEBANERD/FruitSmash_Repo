@@ -5,6 +5,18 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local HUDServer = require(script.Parent:WaitForChild("HUDServer"))
 local ArenaServer = require(ServerScriptService.GameServer.ArenaServer)
 
+local AchievementServer do
+    local ok, result = pcall(function()
+        return require(script.Parent:WaitForChild("AchievementServer"))
+    end)
+
+    if ok then
+        AchievementServer = result
+    elseif result ~= nil then
+        warn(string.format("[TargetHealthServer] Failed to require AchievementServer: %s", tostring(result)))
+    end
+end
+
 local TargetImmunityServer do
     local ok, result = pcall(function()
         return require(script.Parent:WaitForChild("TargetImmunityServer"))
@@ -297,7 +309,16 @@ function TargetHealthServer.ApplyDamage(arenaId, laneId, damage)
         return laneState.currentHP
     end
 
+    local previousHP = laneState.currentHP
     laneState.currentHP = math.max(laneState.currentHP - numericDamage, 0)
+    if laneState.currentHP < previousHP then
+        if AchievementServer and typeof(AchievementServer.RecordLaneDamage) == "function" then
+            local okRecord, errRecord = pcall(AchievementServer.RecordLaneDamage, arenaId, laneId)
+            if not okRecord then
+                warn(string.format("[TargetHealthServer] AchievementServer.RecordLaneDamage failed: %s", tostring(errRecord)))
+            end
+        end
+    end
     if laneState.currentHP <= 0 then
         state.gameOver = true
         gameOverEvent:Fire(arenaId, laneId)

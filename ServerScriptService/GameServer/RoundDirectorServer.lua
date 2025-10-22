@@ -34,6 +34,19 @@ local ArenaServer = require(script.Parent:WaitForChild("ArenaServer"))
 local TargetHealthServer = require(script.Parent:WaitForChild("TargetHealthServer"))
 local RoundSummaryServer = require(script.Parent:WaitForChild("RoundSummaryServer"))
 
+local AchievementServer
+do
+    local achievementModule = script.Parent:FindFirstChild("AchievementServer")
+    if achievementModule and achievementModule:IsA("ModuleScript") then
+        local ok, result = pcall(require, achievementModule)
+        if ok then
+            AchievementServer = result
+        else
+            warn(string.format("[RoundDirectorServer] Failed to require AchievementServer: %s", tostring(result)))
+        end
+    end
+end
+
 local MatchReturnService
 do
     local matchFolder = ServerScriptService:FindFirstChild("Match")
@@ -395,6 +408,14 @@ local function ensureLevelSummary(state)
 
     state.currentLevelSummary = summary
 
+    if AchievementServer and typeof(AchievementServer.BeginLevel) == "function" then
+        local players = gatherArenaPlayers(state)
+        local okAchievement, achievementErr = pcall(AchievementServer.BeginLevel, state.arenaId, summary.level, players, summary.startedAt)
+        if not okAchievement then
+            warn(string.format("[RoundDirectorServer] AchievementServer.BeginLevel failed: %s", tostring(achievementErr)))
+        end
+    end
+
     if RoundSummaryServer and typeof(RoundSummaryServer.BeginLevel) == "function" then
         local ok, err = pcall(RoundSummaryServer.BeginLevel, state.arenaId, summary.level, summary.startKOs)
         if not ok then
@@ -640,6 +661,22 @@ local function finalizeLevelSummary(state, outcome, reason)
 
     if levelEventPayload then
         fireLevelCompleteEvent(state, levelEventPayload)
+    end
+
+    local finishClock = os.clock()
+    if AchievementServer and typeof(AchievementServer.HandleLevelComplete) == "function" then
+        local levelInfo = {
+            level = levelNumber,
+            startedAt = summary.startedAt,
+            finishedAt = finishClock,
+            duration = summary.startedAt and math.max(0, finishClock - summary.startedAt) or nil,
+            wavesCleared = sanitizeInteger(summary.wavesCleared or 0),
+        }
+
+        local okAchievement, achievementErr = pcall(AchievementServer.HandleLevelComplete, state.arenaId, outcome, players, perPlayerSummary, levelInfo)
+        if not okAchievement then
+            warn(string.format("[RoundDirectorServer] AchievementServer.HandleLevelComplete failed: %s", tostring(achievementErr)))
+        end
     end
 
     state.currentLevelSummary = nil
@@ -1076,6 +1113,13 @@ local function runLoop(state)
         activeStates[state.arenaId] = nil
     end
 
+    if AchievementServer and typeof(AchievementServer.ResetArena) == "function" then
+        local okAchievementReset, achievementResetErr = pcall(AchievementServer.ResetArena, state.arenaId)
+        if not okAchievementReset then
+            warn(string.format("[RoundDirectorServer] AchievementServer.ResetArena failed: %s", tostring(achievementResetErr)))
+        end
+    end
+
     if RoundSummaryServer and typeof(RoundSummaryServer.Reset) == "function" then
         local okReset, resetErr = pcall(RoundSummaryServer.Reset, state.arenaId)
         if not okReset then
@@ -1194,6 +1238,13 @@ function RoundDirectorServer.Abort(arenaId)
     callSawblade("Stop", arenaId)
     activeStates[arenaId] = nil
     sendPrepTimer(state, 0)
+
+    if AchievementServer and typeof(AchievementServer.ResetArena) == "function" then
+        local okAchievementReset, achievementResetErr = pcall(AchievementServer.ResetArena, arenaId)
+        if not okAchievementReset then
+            warn(string.format("[RoundDirectorServer] AchievementServer.ResetArena failed: %s", tostring(achievementResetErr)))
+        end
+    end
 
     if RoundSummaryServer and typeof(RoundSummaryServer.Reset) == "function" then
         local okReset, resetErr = pcall(RoundSummaryServer.Reset, arenaId)
