@@ -30,6 +30,26 @@ local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("
 local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig"))
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 
+local FlagsModule
+do
+    local ok, module = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Flags"))
+    end)
+    if ok and typeof(module) == "table" then
+        FlagsModule = module
+    end
+end
+
+local function resolveObstaclesFlag(): boolean
+    if FlagsModule and typeof((FlagsModule :: any).IsEnabled) == "function" then
+        local ok, result = pcall((FlagsModule :: any).IsEnabled, "Obstacles")
+        if ok and typeof(result) == "boolean" then
+            return result
+        end
+    end
+    return true
+end
+
 local ArenaServer = require(script.Parent:WaitForChild("ArenaServer"))
 local TargetHealthServer = require(script.Parent:WaitForChild("TargetHealthServer"))
 local RoundSummaryServer = require(script.Parent:WaitForChild("RoundSummaryServer"))
@@ -155,6 +175,8 @@ local ROSTER_BANDS = {
 
 local RoundDirectorServer = {}
 local activeStates = {}
+
+local obstaclesFlagEnabled = resolveObstaclesFlag()
 
 local waveCompleteRemote = Remotes and Remotes.WaveComplete or nil
 local levelCompleteRemote = Remotes and Remotes.LevelComplete or nil
@@ -451,6 +473,10 @@ local function callSawblade(methodName, arenaId, ...)
         return
     end
 
+    if methodName ~= "Stop" and not obstaclesFlagEnabled then
+        return
+    end
+
     local method = SawbladeServer[methodName]
     if typeof(method) ~= "function" then
         return
@@ -460,6 +486,38 @@ local function callSawblade(methodName, arenaId, ...)
     if not ok then
         warn(string.format("[RoundDirectorServer] SawbladeServer.%s failed: %s", tostring(methodName), tostring(err)))
     end
+end
+
+local function applyObstaclesFlag(isEnabled: boolean)
+    obstaclesFlagEnabled = isEnabled and true or false
+    if not obstaclesFlagEnabled then
+        for arenaId in pairs(activeStates) do
+            callSawblade("Stop", arenaId)
+        end
+        return
+    end
+
+    for arenaId, state in pairs(activeStates) do
+        if typeof(state) == "table" then
+            local context = {
+                level = state.level,
+                phase = state.phase,
+                wave = state.wave,
+            }
+
+            if state.phase == "Wave" then
+                callSawblade("Start", arenaId, context)
+            else
+                callSawblade("UpdateRoundState", arenaId, context)
+            end
+        end
+    end
+end
+
+if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
+    (FlagsModule :: any).OnChanged("Obstacles", function(isEnabled)
+        applyObstaclesFlag(isEnabled)
+    end)
 end
 
 local function updateArenaStateSnapshot(state)
