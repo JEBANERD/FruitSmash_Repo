@@ -28,7 +28,35 @@ type BonusConfig = { Base: number?, PerLevel: number?, PointsBase: number?, Poin
 
 type Metadata = { [string]: any }
 
+type MultiplierEntry = { value: number, expiresAt: number?, token: any, attributeName: string? }
+
 local wallets: { [Player]: Wallet } = setmetatable({}, { __mode = "k" })
+local multipliers: { [Player]: { [string]: MultiplierEntry } } = setmetatable({}, { __mode = "k" })
+
+local multiplierAttributeMap: { [string]: string } = {
+        coins = "CoinRewardMultiplier",
+}
+
+local function normalizeStatName(stat: any): string?
+        if typeof(stat) ~= "string" then
+                return nil
+        end
+
+        local lowered = string.lower(stat)
+        if lowered == "coin" then
+                lowered = "coins"
+        end
+
+        if multiplierAttributeMap[lowered] ~= nil then
+                return lowered
+        end
+
+        if lowered == "coins" then
+                return lowered
+        end
+
+        return nil
+end
 
 local EconomyServer = {}
 
@@ -83,6 +111,71 @@ local function ensureWallet(player: Player): Wallet
         return wallet
 end
 
+local function cleanupMultiplierState(player: Player, state: { [string]: MultiplierEntry }?)
+        if not state then
+                return
+        end
+
+        if next(state) == nil then
+                multipliers[player] = nil
+        end
+end
+
+local function clearMultiplier(player: Player, stat: string, stateOverride: { [string]: MultiplierEntry }?, entryOverride: MultiplierEntry?)
+        local state = stateOverride or multipliers[player]
+        if not state then
+                return
+        end
+
+        local entry = entryOverride or state[stat]
+        if not entry then
+                cleanupMultiplierState(player, state)
+                return
+        end
+
+        local attrName = entry.attributeName or multiplierAttributeMap[stat]
+        if attrName then
+                local attr = player:GetAttribute(attrName)
+                if attr ~= nil then
+                        if typeof(attr) ~= "number" or entry.value == nil then
+                                player:SetAttribute(attrName, nil)
+                        elseif math.abs((attr :: number) - entry.value) < 1e-3 then
+                                player:SetAttribute(attrName, nil)
+                        end
+                end
+        end
+
+        state[stat] = nil
+        cleanupMultiplierState(player, state)
+end
+
+local function resolveMultiplier(player: Player, stat: string): number
+        local state = multipliers[player]
+        if not state then
+                return 1
+        end
+
+        local entry = state[stat]
+        if not entry then
+                cleanupMultiplierState(player, state)
+                return 1
+        end
+
+        local expiresAt = entry.expiresAt
+        if expiresAt ~= nil and expiresAt <= os.clock() then
+                clearMultiplier(player, stat, state, entry)
+                return 1
+        end
+
+        local numeric = tonumber(entry.value)
+        if numeric == nil or numeric <= 0 then
+                clearMultiplier(player, stat, state, entry)
+                return 1
+        end
+
+        return numeric
+end
+
 local function updateAttributes(player: Player, wallet: Wallet)
         if not player or player.Parent == nil then
                 return
@@ -121,6 +214,16 @@ local function applyDelta(player: Player, coinsDeltaRaw: any, pointsDeltaRaw: an
 
         if coinsDelta == 0 and pointsDelta == 0 then
                 return nil
+        end
+
+        if coinsDelta > 0 then
+                local multiplier = resolveMultiplier(player, "coins")
+                if multiplier > 0 and math.abs(multiplier - 1) > 1e-3 then
+                        local scaled = toInteger(coinsDelta * multiplier)
+                        if scaled and scaled > 0 then
+                                coinsDelta = scaled
+                        end
+                end
         end
 
         local wallet = ensureWallet(player)
@@ -221,6 +324,63 @@ local function resolveFruitStats(fruitId: string)
         return nil
 end
 
+function EconomyServer.SetMultiplier(player: Player, stat: string, value: any, durationSec: any?): boolean
+        if typeof(player) ~= "Instance" or not player:IsA("Player") then
+                return false
+        end
+
+        local normalized = normalizeStatName(stat)
+        if not normalized then
+                return false
+        end
+
+        local numericValue = tonumber(value)
+        if numericValue == nil or numericValue <= 0 then
+                clearMultiplier(player, normalized)
+                return true
+        end
+
+        local duration = tonumber(durationSec)
+        if duration ~= nil and duration <= 0 then
+                duration = nil
+        end
+
+        local state = multipliers[player]
+        if not state then
+                state = {}
+                multipliers[player] = state
+        end
+
+        local entry: MultiplierEntry = {
+                value = numericValue,
+                expiresAt = duration and (os.clock() + duration) or nil,
+                token = {},
+                attributeName = multiplierAttributeMap[normalized],
+        }
+
+        local attrName = entry.attributeName
+        if attrName then
+                player:SetAttribute(attrName, numericValue)
+        end
+
+        state[normalized] = entry
+
+        if duration then
+                local token = entry.token
+                task.delay(duration, function()
+                        local currentState = multipliers[player]
+                        local currentEntry = currentState and currentState[normalized]
+                        if currentEntry ~= entry or currentEntry.token ~= token then
+                                return
+                        end
+
+                        clearMultiplier(player, normalized, currentState, currentEntry)
+                end)
+        end
+
+        return true
+end
+
 function EconomyServer.GrantFruit(player: Player, fruitId: string): AwardSummary?
         if typeof(player) ~= "Instance" or not player:IsA("Player") then
                 return nil
@@ -293,6 +453,16 @@ end
 Players.PlayerAdded:Connect(hydratePlayer)
 Players.PlayerRemoving:Connect(function(player)
         wallets[player] = nil
+        local state = multipliers[player]
+        if state then
+                local stats = {}
+                for statName in pairs(state) do
+                        table.insert(stats, statName)
+                end
+                for _, statName in ipairs(stats) do
+                        clearMultiplier(player, statName, state)
+                end
+        end
 end)
 
 return EconomyServer
