@@ -94,6 +94,16 @@ local function applyDelta(player, coinsDelta, pointsDelta, metadata)
         return 0, 0
     end
 
+    if coinsDelta > 0 then
+        local multiplierAttr = player and player:GetAttribute("CoinRewardMultiplier")
+        if typeof(multiplierAttr) == "number" and multiplierAttr > 0 then
+            coinsDelta *= multiplierAttr
+            if coinsDelta > 0 then
+                coinsDelta = math.floor(coinsDelta + 0.5)
+            end
+        end
+    end
+
     local wallet = getWallet(player)
     wallet.Coins += coinsDelta
     wallet.Points += pointsDelta

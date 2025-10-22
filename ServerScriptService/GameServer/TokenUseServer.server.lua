@@ -1,43 +1,65 @@
 --!strict
 -- TokenUseServer.server.lua
--- Minimal server handler so Quickbar can invoke token usage in local tests.
+-- Minimal server handler so Quickbar can invoke token usage with server validation.
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local Remotes = require(ReplicatedStorage.Remotes.RemoteBootstrap)
+local TokenEffectsServer = require(script.Parent:WaitForChild("TokenEffectsServer"))
 
 -- Use a map type for arbitrary metadata instead of `table`
 export type Meta = { [string]: any }
 
 export type UseTokenPayload = {
-	effect: string?,   -- "SpeedBoost" | "DoubleCoins" | "TargetShield" | "BurstClear" | "AutoRepairMelee" | "TargetHealthBoost"
-	slot: number?,     -- quickbar slot index [optional]
-	meta: Meta?,       -- arbitrary extra data from client
+    effect: string?,
+    slot: number?,
+    meta: Meta?,
 }
 
 local rf: RemoteFunction = Remotes.RF_UseToken
 
-rf.OnServerInvoke = function(player: Player, payload: UseTokenPayload?)
-	-- Basic validation
-	if typeof(payload) ~= "table" then
-		return { ok = false, err = "BadPayload" }
-	end
+local function parsePayload(payload: any): (string?, number?)
+    if payload == nil then
+        return nil, nil
+    end
 
-	local effect = payload.effect
-	if typeof(effect) ~= "string" then
-		return { ok = false, err = "NoEffect" }
-	end
+    local effectName: string? = nil
+    local slotIndex: number? = nil
 
-	print(("[TokenUse] %s requested effect %s (slot=%s)")
-		:format(player.Name, effect, tostring(payload.slot)))
+    if typeof(payload) == "number" then
+        slotIndex = payload
+    elseif typeof(payload) == "table" then
+        effectName = payload.effect or payload.Effect
+        slotIndex = payload.slot or payload.Slot or payload.index or payload.Index
+    elseif typeof(payload) == "string" then
+        effectName = payload
+    end
 
-	-- TODO: Wire to real effect application here.
-
-	-- Optional feedback
-	if Remotes.RE_Notice then
-		Remotes.RE_Notice:FireClient(player, { msg = "Token used: " .. effect, kind = "info" })
-	end
-
-	return { ok = true }
+    return effectName, slotIndex
 end
+
+rf.OnServerInvoke = function(player: Player, payload: UseTokenPayload?)
+    local effectName, slotIndex = parsePayload(payload)
+
+    local result = TokenEffectsServer.Use(player, effectName, slotIndex)
+    if typeof(result) ~= "table" then
+        return { ok = false, err = "NoResult" }
+    end
+
+    if result.ok and Remotes.RE_Notice then
+        local messageEffect = result.effect or effectName or "token"
+        Remotes.RE_Notice:FireClient(player, {
+            msg = string.format("Token used: %s", tostring(messageEffect)),
+            kind = "info",
+        })
+    end
+
+    return result
+end
+
+Players.PlayerRemoving:Connect(function(player)
+    TokenEffectsServer.ExpireAll(player)
+end)
 
 print("[TokenUseServer] RF_UseToken handler ready.")
