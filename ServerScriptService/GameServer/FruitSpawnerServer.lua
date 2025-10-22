@@ -277,6 +277,10 @@ local function spawnFruitNow(arenaId, laneIdentifier, fruitId)
     local stats = FruitConfig.Get(fruitId)
     if not stats then
         warn(string.format("[FruitSpawnerServer] Unknown fruit id '%s'", tostring(fruitId)))
+local function spawnFruitInternal(arenaId, laneId, fruitId)
+    local arenaState = ArenaServer.GetArenaState(arenaId)
+    if not arenaState then
+        warn(string.format("[FruitSpawnerServer] Unknown arena '%s'", tostring(arenaId)))
         return nil
     end
 
@@ -377,6 +381,55 @@ end
 function FruitSpawnerServer.SpawnFruit(arenaId, laneIdentifier, fruitId)
     FruitSpawnerServer.Start(arenaId)
     return FruitSpawnerServer.Queue(arenaId, laneIdentifier, fruitId)
+end
+
+local function safeSpawn(arenaId, laneId, fruitId)
+    local ok, result = pcall(spawnFruitInternal, arenaId, laneId, fruitId)
+    if ok then
+        return result
+    end
+
+    warn(string.format("[FruitSpawnerServer] Failed to spawn fruit: %s", result))
+    return nil
+end
+
+function FruitSpawnerServer.SpawnFruit(arenaId, laneId, fruitId)
+    return safeSpawn(arenaId, laneId, fruitId)
+end
+
+local function resolveFruitId(payload)
+    if typeof(payload) ~= "table" then
+        return payload
+    end
+
+    return payload.FruitId or payload.fruitId or payload.Fruit or payload.fruit
+end
+
+local function resolveDelay(payload)
+    if typeof(payload) ~= "table" then
+        return 0
+    end
+
+    return payload.Delay or payload.delay or 0
+end
+
+function FruitSpawnerServer.Queue(arenaId, laneId, payload)
+    local fruitId = resolveFruitId(payload)
+    if not fruitId then
+        warn(string.format("[FruitSpawnerServer] Queue requires a fruit id for arena '%s' lane '%s'", tostring(arenaId), tostring(laneId)))
+        return nil
+    end
+
+    local delay = resolveDelay(payload)
+    if delay and delay > 0 then
+        task.delay(delay, function()
+            safeSpawn(arenaId, laneId, fruitId)
+        end)
+        return true
+    end
+
+    safeSpawn(arenaId, laneId, fruitId)
+    return true
 end
 
 return FruitSpawnerServer
