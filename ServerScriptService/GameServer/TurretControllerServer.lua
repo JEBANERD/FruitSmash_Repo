@@ -340,6 +340,42 @@ end
 
 local function startArena(arenaId, context)
     assert(arenaId ~= nil, "arenaId is required")
+    assert(level ~= nil, "level is required")
+
+    local ok, startErr = pcall(FruitSpawnerServer.Start, arenaId)
+    if not ok then
+        warn(string.format("[TurretControllerServer] Failed to start FruitSpawnerServer for arena '%s': %s", tostring(arenaId), tostring(startErr)))
+    end
+
+    local rng = Random.new()
+    local laneCount = getLaneCount(level)
+    local shotsPerSecond = computeShotsPerSecond(level)
+    local laneScaling = laneCount / GameConfig.Lanes.StartCount
+    local shotsPerWave = math.max(1, math.floor(shotsPerSecond * DEFAULT_WAVE_DURATION * laneScaling))
+    local interval = shotsPerSecond > 0 and (1 / shotsPerSecond) or DEFAULT_WAVE_DURATION / math.max(shotsPerWave, 1)
+
+    local nextFruit = buildFruitBag(rng)
+    local scheduled = {}
+    local currentTime = 0
+
+    for _ = 1, shotsPerWave do
+        local shotLanes = chooseLanes(rng, laneCount, level)
+        local jitter = rng:NextNumber(-0.25, 0.35) * interval
+        currentTime = math.max(0, currentTime + interval + jitter)
+
+        table.insert(scheduled, { time = currentTime, lanes = shotLanes })
+
+        task.delay(currentTime, function()
+            for _, lane in ipairs(shotLanes) do
+                local fruitId = nextFruit()
+                if fruitId then
+                    local success, err = pcall(FruitSpawnerServer.Queue, arenaId, lane, fruitId)
+                    if not success then
+                        warn(string.format("[TurretControllerServer] Failed to queue fruit '%s' for arena '%s': %s", tostring(fruitId), tostring(arenaId), tostring(err)))
+                    end
+                end
+            end
+        end)
 
     local state = arenaStates[arenaId]
     if state then
