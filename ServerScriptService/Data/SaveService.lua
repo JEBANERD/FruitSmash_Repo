@@ -240,6 +240,47 @@ function SaveService.SaveAsync(userId: number, data: SavePayload): (boolean, str
     return success, err
 end
 
+function SaveService.UpdateAsync(userId: number, mutator: (SavePayload?) -> SavePayload?): (SavePayload?, string?)
+    assert(typeof(userId) == "number", "SaveService.UpdateAsync expects a numeric userId")
+    assert(typeof(mutator) == "function", "SaveService.UpdateAsync expects a mutator function")
+
+    local current = SaveService.GetCached(userId)
+    if current == nil then
+        local loaded, loadErr = SaveService.LoadAsync(userId)
+        if loadErr then
+            return nil, loadErr
+        end
+        current = loaded
+    end
+
+    local snapshot = if current ~= nil then deepCopy(current) else nil
+
+    local ok, result = pcall(mutator, snapshot)
+    if not ok then
+        return nil, tostring(result)
+    end
+
+    local target = result
+    if target == nil then
+        target = snapshot
+    end
+
+    if target == nil then
+        return current, nil
+    end
+
+    if typeof(target) ~= "table" then
+        return nil, "MutatorReturnedInvalidPayload"
+    end
+
+    local success, saveErr = SaveService.SaveAsync(userId, target :: SavePayload)
+    if not success then
+        return nil, saveErr
+    end
+
+    return deepCopy(target), nil
+end
+
 function SaveService.GetCached(userId: number): SavePayload?
     local cached = sessionCache[userId]
     if cached then
