@@ -1,6 +1,10 @@
 --!strict
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
+local HttpService = game:GetService("HttpService")
 
 export type RateLimitConfig = {
         maxCalls: number?,
@@ -159,6 +163,661 @@ local function isValidPlayer(player: any): boolean
         return typeof(player) == "Instance" and player:IsA("Player")
 end
 
+local GameConfigModule: any = nil
+ do
+        local ok, moduleInstance = pcall(function()
+                local shared = ReplicatedStorage:FindFirstChild("Shared")
+                local configFolder = shared and shared:FindFirstChild("Config")
+                return configFolder and configFolder:FindFirstChild("GameConfig")
+        end)
+        if ok and moduleInstance and moduleInstance:IsA("ModuleScript") then
+                local okRequire, result = pcall(require, moduleInstance)
+                if okRequire then
+                        GameConfigModule = result
+                else
+                        warn(string.format("[Guard] Failed to require GameConfig: %s", tostring(result)))
+                end
+        end
+end
+
+local GameConfig = GameConfigModule
+if typeof(GameConfigModule) == "table" and typeof(GameConfigModule.Get) == "function" then
+        local okGet, config = pcall(GameConfigModule.Get)
+        if okGet and typeof(config) == "table" then
+                GameConfig = config
+        end
+end
+if typeof(GameConfig) ~= "table" then
+        GameConfig = {}
+end
+
+local playerConfig = GameConfig.Player or {}
+local sprintConfig = playerConfig.Sprint or {}
+local powerUpsConfig = GameConfig.PowerUps or {}
+local speedBoostConfig = powerUpsConfig.SpeedBoost or {}
+
+local DEFAULT_BASE_WALK_SPEED = sprintConfig.BaseWalkSpeed or 16
+local DEFAULT_BASE_SPRINT_SPEED = sprintConfig.BaseSprintSpeed or math.max(DEFAULT_BASE_WALK_SPEED * 1.25, DEFAULT_BASE_WALK_SPEED)
+local DEFAULT_SPEEDBOOST_MULTIPLIER = speedBoostConfig.SpeedMultiplier or 1.35
+
+local SWING_MIN_INTERVAL = 0.26
+local SWING_WINDOW_SECONDS = 1.5
+local SWING_MAX_PER_WINDOW = 5
+
+local SPEED_TOLERANCE = 1.5
+local MULTIPLIER_EPSILON = 0.05
+
+local TELEPORT_DISTANCE_THRESHOLD = 80
+local TELEPORT_TIME_THRESHOLD = 0.25
+
+local COIN_SINGLE_THRESHOLD = 1500
+local COIN_BURST_THRESHOLD = 2500
+local COIN_BURST_WINDOW = 5
+
+local telemetryResolved = false
+local telemetryModule: any = nil
+
+local function resolveTelemetry()
+        if telemetryResolved then
+                return telemetryModule
+        end
+
+        telemetryResolved = true
+
+        local analyticsFolder = ServerScriptService:FindFirstChild("Analytics")
+        local moduleInstance = analyticsFolder and analyticsFolder:FindFirstChild("TelemetryServer")
+
+        if moduleInstance and moduleInstance:IsA("ModuleScript") then
+                local ok, result = pcall(require, moduleInstance)
+                if ok and result then
+                        telemetryModule = result
+                else
+                        warn(string.format("[Guard] Failed to require TelemetryServer: %s", tostring(result)))
+                        telemetryModule = false
+                end
+        else
+                telemetryModule = false
+        end
+
+        return telemetryModule
+end
+
+local function trackTelemetry(eventName: string, payload: any)
+        if typeof(eventName) ~= "string" or eventName == "" then
+                return
+        end
+
+        local module = resolveTelemetry()
+        if not module or module == false then
+                return
+        end
+
+        if typeof(module.Track) ~= "function" then
+                return
+        end
+
+        local ok, err = pcall(module.Track, eventName, payload)
+        if not ok then
+                warn(string.format("[Guard] Telemetry.Track failed for %s: %s", eventName, tostring(err)))
+        end
+end
+
+local guardConfig = {
+        autoKickThreshold = 0,
+        telemetryEventName = "guard_violation",
+}
+
+type PlayerAuditState = {
+        violations: { [string]: number },
+        totalViolations: number,
+        lastReport: { [string]: number },
+        connections: { RBXScriptConnection },
+        charConnections: { RBXScriptConnection },
+        humanoidConnections: { RBXScriptConnection },
+        humanoid: Humanoid?,
+        swing: { lastAt: number, windowStart: number, count: number },
+        coins: { lastTotal: number?, windowStart: number, accumulated: number },
+        teleport: { lastPosition: Vector3?, lastTimestamp: number },
+        kicked: boolean?,
+}
+
+local playerAuditStates: { [Player]: PlayerAuditState } = setmetatable({}, { __mode = "k" })
+
+local function disconnectConnections(connections: { RBXScriptConnection }?)
+        if not connections then
+                return
+        end
+        for index = #connections, 1, -1 do
+                local connection = connections[index]
+                if connection and typeof(connection) == "RBXScriptConnection" then
+                        connection:Disconnect()
+                elseif connection and connection.Disconnect then
+                        connection:Disconnect()
+                end
+                connections[index] = nil
+        end
+end
+
+local function formatDetail(detail: any): string
+        if detail == nil then
+                return "Violation"
+        end
+
+        if typeof(detail) == "table" then
+                local ok, encoded = pcall(HttpService.JSONEncode, HttpService, detail)
+                if ok then
+                        return encoded
+                end
+        end
+
+        return tostring(detail)
+end
+
+local function ensureAuditState(player: Player): PlayerAuditState
+        local state = playerAuditStates[player]
+        if state then
+                return state
+        end
+
+        local now = os.clock()
+        state = {
+                violations = {},
+                totalViolations = 0,
+                lastReport = {},
+                connections = {},
+                charConnections = {},
+                humanoidConnections = {},
+                humanoid = nil,
+                swing = { lastAt = -math.huge, windowStart = now, count = 0 },
+                coins = { lastTotal = nil, windowStart = now, accumulated = 0 },
+                teleport = { lastPosition = nil, lastTimestamp = now },
+                kicked = false,
+        }
+        playerAuditStates[player] = state
+        return state
+end
+
+local function cleanupAuditState(player: Player)
+        local state = playerAuditStates[player]
+        if not state then
+                return
+        end
+
+        disconnectConnections(state.connections)
+        disconnectConnections(state.charConnections)
+        disconnectConnections(state.humanoidConnections)
+
+        playerAuditStates[player] = nil
+end
+
+local function recordViolation(player: Player, violationType: string, detail: any)
+        if not isValidPlayer(player) then
+                return
+        end
+
+        local state = ensureAuditState(player)
+        state.totalViolations += 1
+        state.violations[violationType] = (state.violations[violationType] or 0) + 1
+
+        local now = os.clock()
+        local lastReport = state.lastReport[violationType]
+        local shouldReport = lastReport == nil or (now - lastReport) >= 2
+
+        if shouldReport then
+                state.lastReport[violationType] = now
+                warn(string.format("[Guard] %s flagged %s: %s", violationType, formatPlayer(player), formatDetail(detail)))
+
+                trackTelemetry(guardConfig.telemetryEventName, {
+                        userId = player.UserId,
+                        player = player.Name,
+                        violation = violationType,
+                        detail = detail,
+                        count = state.violations[violationType],
+                        total = state.totalViolations,
+                        arenaId = player:GetAttribute("ArenaId"),
+                })
+        end
+
+        local threshold = guardConfig.autoKickThreshold
+        if threshold and threshold > 0 and not state.kicked and state.totalViolations >= threshold then
+                state.kicked = true
+                local reason = string.format("Guard violation: %s", violationType)
+                local ok, err = pcall(function()
+                        player:Kick(reason)
+                end)
+                if not ok then
+                        warn(string.format("[Guard] Failed to kick %s: %s", formatPlayer(player), tostring(err)))
+                else
+                        trackTelemetry(guardConfig.telemetryEventName, {
+                                userId = player.UserId,
+                                player = player.Name,
+                                violation = violationType,
+                                total = state.totalViolations,
+                                kicked = true,
+                                reason = reason,
+                        })
+                end
+        end
+end
+
+local function readSpeedBoostMultiplierFrom(instance: Instance?): number
+        if instance == nil then
+                return 1
+        end
+
+        local multiplier = 1
+        local hadExplicit = false
+
+        local attrMult = instance:GetAttribute("SpeedBoostMultiplier")
+        if typeof(attrMult) == "number" and attrMult > 0 then
+                multiplier *= attrMult
+                hadExplicit = true
+        end
+
+        local valueObject = instance:FindFirstChild("SpeedBoostMultiplier")
+        if valueObject and valueObject:IsA("NumberValue") and valueObject.Value > 0 then
+                multiplier *= valueObject.Value
+                hadExplicit = true
+        end
+
+        if not hadExplicit then
+                local attrActive = instance:GetAttribute("SpeedBoostActive")
+                local active = attrActive == true
+                if not active then
+                        local boolValue = instance:FindFirstChild("SpeedBoostActive")
+                        if boolValue and boolValue:IsA("BoolValue") and boolValue.Value then
+                                active = true
+                        end
+                end
+                if active then
+                        multiplier *= DEFAULT_SPEEDBOOST_MULTIPLIER
+                end
+        end
+
+        if multiplier < 0.01 then
+                multiplier = 0.01
+        end
+
+        return multiplier
+end
+
+local function getTotalSpeedMultiplier(player: Player, character: Model?, humanoid: Humanoid?): number
+        local total = 1
+        total *= readSpeedBoostMultiplierFrom(player)
+        total *= readSpeedBoostMultiplierFrom(character)
+        total *= readSpeedBoostMultiplierFrom(humanoid)
+        if total < 0.01 then
+                total = 0.01
+        end
+        return total
+end
+
+local function resolveBaseSpeeds(player: Player, character: Model?, humanoid: Humanoid?): (number, number)
+        local walk = DEFAULT_BASE_WALK_SPEED
+        local sprint = DEFAULT_BASE_SPRINT_SPEED
+
+        local function apply(instance: Instance?)
+                if not instance then
+                        return
+                end
+
+                local baseWalk = instance:GetAttribute("BaseWalkSpeed")
+                if typeof(baseWalk) == "number" and baseWalk >= 0 then
+                        walk = baseWalk
+                end
+
+                local baseSprint = instance:GetAttribute("BaseSprintSpeed")
+                if typeof(baseSprint) == "number" and baseSprint >= 0 then
+                        sprint = baseSprint
+                end
+        end
+
+        apply(player)
+        apply(character)
+        apply(humanoid)
+
+        if sprint < walk then
+                sprint = walk
+        end
+
+        return walk, sprint
+end
+
+local function computeAllowedWalkSpeed(player: Player, humanoid: Humanoid?): (number, number, number)
+        if not humanoid then
+                local baseline = math.max(DEFAULT_BASE_WALK_SPEED, DEFAULT_BASE_SPRINT_SPEED)
+                return baseline, 1, baseline
+        end
+
+        local character = humanoid.Parent
+        local model = if character and character:IsA("Model") then character else nil
+        local walk, sprint = resolveBaseSpeeds(player, model, humanoid)
+        local baseline = math.max(walk, sprint)
+        local multiplier = getTotalSpeedMultiplier(player, model, humanoid)
+        local allowed = baseline * multiplier
+
+        return allowed, multiplier, baseline
+end
+
+local function auditWalkSpeed(player: Player, state: PlayerAuditState, humanoid: Humanoid)
+        local allowed, multiplier, baseline = computeAllowedWalkSpeed(player, humanoid)
+        local current = tonumber(humanoid.WalkSpeed) or 0
+        if allowed <= 0 then
+                return
+        end
+
+        if current > allowed + SPEED_TOLERANCE then
+                if current > allowed then
+                        humanoid.WalkSpeed = allowed
+                end
+
+                if multiplier <= 1 + MULTIPLIER_EPSILON then
+                        recordViolation(player, "ImpossibleSpeed", {
+                                observed = current,
+                                allowed = allowed,
+                                baseline = baseline,
+                        })
+                end
+        end
+end
+
+local function attachHumanoid(player: Player, state: PlayerAuditState, humanoid: Humanoid)
+        if state.humanoid == humanoid then
+                auditWalkSpeed(player, state, humanoid)
+                return
+        end
+
+        disconnectConnections(state.humanoidConnections)
+        state.humanoidConnections = {}
+        state.humanoid = humanoid
+
+        table.insert(state.humanoidConnections, humanoid.Destroying:Connect(function()
+                if state.humanoid == humanoid then
+                        disconnectConnections(state.humanoidConnections)
+                        state.humanoidConnections = {}
+                        state.humanoid = nil
+                end
+        end))
+
+        table.insert(state.humanoidConnections, humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+                auditWalkSpeed(player, state, humanoid)
+        end))
+
+        table.insert(state.humanoidConnections, humanoid:GetPropertyChangedSignal("Parent"):Connect(function()
+                if humanoid.Parent == nil and state.humanoid == humanoid then
+                        disconnectConnections(state.humanoidConnections)
+                        state.humanoidConnections = {}
+                        state.humanoid = nil
+                end
+        end))
+
+        auditWalkSpeed(player, state, humanoid)
+end
+
+local function onCharacterAdded(player: Player, character: Model)
+        local state = ensureAuditState(player)
+
+        disconnectConnections(state.charConnections)
+        state.charConnections = {}
+        disconnectConnections(state.humanoidConnections)
+        state.humanoidConnections = {}
+        state.humanoid = nil
+
+        state.teleport.lastPosition = nil
+        state.teleport.lastTimestamp = os.clock()
+
+        local function attemptAttach()
+                local humanoid = character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                        attachHumanoid(player, state, humanoid)
+                end
+        end
+
+        attemptAttach()
+
+        table.insert(state.charConnections, character.ChildAdded:Connect(function(child)
+                if child:IsA("Humanoid") then
+                        attachHumanoid(player, state, child)
+                end
+        end))
+
+        table.insert(state.charConnections, character:GetPropertyChangedSignal("Parent"):Connect(function()
+                if character.Parent == nil then
+                        disconnectConnections(state.humanoidConnections)
+                        state.humanoidConnections = {}
+                        state.humanoid = nil
+                end
+        end))
+end
+
+local function onCoinsChanged(player: Player)
+        local state = ensureAuditState(player)
+        local now = os.clock()
+        local attr = player:GetAttribute("Coins")
+        local numeric = if attr ~= nil then tonumber(attr) else nil
+
+        if numeric == nil then
+                state.coins.lastTotal = nil
+                state.coins.windowStart = now
+                state.coins.accumulated = 0
+                return
+        end
+
+        local last = state.coins.lastTotal
+        state.coins.lastTotal = numeric
+
+        if last == nil then
+                state.coins.windowStart = now
+                state.coins.accumulated = 0
+                return
+        end
+
+        local delta = numeric - last
+        if delta <= 0 then
+                state.coins.windowStart = now
+                state.coins.accumulated = 0
+                return
+        end
+
+        if now - state.coins.windowStart > COIN_BURST_WINDOW then
+                state.coins.windowStart = now
+                state.coins.accumulated = 0
+        end
+
+        state.coins.accumulated += delta
+
+        local multiplierAttr = player:GetAttribute("CoinRewardMultiplier")
+        local multiplier = if multiplierAttr ~= nil then tonumber(multiplierAttr) else nil
+        if multiplier and multiplier > 1 + MULTIPLIER_EPSILON then
+                state.coins.windowStart = now
+                state.coins.accumulated = 0
+                return
+        end
+
+        if delta >= COIN_SINGLE_THRESHOLD or state.coins.accumulated >= COIN_BURST_THRESHOLD then
+                recordViolation(player, "CoinBurst", {
+                        delta = delta,
+                        windowTotal = state.coins.accumulated,
+                        windowSeconds = now - state.coins.windowStart,
+                })
+                state.coins.windowStart = now
+                state.coins.accumulated = 0
+        end
+end
+
+local function auditSwing(player: Player)
+        local state = ensureAuditState(player)
+        local swingState = state.swing
+        local now = os.clock()
+
+        local flagged = false
+        local delta = now - swingState.lastAt
+        if swingState.lastAt > 0 and delta < SWING_MIN_INTERVAL then
+                recordViolation(player, "SwingRate", { delta = delta })
+                flagged = true
+        end
+
+        if now - swingState.windowStart > SWING_WINDOW_SECONDS then
+                swingState.windowStart = now
+                swingState.count = 0
+        end
+
+        swingState.count += 1
+        if swingState.count > SWING_MAX_PER_WINDOW then
+                if not flagged then
+                        recordViolation(player, "SwingRate", {
+                                count = swingState.count,
+                                windowSeconds = now - swingState.windowStart,
+                        })
+                end
+                swingState.count = 0
+                swingState.windowStart = now
+        end
+
+        swingState.lastAt = now
+end
+
+local function auditTeleport(player: Player, state: PlayerAuditState, now: number)
+        if not isValidPlayer(player) then
+                return
+        end
+
+        local character = player.Character
+        if not character or character.Parent == nil then
+                state.teleport.lastPosition = nil
+                state.teleport.lastTimestamp = now
+                return
+        end
+
+        local root = character:FindFirstChild("HumanoidRootPart")
+        if not root or not root:IsA("BasePart") then
+                state.teleport.lastPosition = nil
+                state.teleport.lastTimestamp = now
+                return
+        end
+
+        local previousPosition = state.teleport.lastPosition
+        local previousTimestamp = state.teleport.lastTimestamp
+
+        state.teleport.lastPosition = root.Position
+        state.teleport.lastTimestamp = now
+
+        if not previousPosition or not previousTimestamp then
+                return
+        end
+
+        local arenaId = player:GetAttribute("ArenaId")
+        if arenaId == nil then
+                return
+        end
+
+        local deltaTime = now - previousTimestamp
+        if deltaTime <= 0 or deltaTime > TELEPORT_TIME_THRESHOLD then
+                return
+        end
+
+        local distance = (root.Position - previousPosition).Magnitude
+        if distance >= TELEPORT_DISTANCE_THRESHOLD then
+                recordViolation(player, "Teleport", {
+                        distance = distance,
+                        deltaTime = deltaTime,
+                        arenaId = arenaId,
+                })
+        end
+end
+
+local function observePlayer(player: Player)
+        if not isValidPlayer(player) then
+                return
+        end
+
+        local state = ensureAuditState(player)
+        onCoinsChanged(player)
+
+        table.insert(state.connections, player:GetAttributeChangedSignal("Coins"):Connect(function()
+                onCoinsChanged(player)
+        end))
+
+        table.insert(state.connections, player:GetAttributeChangedSignal("CoinRewardMultiplier"):Connect(function()
+                state.coins.windowStart = os.clock()
+                state.coins.accumulated = 0
+        end))
+
+        table.insert(state.connections, player.CharacterAdded:Connect(function(character)
+                if character then
+                        onCharacterAdded(player, character)
+                end
+        end))
+
+        table.insert(state.connections, player.CharacterRemoving:Connect(function()
+                disconnectConnections(state.charConnections)
+                disconnectConnections(state.humanoidConnections)
+                state.humanoidConnections = {}
+                state.charConnections = {}
+                state.humanoid = nil
+        end))
+
+        local character = player.Character
+        if character then
+                onCharacterAdded(player, character)
+        end
+end
+
+local swingRemoteNames = {
+        RE_MeleeHitAttempt = true,
+}
+
+local function runRemoteHeuristics(remoteName: string, player: Player, sanitized: any, rawArgs: { any }?)
+        if swingRemoteNames[remoteName] then
+                auditSwing(player)
+        end
+end
+
+function Guard.Configure(options: { [string]: any }?)
+        if typeof(options) ~= "table" then
+                return
+        end
+
+        if options.autoKickThreshold ~= nil then
+                local numeric = tonumber(options.autoKickThreshold)
+                if not numeric or numeric <= 0 then
+                        guardConfig.autoKickThreshold = 0
+                else
+                        guardConfig.autoKickThreshold = math.floor(numeric + 0.5)
+                end
+        end
+
+        if typeof(options.telemetryEventName) == "string" and options.telemetryEventName ~= "" then
+                guardConfig.telemetryEventName = options.telemetryEventName
+        end
+end
+
+function Guard.SetAutoKickThreshold(threshold: number?)
+        if threshold == nil then
+                guardConfig.autoKickThreshold = 0
+                return
+        end
+
+        local numeric = tonumber(threshold)
+        if not numeric or numeric <= 0 then
+                guardConfig.autoKickThreshold = 0
+        else
+                guardConfig.autoKickThreshold = math.floor(numeric + 0.5)
+        end
+end
+
+function Guard.GetViolationSummary(player: Player)
+        local state = playerAuditStates[player]
+        if not state then
+                return nil
+        end
+
+        return {
+                total = state.totalViolations,
+                perType = shallowCopy(state.violations),
+        }
+end
+
 function Guard.WrapRemote(remote: Instance?, config: GuardConfig?, handler: ((Player, any?) -> any?)?)
         if remote == nil then
                 warn("[Guard] Attempted to wrap a nil remote")
@@ -202,6 +861,8 @@ function Guard.WrapRemote(remote: Instance?, config: GuardConfig?, handler: ((Pl
                                         sanitized = value
                                 end
                         end
+
+                        runRemoteHeuristics(remoteName, player, sanitized, rawArgs)
 
                         if handler then
                                 local success, err = pcall(handler, player, sanitized)
@@ -253,9 +914,25 @@ function Guard.WrapRemote(remote: Instance?, config: GuardConfig?, handler: ((Pl
         return remote.OnServerInvoke
 end
 
+for _, player in ipairs(Players:GetPlayers()) do
+        observePlayer(player)
+end
+
+Players.PlayerAdded:Connect(observePlayer)
+
 Players.PlayerRemoving:Connect(function(player)
+        cleanupAuditState(player)
         for _, remoteBuckets in pairs(rateState) do
                 remoteBuckets[player] = nil
+        end
+end)
+
+RunService.Heartbeat:Connect(function()
+        local now = os.clock()
+        for player, state in pairs(playerAuditStates) do
+                if state and player.Parent then
+                        auditTeleport(player, state, now)
+                end
         end
 end)
 
