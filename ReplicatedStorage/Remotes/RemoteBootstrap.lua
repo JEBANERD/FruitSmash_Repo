@@ -49,8 +49,9 @@ local Remotes = {
 	-- Misc progression
 	WaveComplete        = getOrCreateEvent("WaveComplete"),
 
-	-- Functions (client -> server request/response)
-	RF_UseToken         = getOrCreateFunction("RF_UseToken"),
+        -- Functions (client -> server request/response)
+        RF_Purchase         = getOrCreateFunction("RF_Purchase"),
+        RF_UseToken         = getOrCreateFunction("RF_UseToken"),
 }
 
 print("[RemoteBootstrap] RemoteEvents/Functions initialized")
