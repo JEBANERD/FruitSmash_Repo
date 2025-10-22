@@ -40,6 +40,7 @@ type RemoteRefs = {
         GameStart: RemoteEvent,
         RE_PrepTimer: RemoteEvent,
         RE_WaveChanged: RemoteEvent,
+        PartyUpdate: RemoteEvent,
         RE_MeleeHitAttempt: RemoteEvent,
         RE_TargetHP: RemoteEvent,
         RE_CoinPointDelta: RemoteEvent,
@@ -49,14 +50,17 @@ type RemoteRefs = {
         PlayerKO: RemoteEvent,
         RE_Notice: RemoteEvent,
         WaveComplete: RemoteEvent,
+        RF_JoinQueue: RemoteFunction,
+        RF_LeaveQueue: RemoteFunction,
         RF_UseToken: RemoteFunction,
 }
 
 local Remotes: RemoteRefs = {
 	-- Match / flow
-	GameStart           = getOrCreateEvent("GameStart"),
-	RE_PrepTimer        = getOrCreateEvent("RE_PrepTimer"),
-	RE_WaveChanged      = getOrCreateEvent("RE_WaveChanged"),
+        GameStart           = getOrCreateEvent("GameStart"),
+        RE_PrepTimer        = getOrCreateEvent("RE_PrepTimer"),
+        RE_WaveChanged      = getOrCreateEvent("RE_WaveChanged"),
+        PartyUpdate         = getOrCreateEvent("PartyUpdate"),
 
 	-- Combat / state
 	RE_MeleeHitAttempt  = getOrCreateEvent("RE_MeleeHitAttempt"),
@@ -77,6 +81,8 @@ local Remotes: RemoteRefs = {
 
         -- Functions (client -> server request/response)
         RF_Purchase         = getOrCreateFunction("RF_Purchase"),
+        RF_JoinQueue        = getOrCreateFunction("RF_JoinQueue"),
+        RF_LeaveQueue       = getOrCreateFunction("RF_LeaveQueue"),
         RF_UseToken         = getOrCreateFunction("RF_UseToken"),
 }
 
