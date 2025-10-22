@@ -7,6 +7,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local FruitConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("FruitConfig"))
 local ProjectileServer = require(script.Parent:WaitForChild("ProjectileServer"))
 local ArenaAdapter = require(script.Parent:WaitForChild("Libraries"):WaitForChild("ArenaAdapter"))
+local ContentRegistry = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Content"):WaitForChild("ContentRegistry"))
 
 local ProjectileServer
 do
@@ -34,6 +35,9 @@ if projectileModule then
         warn(string.format("[FruitSpawnerServer] Failed to require ProjectileMotionServer: %s", result))
 local random = Random.new()
 
+local FRUIT_ASSET_PREFIX = "Fruit."
+local FALLBACK_FRUIT_ASSET_ID = "Fruit.Fallback"
+
 local LANE_FRUIT_CONTAINER = "FruitProjectiles"
 local DEFAULT_FRUIT_SIZE = Vector3.new(1, 1, 1)
 local SIZE_BY_TAG = {
@@ -43,6 +47,17 @@ local SIZE_BY_TAG = {
     L = Vector3.new(1.6, 1.6, 1.6),
     XL = Vector3.new(2, 2, 2),
 }
+
+do
+    local roster = FruitConfig.All()
+    local preloadIds = { FALLBACK_FRUIT_ASSET_ID }
+
+    for fruitId in pairs(roster) do
+        table.insert(preloadIds, FRUIT_ASSET_PREFIX .. fruitId)
+    end
+
+    ContentRegistry.Preload(preloadIds)
+end
 
 local arenaQueues = {}
 
@@ -256,16 +271,86 @@ local function buildMotionParams(arenaId, laneIdentifier, laneIndex, stats, lane
     return params
 end
 
-local function createFruitPart(name, size, originCFrame)
+local function createFruitPrimitive(name, size, originCFrame)
     local part = Instance.new("Part")
     part.Name = name or "Fruit"
     part.Shape = Enum.PartType.Ball
     part.Size = size or DEFAULT_FRUIT_SIZE
-    part.CFrame = originCFrame
+    part.CFrame = originCFrame or CFrame.new()
     part.Material = Enum.Material.SmoothPlastic
     part.Color = Color3.fromRGB(255, 255, 255)
+    part.TopSurface = Enum.SurfaceType.Smooth
+    part.BottomSurface = Enum.SurfaceType.Smooth
+    part.CastShadow = false
     applyPhysicsDefaults(part)
     return part
+end
+
+local function normalizeFruitAssetId(assetId)
+    if typeof(assetId) ~= "string" then
+        return nil
+    end
+
+    if assetId == "" then
+        return nil
+    end
+
+    if string.find(assetId, ".", 1, true) then
+        return assetId
+    end
+
+    return FRUIT_ASSET_PREFIX .. assetId
+end
+
+local function configureFruitInstance(instance, size, originCFrame)
+    if not instance then
+        return nil
+    end
+
+    if instance:IsA("Model") then
+        for _, descendant in ipairs(instance:GetDescendants()) do
+            if descendant:IsA("BasePart") then
+                applyPhysicsDefaults(descendant)
+            end
+        end
+
+        local root = instance.PrimaryPart or instance:FindFirstChildWhichIsA("BasePart")
+        if not instance.PrimaryPart and root then
+            instance.PrimaryPart = root
+        end
+
+        if root and size then
+            root.Size = size
+        end
+
+        if originCFrame then
+            local ok = pcall(instance.PivotTo, instance, originCFrame)
+            if not ok and root then
+                root.CFrame = originCFrame
+            end
+        end
+
+        return root
+    end
+
+    local targetPart
+    if instance:IsA("BasePart") then
+        targetPart = instance
+    else
+        targetPart = instance:FindFirstChildWhichIsA("BasePart")
+    end
+
+    if targetPart then
+        applyPhysicsDefaults(targetPart)
+        if size then
+            targetPart.Size = size
+        end
+        if originCFrame then
+            targetPart.CFrame = originCFrame
+        end
+    end
+
+    return targetPart
 end
 
 local function buildPathProfile(arenaId, laneId, stats)
@@ -275,15 +360,6 @@ local function buildPathProfile(arenaId, laneId, stats)
         Path = stats.Path,
         FruitId = stats.Id,
     }
-end
-
-local function spawnSingleFruit(container, stats, originCFrame, pathProfile)
-    local fruit = createFruitPart(stats, originCFrame)
-    fruit.Parent = container
-
-    configureProjectile(fruit, stats, pathProfile)
-
-    return fruit
 end
 
 local function distributeValue(total, count)
@@ -302,18 +378,71 @@ local function distributeValue(total, count)
     return distribution
 end
 
-local function spawnSingleFruit(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, motionParams)
+local function spawnSingleFruit(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, motionParams, fruitId)
+    local fruitName = stats and stats.Id or fruitId or "Fruit"
+    if not stats then
+        local fallback = createFruitPrimitive(fruitName, DEFAULT_FRUIT_SIZE, laneFrame)
+        fallback.Parent = container
+
+        applyFruitAttributes(fallback, nil, nil, fruitId)
+        applyOwnershipAttributes(fallback, arenaId, laneIdentifier, laneIndex)
+        tagInstance(fallback, arenaId, laneIdentifier, laneIndex)
+
+        ProjectileServer.Track(fallback, motionParams)
+
+        return fallback
+    end
+
+    local assetKey = stats.AssetId or fruitName
+    local preferredAssetId = normalizeFruitAssetId(assetKey)
+
+    local fruitInstance
+    if preferredAssetId then
+        local candidate = ContentRegistry.GetAsset(preferredAssetId)
+        if typeof(candidate) == "Instance" then
+            fruitInstance = candidate
+        end
+    end
+
+    if not fruitInstance then
+        local fallbackCandidate = ContentRegistry.GetAsset(FALLBACK_FRUIT_ASSET_ID)
+        if typeof(fallbackCandidate) == "Instance" then
+            fruitInstance = fallbackCandidate
+        end
+    end
+
     local size = getFruitSize(stats)
-    local fruitPart = createFruitPart(stats and stats.Id or "Fruit", size, laneFrame)
-    fruitPart.Parent = container
+    local root
 
-    applyFruitAttributes(fruitPart, stats, nil, stats and stats.Id)
-    applyOwnershipAttributes(fruitPart, arenaId, laneIdentifier, laneIndex)
-    tagInstance(fruitPart, arenaId, laneIdentifier, laneIndex)
+    if not fruitInstance then
+        fruitInstance = createFruitPrimitive(fruitName, size, laneFrame)
+        fruitInstance.Parent = container
+        root = fruitInstance
+    else
+        fruitInstance.Name = fruitName
+        fruitInstance.Parent = container
+        root = configureFruitInstance(fruitInstance, size, laneFrame)
+        if not root then
+            if fruitInstance:IsA("BasePart") then
+                root = fruitInstance
+            elseif fruitInstance:IsA("Model") then
+                root = fruitInstance.PrimaryPart or fruitInstance:FindFirstChildWhichIsA("BasePart")
+            end
+        end
+    end
 
-    ProjectileServer.Track(fruitPart, motionParams)
+    applyFruitAttributes(fruitInstance, stats, nil, stats and stats.Id)
+    applyOwnershipAttributes(fruitInstance, arenaId, laneIdentifier, laneIndex)
+    tagInstance(fruitInstance, arenaId, laneIdentifier, laneIndex)
 
-    return fruitPart
+    if root and root ~= fruitInstance then
+        applyFruitAttributes(root, stats, nil, stats and stats.Id)
+        applyOwnershipAttributes(root, arenaId, laneIdentifier, laneIndex)
+    end
+
+    ProjectileServer.Track(fruitInstance, motionParams)
+
+    return fruitInstance
 end
 
 local function spawnGrapeBundle(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, motionParams)
@@ -345,7 +474,7 @@ local function spawnGrapeBundle(arenaId, laneIdentifier, laneIndex, stats, conta
         )
 
         local grapeCFrame = laneFrame * CFrame.new(offset)
-        local grape = createFruitPart(string.format("%s_%d", stats and stats.Id or "Grape", index), grapeSize, grapeCFrame)
+        local grape = createFruitPrimitive(string.format("%s_%d", stats and stats.Id or "Grape", index), grapeSize, grapeCFrame)
         grape.Parent = bundleModel
 
         applyFruitAttributes(grape, stats, {
@@ -407,7 +536,7 @@ local function spawnFruitInternal(arenaId, laneId, fruitId)
         return spawnGrapeBundle(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, motionParams)
     end
 
-    return spawnSingleFruit(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, motionParams)
+    return spawnSingleFruit(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, motionParams, fruitId)
 end
 
 local function processQueue(arenaId, state)
