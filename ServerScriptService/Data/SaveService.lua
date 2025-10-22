@@ -2,11 +2,8 @@
 -- SaveService
 -- Wraps DataStoreService with a studio-safe in-memory fallback and simple retries.
 
-local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local DataStoreService = game:GetService("DataStoreService")
-
-local ProfileServer = require(script.Parent:WaitForChild("ProfileServer"))
 
 local SAVE_STORE_NAME = "PlayerProfiles"
 local SAVE_KEY_PREFIX = "player_"
@@ -243,77 +240,12 @@ function SaveService.SaveAsync(userId: number, data: SavePayload): (boolean, str
     return success, err
 end
 
-local function applyLoadedProfile(player: Player, data: SavePayload?)
-    local ok, err = pcall(function()
-        if data then
-            (ProfileServer :: any).LoadSerialized(player, data)
-        else
-            (ProfileServer :: any).LoadSerialized(player, nil)
-        end
-    end)
-
-    if not ok then
-        warn(string.format("[SaveService] Failed to apply profile for %s: %s", player.Name, tostring(err)))
-    end
-end
-
-function SaveService.OnPlayerAdded(player: Player)
-    local userId = player.UserId
-    if userId == nil then
-        return
-    end
-
-    local data, err = SaveService.LoadAsync(userId)
-    if err then
-        warn(string.format("[SaveService] Load failed for %s (%d): %s", player.Name, userId, err))
-    end
-
-    applyLoadedProfile(player, data)
-end
-
-function SaveService.OnPlayerRemoving(player: Player)
-    local userId = player.UserId
-    if typeof(userId) ~= "number" or userId <= 0 then
-        return
-    end
-
-    local data = ProfileServer.Serialize(player)
-    local success, err = SaveService.SaveAsync(userId, data)
-    if not success and err then
-        warn(string.format("[SaveService] Save failed for %s (%d): %s", player.Name, userId, err))
-    end
-end
-
-function SaveService.SavePlayerAsync(player: Player): (boolean, string?)
-    local userId = player.UserId
-    if typeof(userId) ~= "number" or userId <= 0 then
-        return false, "InvalidUser"
-    end
-
-    local data = ProfileServer.Serialize(player)
-    return SaveService.SaveAsync(userId, data)
-end
-
 function SaveService.GetCached(userId: number): SavePayload?
     local cached = sessionCache[userId]
     if cached then
         return deepCopy(cached)
     end
     return nil
-end
-
-Players.PlayerAdded:Connect(function(player)
-    SaveService.OnPlayerAdded(player)
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    SaveService.OnPlayerRemoving(player)
-end)
-
-for _, player in ipairs(Players:GetPlayers()) do
-    task.defer(function()
-        SaveService.OnPlayerAdded(player)
-    end)
 end
 
 return SaveService

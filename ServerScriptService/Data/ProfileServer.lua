@@ -36,6 +36,11 @@ local function findFirstChildPath(root: Instance?, parts: {string}): Instance?
     return current
 end
 
+local saveServiceModule = script.Parent:FindFirstChild("SaveService")
+local SaveService = if saveServiceModule then safeRequire(saveServiceModule) else nil
+local saveServiceLoadAsync = if SaveService and typeof((SaveService :: any).LoadAsync) == "function" then (SaveService :: any).LoadAsync else nil
+local saveServiceSaveAsync = if SaveService and typeof((SaveService :: any).SaveAsync) == "function" then (SaveService :: any).SaveAsync else nil
+
 local SaveSchemaModule = safeRequire(typesFolder:FindFirstChild("SaveSchema"))
 local ShopConfigModule = safeRequire(configFolder:FindFirstChild("ShopConfig"))
 
@@ -487,6 +492,13 @@ local function removeProfile(player: Player)
     disconnectAttributeConnections(player)
 end
 
+local function refreshQuickbarForPlayer(player: Player)
+    local profile = ensureProfile(player)
+    local data = profile.Data
+    local inventory = ensureInventory(data)
+    refreshQuickbar(player, data, inventory)
+end
+
 local function getTokenCounts(inventory: Inventory): TokenCounts
     if type(inventory.TokenCounts) ~= "table" then
         inventory.TokenCounts = {}
@@ -742,16 +754,105 @@ function ProfileServer.Reset(player: Player)
     refreshQuickbar(player, profile.Data, profile.Data.Inventory)
 end
 
+local saveServiceLoadWarned = false
+local saveServiceSaveWarned = false
+
+local function warnLoadUnavailable()
+    if not saveServiceLoadWarned then
+        warn("[ProfileServer] SaveService.LoadAsync unavailable; using default data.")
+        saveServiceLoadWarned = true
+    end
+end
+
+local function warnSaveUnavailable()
+    if not saveServiceSaveWarned then
+        warn("[ProfileServer] SaveService.SaveAsync unavailable; progress will not persist.")
+        saveServiceSaveWarned = true
+    end
+end
+
+local function getNumericUserId(player: Player): number
+    local userId = player.UserId
+    if typeof(userId) == "number" then
+        return userId
+    end
+    local numeric = tonumber(userId)
+    if typeof(numeric) == "number" then
+        return numeric
+    end
+    return 0
+end
+
+local function handlePlayerAdded(player: Player)
+    local profile = ensureProfile(player)
+    local data = profile.Data
+    local inventory = ensureInventory(data)
+    refreshQuickbar(player, data, inventory)
+
+    if not saveServiceLoadAsync then
+        warnLoadUnavailable()
+        return
+    end
+
+    local userId = getNumericUserId(player)
+
+    task.spawn(function()
+        local ok, payload, loadErr = pcall(saveServiceLoadAsync, userId)
+        if not ok then
+            warn(string.format("[ProfileServer] Load error for %s (%d): %s", player.Name, userId, tostring(payload)))
+            return
+        end
+
+        if loadErr then
+            warn(string.format("[ProfileServer] Load failed for %s (%d): %s", player.Name, userId, tostring(loadErr)))
+            return
+        end
+
+        if player.Parent == nil or not profilesByPlayer[player] then
+            return
+        end
+
+        if payload ~= nil then
+            local applyOk, applyErr = pcall(ProfileServer.LoadSerialized, player, payload)
+            if not applyOk then
+                warn(string.format("[ProfileServer] Apply failed for %s (%d): %s", player.Name, userId, tostring(applyErr)))
+                refreshQuickbarForPlayer(player)
+            end
+        else
+            refreshQuickbarForPlayer(player)
+        end
+    end)
+end
+
+local function handlePlayerRemoving(player: Player)
+    local serialized = ProfileServer.Serialize(player)
+
+    if saveServiceSaveAsync then
+        local userId = getNumericUserId(player)
+        local ok, saveSuccess, saveErr = pcall(saveServiceSaveAsync, userId, serialized)
+        if not ok then
+            warn(string.format("[ProfileServer] Save error for %s (%d): %s", player.Name, userId, tostring(saveSuccess)))
+        elseif not saveSuccess then
+            local message = if saveErr then tostring(saveErr) else "Unknown error"
+            warn(string.format("[ProfileServer] Save failed for %s (%d): %s", player.Name, userId, message))
+        end
+    else
+        warnSaveUnavailable()
+    end
+
+    removeProfile(player)
+end
+
 Players.PlayerAdded:Connect(function(player)
-    ensureProfile(player)
+    handlePlayerAdded(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
-    removeProfile(player)
+    handlePlayerRemoving(player)
 end)
 
 for _, player in ipairs(Players:GetPlayers()) do
-    ensureProfile(player)
+    task.defer(handlePlayerAdded, player)
 end
 
 return ProfileServer
