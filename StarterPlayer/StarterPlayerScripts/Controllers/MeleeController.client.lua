@@ -11,6 +11,16 @@ local localPlayer: Player = Players.LocalPlayer
 local RemotesModule = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap"))
 local meleeRemote: RemoteEvent? = RemotesModule and RemotesModule.RE_MeleeHitAttempt or nil
 
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local okAudioBus, AudioBusModule = pcall(function()
+	return require(systemsFolder:WaitForChild("AudioBus"))
+end)
+if not okAudioBus then
+	warn(string.format("[MeleeController] Failed to load AudioBus: %s", tostring(AudioBusModule)))
+end
+local AudioBus = if okAudioBus then AudioBusModule else nil
+
 local ACTION_NAME = "FruitSmashMeleeSwing"
 local SWING_COOLDOWN_SECONDS = 0.35
 local MAX_MELEE_DISTANCE = 18
@@ -411,6 +421,15 @@ local function fireSwing(inputObject: InputObject?)
 
         playCameraShake()
 
+	if AudioBus and typeof(AudioBus.Play) == "function" then
+		AudioBus.Play("swing", attackPosition)
+	end
+
+	meleeRemote:FireServer({
+		fruit = fruitPart,
+		fruitId = fruitId,
+		position = attackPosition,
+	})
         meleeRemote:FireServer({
                 fruit = fruitPart,
                 fruitId = fruitId,
