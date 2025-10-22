@@ -52,10 +52,12 @@ type RemoteRefs = {
         RE_Notice: RemoteEvent,
         WaveComplete: RemoteEvent,
         RE_SettingsPushed: RemoteEvent,
+        RE_SessionLeaderboard: RemoteEvent,
         RF_JoinQueue: RemoteFunction,
         RF_LeaveQueue: RemoteFunction,
         RF_UseToken: RemoteFunction,
         RF_SaveSettings: RemoteFunction,
+        RF_GetGlobalLeaderboard: RemoteFunction,
 }
 
 local Remotes: RemoteRefs = {
@@ -86,12 +88,16 @@ local Remotes: RemoteRefs = {
         -- Settings / accessibility
         RE_SettingsPushed   = getOrCreateEvent("RE_SettingsPushed"),
 
+        -- Leaderboards
+        RE_SessionLeaderboard = getOrCreateEvent("RE_SessionLeaderboard"),
+
         -- Functions (client -> server request/response)
         RF_Purchase         = getOrCreateFunction("RF_Purchase"),
         RF_JoinQueue        = getOrCreateFunction("RF_JoinQueue"),
         RF_LeaveQueue       = getOrCreateFunction("RF_LeaveQueue"),
         RF_UseToken         = getOrCreateFunction("RF_UseToken"),
         RF_SaveSettings     = getOrCreateFunction("RF_SaveSettings"),
+        RF_GetGlobalLeaderboard = getOrCreateFunction("RF_GetGlobalLeaderboard"),
 }
 
 table.freeze(Remotes)
