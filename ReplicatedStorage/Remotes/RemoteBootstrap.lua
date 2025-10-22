@@ -7,26 +7,52 @@ remotesFolder.Name = "Remotes"
 remotesFolder.Parent = ReplicatedStorage
 
 local function getOrCreateEvent(name: string): RemoteEvent
-	local r = remotesFolder:FindFirstChild(name)
-	if not r then
-		r = Instance.new("RemoteEvent")
-		r.Name = name
-		r.Parent = remotesFolder
-	end
-	return r :: RemoteEvent
+        local r = remotesFolder:FindFirstChild(name)
+        if r and not r:IsA("RemoteEvent") then
+                warn(string.format("[RemoteBootstrap] Replacing %s '%s' with RemoteEvent", r.ClassName, name))
+                r:Destroy()
+                r = nil
+        end
+        if not r then
+                r = Instance.new("RemoteEvent")
+                r.Name = name
+                r.Parent = remotesFolder
+        end
+        return r :: RemoteEvent
 end
 
 local function getOrCreateFunction(name: string): RemoteFunction
-	local r = remotesFolder:FindFirstChild(name)
-	if not r then
-		r = Instance.new("RemoteFunction")
-		r.Name = name
-		r.Parent = remotesFolder
-	end
-	return r :: RemoteFunction
+        local r = remotesFolder:FindFirstChild(name)
+        if r and not r:IsA("RemoteFunction") then
+                warn(string.format("[RemoteBootstrap] Replacing %s '%s' with RemoteFunction", r.ClassName, name))
+                r:Destroy()
+                r = nil
+        end
+        if not r then
+                r = Instance.new("RemoteFunction")
+                r.Name = name
+                r.Parent = remotesFolder
+        end
+        return r :: RemoteFunction
 end
 
-local Remotes = {
+type RemoteRefs = {
+        GameStart: RemoteEvent,
+        RE_PrepTimer: RemoteEvent,
+        RE_WaveChanged: RemoteEvent,
+        RE_MeleeHitAttempt: RemoteEvent,
+        RE_TargetHP: RemoteEvent,
+        RE_CoinPointDelta: RemoteEvent,
+        RE_QuickbarUpdate: RemoteEvent,
+        ShopOpen: RemoteEvent,
+        PurchaseMade: RemoteEvent,
+        PlayerKO: RemoteEvent,
+        RE_Notice: RemoteEvent,
+        WaveComplete: RemoteEvent,
+        RF_UseToken: RemoteFunction,
+}
+
+local Remotes: RemoteRefs = {
 	-- Match / flow
 	GameStart           = getOrCreateEvent("GameStart"),
 	RE_PrepTimer        = getOrCreateEvent("RE_PrepTimer"),
@@ -54,5 +80,7 @@ local Remotes = {
         RF_UseToken         = getOrCreateFunction("RF_UseToken"),
 }
 
-print("[RemoteBootstrap] RemoteEvents/Functions initialized")
+table.freeze(Remotes)
+
+print("[RemoteBootstrap] RemoteEvents initialized")
 return Remotes
