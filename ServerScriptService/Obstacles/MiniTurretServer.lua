@@ -11,6 +11,7 @@ local ArenaServer = require(ServerScriptService:WaitForChild("GameServer"):WaitF
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 local ObstacleConfig = (GameConfig.Obstacles and GameConfig.Obstacles.MiniTurret) or {}
 local ObstaclesConfig = GameConfig.Obstacles or {}
+local PlayerConfig = GameConfig.Player or {}
 
 local MIN_INTERVAL = ObstacleConfig.FireIntervalMin or 2.5
 local MAX_INTERVAL = ObstacleConfig.FireIntervalMax or 3.5
@@ -18,6 +19,7 @@ local DAMAGE = ObstacleConfig.Damage or 25
 local PROJECTILE_SPEED = ObstacleConfig.ProjectileSpeed or 70
 local SEARCH_RADIUS = ObstacleConfig.SearchRadius or 200
 local ENABLE_LEVEL = ObstaclesConfig.EnableAtLevel or math.huge
+local RESPAWN_GRACE = math.max(tonumber(PlayerConfig.SawbladeRespawnSeconds) or 0, 0)
 
 if MIN_INTERVAL > MAX_INTERVAL then
     MIN_INTERVAL, MAX_INTERVAL = MAX_INTERVAL, MIN_INTERVAL
@@ -33,9 +35,73 @@ local PROJECTILE_MIN_LIFETIME = 0.75
 local WAIT_STEP = 0.25
 local UP_VECTOR = Vector3.new(0, 1, 0)
 
+local AudioBus
+do
+    local ok, result = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Systems"):WaitForChild("AudioBus"))
+    end)
+    if ok then
+        AudioBus = result
+    else
+        warn(string.format("[MiniTurretServer] Failed to load AudioBus: %s", tostring(result)))
+        AudioBus = nil
+    end
+end
+
+local telemetryTrack
+do
+    local analyticsFolder = ServerScriptService:FindFirstChild("Analytics")
+    local telemetryModule = analyticsFolder and analyticsFolder:FindFirstChild("TelemetryServer")
+    if telemetryModule and telemetryModule:IsA("ModuleScript") then
+        local ok, telemetry = pcall(require, telemetryModule)
+        if ok then
+            local trackFn = telemetry.Track
+            if typeof(trackFn) == "function" then
+                telemetryTrack = function(eventName, payload)
+                    local success, err = pcall(trackFn, eventName, payload)
+                    if not success then
+                        warn(string.format("[MiniTurretServer] Telemetry.Track failed: %s", tostring(err)))
+                    end
+                end
+            end
+        else
+            warn(string.format("[MiniTurretServer] Failed to require TelemetryServer: %s", tostring(telemetry)))
+        end
+    end
+end
+
 local MiniTurretServer = {}
 
 local activeStates = {}
+
+local RoundDirectorServer
+
+local function getRoundDirector()
+    if RoundDirectorServer == false then
+        return nil
+    end
+
+    if RoundDirectorServer then
+        return RoundDirectorServer
+    end
+
+    local gameServerFolder = ServerScriptService:FindFirstChild("GameServer")
+    local module = gameServerFolder and gameServerFolder:FindFirstChild("RoundDirectorServer")
+    if not module then
+        RoundDirectorServer = false
+        return nil
+    end
+
+    local ok, result = pcall(require, module)
+    if not ok then
+        warn(string.format("[MiniTurretServer] Failed to require RoundDirectorServer: %s", tostring(result)))
+        RoundDirectorServer = false
+        return nil
+    end
+
+    RoundDirectorServer = result
+    return RoundDirectorServer
+end
 
 local function getArenaModel(arenaId)
     if arenaId == nil then
@@ -54,6 +120,125 @@ local function getArenaModel(arenaId)
     end
 
     return nil
+end
+
+local playerRespawnData = setmetatable({}, { __mode = "k" })
+local playerConnections = setmetatable({}, { __mode = "k" })
+
+local function cleanupPlayerTracking(player)
+    local connections = playerConnections[player]
+    if connections then
+        for _, connection in ipairs(connections) do
+            if typeof(connection) == "RBXScriptConnection" then
+                connection:Disconnect()
+            end
+        end
+    end
+
+    playerConnections[player] = nil
+    playerRespawnData[player] = nil
+end
+
+local function markRespawn(player)
+    if not player then
+        return
+    end
+
+    local data = playerRespawnData[player]
+    if not data then
+        data = {}
+        playerRespawnData[player] = data
+    end
+
+    data.lastSpawn = os.clock()
+end
+
+local function trackPlayer(player)
+    if not player then
+        return
+    end
+
+    cleanupPlayerTracking(player)
+
+    local connections = {}
+
+    connections[#connections + 1] = player.CharacterAdded:Connect(function()
+        markRespawn(player)
+    end)
+
+    connections[#connections + 1] = player.CharacterRemoving:Connect(function()
+        local data = playerRespawnData[player]
+        if data then
+            data.lastCharacterRemoving = os.clock()
+        end
+    end)
+
+    playerConnections[player] = connections
+
+    if player.Character then
+        markRespawn(player)
+    else
+        local data = playerRespawnData[player]
+        if not data then
+            playerRespawnData[player] = { lastSpawn = os.clock() }
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(trackPlayer)
+Players.PlayerRemoving:Connect(function(player)
+    cleanupPlayerTracking(player)
+end)
+
+for _, player in ipairs(Players:GetPlayers()) do
+    trackPlayer(player)
+end
+
+local function isPlayerInGrace(player)
+    if RESPAWN_GRACE <= 0 then
+        return false
+    end
+
+    if not player then
+        return false
+    end
+
+    local data = playerRespawnData[player]
+    local lastSpawn = data and data.lastSpawn
+    if not lastSpawn then
+        return false
+    end
+
+    return os.clock() - lastSpawn <= RESPAWN_GRACE
+end
+
+local function trackObstacleHit(state, player, damage, context)
+    if not telemetryTrack then
+        return
+    end
+
+    local payload = {}
+    if typeof(context) == "table" then
+        for key, value in pairs(context) do
+            payload[key] = value
+        end
+    end
+
+    payload.obstacle = "MiniTurret"
+    payload.damage = damage
+    payload.arenaId = state and state.arenaId or nil
+    payload.level = state and state.level or nil
+    payload.phase = state and state.phase or nil
+    payload.wave = state and state.wave or nil
+
+    if player then
+        payload.player = player.Name
+        if typeof(player.UserId) == "number" then
+            payload.userId = player.UserId
+        end
+    end
+
+    telemetryTrack("ObstacleHit", payload)
 end
 
 local function resolveTurretComponents(instance)
@@ -179,6 +364,9 @@ local function updateArenaState(state)
         if typeof(arenaState.level) == "number" then
             state.level = arenaState.level
         end
+        if typeof(arenaState.wave) == "number" then
+            state.wave = arenaState.wave
+        end
     end
 
     if typeof(ArenaAdapter.GetArenaLevel) == "function" then
@@ -194,6 +382,29 @@ local function updateArenaState(state)
 
     if typeof(state.level) ~= "number" then
         state.level = 1
+    end
+
+    local roundDirector = getRoundDirector()
+    if roundDirector then
+        local getState = roundDirector.GetState
+        if typeof(getState) == "function" then
+            local ok, rdState = pcall(getState, roundDirector, state.arenaId)
+            if not ok then
+                ok, rdState = pcall(getState, state.arenaId)
+            end
+
+            if ok and typeof(rdState) == "table" then
+                if typeof(rdState.phase) == "string" then
+                    state.phase = rdState.phase
+                end
+                if typeof(rdState.level) == "number" then
+                    state.level = rdState.level
+                end
+                if typeof(rdState.wave) == "number" then
+                    state.wave = rdState.wave
+                end
+            end
+        end
     end
 
     return state.arenaModel ~= nil
@@ -306,6 +517,134 @@ local function scheduleCleanup(state, projectile, lifetime)
     end)
 end
 
+local function ensureTurretFx(turret)
+    if not turret or turret.fxSetup then
+        return
+    end
+
+    local components = turret.components
+    if not components then
+        return
+    end
+
+    local attachment = components.attachment
+    local originPart = components.originPart
+
+    if not attachment or not attachment:IsDescendantOf(game) then
+        if originPart and originPart:IsA("BasePart") then
+            attachment = originPart:FindFirstChild("MiniTurretMuzzleAttachment")
+            if not attachment then
+                attachment = Instance.new("Attachment")
+                attachment.Name = "MiniTurretMuzzleAttachment"
+                attachment.Parent = originPart
+            end
+        end
+    end
+
+    if not attachment then
+        return
+    end
+
+    local flash = attachment:FindFirstChild("MuzzleFlash")
+    if not flash then
+        flash = Instance.new("ParticleEmitter")
+        flash.Name = "MuzzleFlash"
+        flash.LightEmission = 0.7
+        flash.Lifetime = NumberRange.new(0.12, 0.18)
+        flash.Speed = NumberRange.new(0, 0)
+        flash.SpreadAngle = Vector2.new(12, 12)
+        flash.Rate = 0
+        flash.Enabled = false
+        flash.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.4),
+            NumberSequenceKeypoint.new(1, 0),
+        })
+        flash.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(0.3, 0.15),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        flash.Parent = attachment
+    end
+
+    local smoke = attachment:FindFirstChild("MuzzleSmoke")
+    if not smoke then
+        smoke = Instance.new("ParticleEmitter")
+        smoke.Name = "MuzzleSmoke"
+        smoke.LightEmission = 0.4
+        smoke.Lifetime = NumberRange.new(0.25, 0.4)
+        smoke.Speed = NumberRange.new(3, 6)
+        smoke.SpreadAngle = Vector2.new(35, 35)
+        smoke.Rate = 0
+        smoke.Enabled = false
+        smoke.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.35),
+            NumberSequenceKeypoint.new(1, 0.85),
+        })
+        smoke.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.15),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        smoke.Parent = attachment
+    end
+
+    local sound = attachment:FindFirstChild("FireSound")
+    if not sound then
+        sound = Instance.new("Sound")
+        sound.Name = "FireSound"
+        sound.SoundId = "rbxassetid://9118822952"
+        sound.Volume = 0.6
+        sound.PlaybackSpeed = 1.1
+        sound.RollOffMode = Enum.RollOffMode.Inverse
+        sound.RollOffMinDistance = 6
+        sound.RollOffMaxDistance = 70
+        sound.Parent = attachment
+    end
+
+    turret.fxAttachment = attachment
+    turret.fxFlash = flash
+    turret.fxSmoke = smoke
+    turret.fxSound = sound
+    turret.fxSetup = true
+end
+
+local function applyProjectileEffects(projectile)
+    local attachment0 = Instance.new("Attachment")
+    attachment0.Name = "TrailStart"
+    attachment0.Position = Vector3.new(0, 0, -projectile.Size.Z * 0.5)
+    attachment0.Parent = projectile
+
+    local attachment1 = Instance.new("Attachment")
+    attachment1.Name = "TrailEnd"
+    attachment1.Position = Vector3.new(0, 0, projectile.Size.Z * 0.5)
+    attachment1.Parent = projectile
+
+    local trail = Instance.new("Trail")
+    trail.Name = "ProjectileTrail"
+    trail.Attachment0 = attachment0
+    trail.Attachment1 = attachment1
+    trail.LightEmission = 0.6
+    trail.Lifetime = 0.18
+    trail.MinLength = 0.05
+    trail.Color = ColorSequence.new(projectile.Color, Color3.fromRGB(255, 214, 120))
+    trail.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.1),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    trail.WidthScale = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.6),
+        NumberSequenceKeypoint.new(1, 0),
+    })
+    trail.Parent = projectile
+
+    local light = Instance.new("PointLight")
+    light.Name = "ProjectileGlow"
+    light.Color = projectile.Color
+    light.Brightness = 1.6
+    light.Range = 12
+    light.Parent = projectile
+end
+
 local function fireTurret(state, turret)
     local components = turret.components
     local originCFrame = getTurretOriginCFrame(components)
@@ -314,6 +653,7 @@ local function fireTurret(state, turret)
     end
 
     updateArenaState(state)
+    ensureTurretFx(turret)
 
     local originPosition = originCFrame.Position
     local humanoid, targetPosition, distance = selectTarget(state, originPosition)
@@ -337,10 +677,13 @@ local function fireTurret(state, turret)
     projectile.CanQuery = false
     projectile.CanTouch = true
     projectile.Massless = true
+    projectile.CastShadow = false
     projectile.CFrame = CFrame.new(originPosition, originPosition + direction)
     projectile:SetAttribute("ArenaId", state.arenaId)
     projectile:SetAttribute("Damage", state.damage)
     projectile.Parent = ensureProjectileFolder(state)
+
+    applyProjectileEffects(projectile)
 
     local profile = {
         Profile = "straight",
@@ -353,6 +696,23 @@ local function fireTurret(state, turret)
     if not motionState then
         projectile:Destroy()
         return
+    end
+
+    if turret.fxFlash then
+        turret.fxFlash:Emit(10)
+    end
+
+    if turret.fxSmoke then
+        turret.fxSmoke:Emit(6)
+    end
+
+    if turret.fxSound then
+        turret.fxSound.TimePosition = 0
+        turret.fxSound:Play()
+    end
+
+    if AudioBus and typeof(AudioBus.Play) == "function" then
+        pcall(AudioBus.Play, "swing", originPosition)
     end
 
     local hit = false
@@ -373,12 +733,28 @@ local function fireTurret(state, turret)
             return
         end
 
+        if player and isPlayerInGrace(player) then
+            return
+        end
+
         hit = true
         if connection then
             connection:Disconnect()
         end
 
         humanoidHit:TakeDamage(state.damage)
+
+        trackObstacleHit(state, player, state.damage, {
+            distance = math.floor(distance + 0.5),
+            turret = turret.components.handle,
+            target = character,
+        })
+
+        if AudioBus and typeof(AudioBus.Play) == "function" then
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+            pcall(AudioBus.Play, "hit", rootPart or character)
+        end
+
         ProjectileServer.Untrack(projectile)
         projectile:Destroy()
     end)
@@ -454,6 +830,10 @@ local function stopTurret(state, turret)
 
     turret.active = false
 
+    if turret.fxSound then
+        turret.fxSound:Stop()
+    end
+
     if turret.ancestryConn then
         turret.ancestryConn:Disconnect()
         turret.ancestryConn = nil
@@ -503,6 +883,8 @@ local function trackTurret(state, instance)
     if key then
         state.trackedSources[key] = turret
     end
+
+    ensureTurretFx(turret)
 
     turret.ancestryConn = handle.AncestryChanged:Connect(function(_, parent)
         if parent == nil then
@@ -607,6 +989,8 @@ function MiniTurretServer.Start(arenaId)
         projectileSpeed = PROJECTILE_SPEED,
         searchRadius = math.max(SEARCH_RADIUS, 0),
         level = 1,
+        phase = "Prep",
+        wave = 0,
     }
 
     updateArenaState(state)
