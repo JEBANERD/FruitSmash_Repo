@@ -9,6 +9,8 @@ local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModu
 local ObstacleConfig = (GameConfig.Obstacles and GameConfig.Obstacles.Sawblade) or {}
 local PlayerConfig = GameConfig.Player or {}
 
+local RESPAWN_GRACE = math.max(tonumber(PlayerConfig.SawbladeRespawnSeconds) or 0, 0)
+
 local ENABLE_LEVEL = (GameConfig.Obstacles and GameConfig.Obstacles.EnableAtLevel) or math.huge
 local INTERVAL_MIN = tonumber(ObstacleConfig.PopUpIntervalMin) or 6
 local INTERVAL_MAX = tonumber(ObstacleConfig.PopUpIntervalMax) or INTERVAL_MIN
@@ -31,9 +33,163 @@ local GameServerFolder = ServerScriptService:WaitForChild("GameServer")
 local LibrariesFolder = GameServerFolder:WaitForChild("Libraries")
 local ArenaAdapter = require(LibrariesFolder:WaitForChild("ArenaAdapter"))
 
+local AudioBus
+do
+    local ok, result = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Systems"):WaitForChild("AudioBus"))
+    end)
+    if ok then
+        AudioBus = result
+    else
+        warn(string.format("[SawbladeServer] Failed to load AudioBus: %s", tostring(result)))
+        AudioBus = nil
+    end
+end
+
+local telemetryTrack
+do
+    local analyticsFolder = ServerScriptService:FindFirstChild("Analytics")
+    local telemetryModule = analyticsFolder and analyticsFolder:FindFirstChild("TelemetryServer")
+    if telemetryModule and telemetryModule:IsA("ModuleScript") then
+        local ok, telemetry = pcall(require, telemetryModule)
+        if ok then
+            local trackFn = telemetry.Track
+            if typeof(trackFn) == "function" then
+                telemetryTrack = function(eventName, payload)
+                    local success, err = pcall(trackFn, eventName, payload)
+                    if not success then
+                        warn(string.format("[SawbladeServer] Telemetry.Track failed: %s", tostring(err)))
+                    end
+                end
+            end
+        else
+            warn(string.format("[SawbladeServer] Failed to require TelemetryServer: %s", tostring(telemetry)))
+        end
+    end
+end
+
 local SawbladeServer = {}
 local activeStates = {}
 local RoundDirectorServer
+
+local playerRespawnData = setmetatable({}, { __mode = "k" })
+local playerConnections = setmetatable({}, { __mode = "k" })
+
+local function cleanupPlayerTracking(player)
+    local connections = playerConnections[player]
+    if connections then
+        for _, connection in ipairs(connections) do
+            if typeof(connection) == "RBXScriptConnection" then
+                connection:Disconnect()
+            end
+        end
+    end
+
+    playerConnections[player] = nil
+    playerRespawnData[player] = nil
+end
+
+local function markRespawn(player)
+    if not player then
+        return
+    end
+
+    local data = playerRespawnData[player]
+    if not data then
+        data = {}
+        playerRespawnData[player] = data
+    end
+
+    data.lastSpawn = os.clock()
+end
+
+local function trackPlayer(player)
+    if not player then
+        return
+    end
+
+    cleanupPlayerTracking(player)
+
+    local connections = {}
+
+    connections[#connections + 1] = player.CharacterAdded:Connect(function()
+        markRespawn(player)
+    end)
+
+    connections[#connections + 1] = player.CharacterRemoving:Connect(function()
+        local data = playerRespawnData[player]
+        if data then
+            data.lastCharacterRemoving = os.clock()
+        end
+    end)
+
+    playerConnections[player] = connections
+
+    if player.Character then
+        markRespawn(player)
+    else
+        local data = playerRespawnData[player]
+        if not data then
+            playerRespawnData[player] = { lastSpawn = os.clock() }
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(trackPlayer)
+Players.PlayerRemoving:Connect(function(player)
+    cleanupPlayerTracking(player)
+end)
+
+for _, player in ipairs(Players:GetPlayers()) do
+    trackPlayer(player)
+end
+
+local function isPlayerInGrace(player)
+    if RESPAWN_GRACE <= 0 then
+        return false
+    end
+
+    if not player then
+        return false
+    end
+
+    local data = playerRespawnData[player]
+    local lastSpawn = data and data.lastSpawn
+    if not lastSpawn then
+        return false
+    end
+
+    return os.clock() - lastSpawn <= RESPAWN_GRACE
+end
+
+local function trackObstacleHit(state, player, damage, context)
+    if not telemetryTrack then
+        return
+    end
+
+    local payload = {}
+    if typeof(context) == "table" then
+        for key, value in pairs(context) do
+            payload[key] = value
+        end
+    end
+
+    payload.obstacle = "Sawblade"
+    payload.damage = damage
+    payload.arenaId = state and state.arenaId or nil
+    payload.level = state and state.level or nil
+    payload.phase = state and state.phase or nil
+    payload.wave = state and state.wave or nil
+
+    if player then
+        payload.player = player.Name
+        if typeof(player.UserId) == "number" then
+            payload.userId = player.UserId
+        end
+    end
+
+    telemetryTrack("ObstacleHit", payload)
+end
 
 local tweenInfoUp = TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local tweenInfoDown = TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
@@ -196,6 +352,72 @@ local function cancelTween(blade)
     blade.tween = nil
 end
 
+local function ensureBladeFx(blade)
+    if not blade or blade.fxSetup then
+        return
+    end
+
+    local part = blade.part
+    if not part then
+        return
+    end
+
+    blade.fxSetup = true
+
+    local attachment = Instance.new("Attachment")
+    attachment.Name = "SawbladeFX"
+    attachment.Parent = part
+
+    local sparks = Instance.new("ParticleEmitter")
+    sparks.Name = "ActiveSparks"
+    sparks.LightEmission = 0.6
+    sparks.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.35),
+        NumberSequenceKeypoint.new(1, 0.05),
+    })
+    sparks.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.1),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    sparks.Lifetime = NumberRange.new(0.18, 0.26)
+    sparks.Speed = NumberRange.new(10, 16)
+    sparks.Rate = 18
+    sparks.EmissionDirection = Enum.NormalId.Top
+    sparks.Enabled = false
+    sparks.Parent = attachment
+
+    local burst = Instance.new("ParticleEmitter")
+    burst.Name = "HitBurst"
+    burst.LightEmission = 0.7
+    burst.Lifetime = NumberRange.new(0.18, 0.28)
+    burst.Speed = NumberRange.new(18, 25)
+    burst.SpreadAngle = Vector2.new(180, 180)
+    burst.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.45),
+        NumberSequenceKeypoint.new(1, 0),
+    })
+    burst.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(0.4, 0.15),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    burst.Rate = 0
+    burst.Parent = attachment
+
+    local light = Instance.new("PointLight")
+    light.Name = "BladeGlow"
+    light.Color = part.Color
+    light.Brightness = 0
+    light.Range = 12
+    light.Shadows = false
+    light.Parent = part
+
+    blade.fxAttachment = attachment
+    blade.fxSparks = sparks
+    blade.fxBurst = burst
+    blade.fxLight = light
+end
+
 local function setBladeActive(state, blade, active)
     if blade.active == active then
         return
@@ -213,6 +435,16 @@ local function setBladeActive(state, blade, active)
     if active then
         part.CanTouch = true
         part.Transparency = 0.2
+        ensureBladeFx(blade)
+        if blade.fxSparks then
+            blade.fxSparks.Enabled = true
+        end
+        if blade.fxLight then
+            blade.fxLight.Brightness = 0.6
+        end
+        if AudioBus and typeof(AudioBus.Play) == "function" then
+            pcall(AudioBus.Play, "swing", part)
+        end
         local tween
         if blade.upCFrame then
             tween = TweenService:Create(part, tweenInfoUp, { CFrame = blade.upCFrame })
@@ -223,6 +455,12 @@ local function setBladeActive(state, blade, active)
         part.CanTouch = false
         part.Transparency = 1
         blade.hitTimestamps = {}
+        if blade.fxSparks then
+            blade.fxSparks.Enabled = false
+        end
+        if blade.fxLight then
+            blade.fxLight.Brightness = 0
+        end
         if blade.downCFrame then
             local tween = TweenService:Create(part, tweenInfoDown, { CFrame = blade.downCFrame })
             blade.tween = tween
@@ -254,6 +492,16 @@ local function destroyBlade(state, blade)
     if blade.lane and state.bladeByLane then
         state.bladeByLane[blade.lane] = nil
     end
+
+    if blade.fxAttachment then
+        blade.fxAttachment:Destroy()
+        blade.fxAttachment = nil
+    end
+
+    if blade.fxLight then
+        blade.fxLight:Destroy()
+        blade.fxLight = nil
+    end
 end
 
 local function onBladeTouched(state, blade, otherPart)
@@ -284,6 +532,11 @@ local function onBladeTouched(state, blade, otherPart)
         return
     end
 
+    local player = Players:GetPlayerFromCharacter(character)
+    if player and isPlayerInGrace(player) then
+        return
+    end
+
     blade.hitTimestamps = blade.hitTimestamps or {}
     local now = os.clock()
     local last = blade.hitTimestamps[humanoid]
@@ -295,9 +548,21 @@ local function onBladeTouched(state, blade, otherPart)
 
     humanoid:TakeDamage(DAMAGE)
 
-    local player = Players:GetPlayerFromCharacter(character)
+    if blade.fxBurst then
+        blade.fxBurst:Emit(18)
+    end
+
+    if AudioBus and typeof(AudioBus.Play) == "function" then
+        pcall(AudioBus.Play, "hit", part)
+    end
+
     local name = player and player.Name or character.Name or "Unknown"
     print(string.format("[SawbladeServer] arena=%s lane=%d dealt %d damage to %s", tostring(state.arenaId), blade.laneIndex or 0, DAMAGE, name))
+
+    trackObstacleHit(state, player, DAMAGE, {
+        lane = blade.laneIndex,
+        character = character,
+    })
 end
 
 local function createBlade(state, lane, laneIndex)
