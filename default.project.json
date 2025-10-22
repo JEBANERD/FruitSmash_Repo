@@ -9,6 +9,7 @@
   "$className": "ServerScriptService",
 
   "GameServer": { "$className": "Folder", "$path": "ServerScriptService/__GS" },
+  "Match":       { "$className": "Folder", "$path": "ServerScriptService/Match" },
   "Combat":     { "$className": "Folder", "$path": "ServerScriptService/Combat" },
   "Data":       { "$className": "Folder", "$path": "ServerScriptService/Data" },
   "Economy":    { "$className": "Folder", "$path": "ServerScriptService/Economy" },
