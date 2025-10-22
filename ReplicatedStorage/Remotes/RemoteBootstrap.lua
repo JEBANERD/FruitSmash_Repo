@@ -57,6 +57,7 @@ type RemoteRefs = {
         RF_LeaveQueue: RemoteFunction,
         RF_UseToken: RemoteFunction,
         RF_SaveSettings: RemoteFunction,
+        RF_Tutorial: RemoteFunction,
         RF_GetGlobalLeaderboard: RemoteFunction,
 }
 
@@ -97,6 +98,7 @@ local Remotes: RemoteRefs = {
         RF_LeaveQueue       = getOrCreateFunction("RF_LeaveQueue"),
         RF_UseToken         = getOrCreateFunction("RF_UseToken"),
         RF_SaveSettings     = getOrCreateFunction("RF_SaveSettings"),
+        RF_Tutorial         = getOrCreateFunction("RF_Tutorial"),
         RF_GetGlobalLeaderboard = getOrCreateFunction("RF_GetGlobalLeaderboard"),
 }
 

@@ -7,6 +7,7 @@ return {
       HighestLevel = 0,
       TotalWavesCleared = 0,
       TotalFruitSmashed = 0,
+      TutorialCompleted = false,
     },
     Settings = {
       SprintToggle = false,

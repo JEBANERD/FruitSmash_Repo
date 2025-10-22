@@ -28,6 +28,20 @@ do
 end
 
 do
+        local tutorialModule = script.Parent:FindFirstChild("TutorialServer")
+        if tutorialModule and tutorialModule:IsA("ModuleScript") then
+                local okTutorial, result = pcall(require, tutorialModule)
+                if not okTutorial then
+                        warn("[Init] TutorialServer require failed:", result)
+                elseif type(result) ~= "table" then
+                        warn("[Init] TutorialServer returned unexpected type")
+                end
+        else
+                warn("[Init] TutorialServer module missing")
+        end
+end
+
+do
         local shopFolder = script.Parent:FindFirstChild("Shop")
         local shopModule = shopFolder and shopFolder:FindFirstChild("ShopServer")
         if shopModule then
