@@ -2,12 +2,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
-local Remotes = require(ReplicatedStorage.Remotes.RemoteBootstrap)
+local HUDServer = require(script.Parent:WaitForChild("HUDServer"))
 local ArenaServer = require(ServerScriptService.GameServer.ArenaServer)
 
 local TargetHealthServer = {}
-
-local remote = Remotes.RE_TargetHP
 local startHP = (GameConfig.Targets and GameConfig.Targets.StartHP) or 200
 local scalePct = (GameConfig.Targets and GameConfig.Targets.TenLevelBandScalePct) or 0.10
 
@@ -58,7 +56,7 @@ local function getShieldStatus(state)
 end
 
 local function snapshotState(state)
-    if not remote then
+    if not HUDServer or typeof(HUDServer.TargetHp) ~= "function" then
         return
     end
 
@@ -70,20 +68,53 @@ local function snapshotState(state)
         end
     end
 
-    local lanesPayload = {}
-    for laneIndex = 1, laneCount do
-        local laneState = state.lanes[laneIndex]
-        lanesPayload[laneIndex] = laneState and laneState.currentHP or 0
+    local maxHP = state.maxHP or 0
+
+    if laneCount <= 0 then
+        local extras = {
+            maxHp = maxHP,
+            MaxHP = maxHP,
+            currentHp = 0,
+            CurrentHP = 0,
+            laneCount = laneCount,
+            LaneCount = laneCount,
+            shieldActive = shieldActive,
+            ShieldActive = shieldActive,
+            shieldRemaining = remaining,
+            ShieldRemaining = remaining,
+            gameOver = state.gameOver,
+            GameOver = state.gameOver,
+        }
+
+        HUDServer.TargetHp(state.arenaId, 0, nil, extras)
+        return
     end
 
-    remote:FireAllClients({
-        ArenaId = state.arenaId,
-        MaxHP = state.maxHP,
-        Lanes = lanesPayload,
-        ShieldActive = shieldActive,
-        ShieldRemaining = remaining,
-        GameOver = state.gameOver,
-    })
+    for laneIndex = 1, laneCount do
+        local laneState = state.lanes[laneIndex]
+        local currentHP = laneState and laneState.currentHP or 0
+        local percent = 0
+        if maxHP > 0 then
+            percent = math.clamp(currentHP / maxHP, 0, 1)
+        end
+
+        local extras = {
+            maxHp = maxHP,
+            MaxHP = maxHP,
+            currentHp = currentHP,
+            CurrentHP = currentHP,
+            laneCount = laneCount,
+            LaneCount = laneCount,
+            shieldActive = shieldActive,
+            ShieldActive = shieldActive,
+            shieldRemaining = remaining,
+            ShieldRemaining = remaining,
+            gameOver = state.gameOver,
+            GameOver = state.gameOver,
+        }
+
+        HUDServer.TargetHp(state.arenaId, laneIndex, percent, extras)
+    end
 end
 
 local function ensureArena(arenaId)
@@ -290,6 +321,65 @@ function TargetHealthServer.SetShield(arenaId, enabled, durationSeconds)
     end
 
     snapshotState(state)
+end
+
+function TargetHealthServer.ApplyHealthBoost(arenaId, bonusPct, healPct)
+    assert(arenaId ~= nil, "arenaId is required")
+
+    local state = ensureArena(arenaId)
+    if not state or state.gameOver then
+        return false
+    end
+
+    local numericBonus = if typeof(bonusPct) == "number" then bonusPct else 0
+    local numericHeal = if typeof(healPct) == "number" then healPct else 0
+
+    if numericBonus <= 0 and numericHeal <= 0 then
+        return false
+    end
+
+    local currentMax = state.maxHP or computeMaxHP(state.level or 1)
+    if currentMax <= 0 then
+        currentMax = computeMaxHP(state.level or 1)
+    end
+
+    local newMax = currentMax
+    if numericBonus > 0 then
+        newMax = math.max(1, math.floor(currentMax * (1 + numericBonus) + 0.5))
+        state.maxHP = newMax
+    end
+
+    local healAmount = 0
+    if numericHeal > 0 then
+        healAmount = math.floor(newMax * numericHeal + 0.5)
+    end
+
+    local laneCount = state.laneCount or 0
+    for laneIndex = 1, laneCount do
+        local laneState = ensureLane(state, laneIndex)
+        if laneState then
+            local currentHP = laneState.currentHP or newMax
+            if healAmount > 0 then
+                currentHP = math.min(newMax, currentHP + healAmount)
+            else
+                currentHP = math.min(newMax, currentHP)
+            end
+            laneState.currentHP = currentHP
+        end
+    end
+
+    for laneIndex, laneState in pairs(state.lanes) do
+        if laneIndex > laneCount and laneState then
+            local currentHP = laneState.currentHP or newMax
+            if healAmount > 0 then
+                currentHP = math.min(newMax, currentHP + healAmount)
+            end
+            laneState.currentHP = math.min(newMax, currentHP)
+        end
+    end
+
+    snapshotState(state)
+    return true
 end
 
 function TargetHealthServer.GetArenaState(arenaId)

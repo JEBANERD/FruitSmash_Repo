@@ -4,7 +4,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local ArenaAdapter = require(ServerScriptService:WaitForChild("Combat"):WaitForChild("ArenaAdapter"))
 local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig"))
-local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap"))
+local HUDServer = require(ServerScriptService:WaitForChild("GameServer"):WaitForChild("HUDServer"))
 
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 local TargetConfig = GameConfig.Targets or {}
@@ -24,8 +24,6 @@ local active = {}
 local perArena = {}
 local laneHealth = {}
 local heartbeatConnection = nil
-
-local targetRemote = Remotes and Remotes.RE_TargetHP or nil
 
 local function currentTime()
     return os.clock()
@@ -172,18 +170,17 @@ local function ensureLaneHealth(arenaId, laneId)
 end
 
 local function fireTargetUpdate(arenaId, laneId, laneState)
-    if not targetRemote or not laneState then
+    if not laneState or not HUDServer or typeof(HUDServer.TargetHp) ~= "function" then
         return
     end
 
     local percent = laneState.max > 0 and laneState.current / laneState.max or 0
     percent = math.clamp(percent, 0, 1)
 
-    targetRemote:FireAllClients({
-        ArenaId = arenaId,
-        LaneId = laneId,
-        Percent = percent,
+    HUDServer.TargetHp(arenaId, laneId, percent, {
+        currentHp = laneState.current,
         CurrentHP = laneState.current,
+        maxHp = laneState.max,
         MaxHP = laneState.max,
     })
 end

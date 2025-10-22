@@ -238,31 +238,69 @@ local function computeReward(fruit: BasePart, stats: FruitStats?)
 	return math.max(0, coins), math.max(0, points)
 end
 
-local function notifyEconomy(player: Player, coins: number, points: number, stats: FruitStats?)
-	if coins == 0 and points == 0 then
-		return
-	end
+local function resolveFruitId(fruit: BasePart?, stats: FruitStats?): string?
+        if stats and typeof(stats.Id) == "string" and stats.Id ~= "" then
+                return stats.Id
+        end
 
-	local economy = resolveEconomy()
-	if economy then
-		local handler = economy.AwardFruitSmash or economy.GrantFruitReward or economy.AwardFruitReward
-		if typeof(handler) == "function" then
-			local ok, err = pcall(handler, economy, player, coins, points, stats)
-			if not ok then
-				warn(string.format("[CombatServer] Economy reward failed: %s", tostring(err)))
-			end
-		end
-	end
+        if fruit then
+                local attr = fruit:GetAttribute("FruitId")
+                if typeof(attr) == "string" and attr ~= "" then
+                        return attr
+                end
 
-	local coinRemote = Remotes.RE_CoinPointDelta
-	if coinRemote then
-		coinRemote:FireClient(player, {
-			coins = coins,
-			points = points,
-			reason = COIN_REASON,
-		})
-	end
+                local name = fruit.Name
+                if typeof(name) == "string" and name ~= "" then
+                        return name
+                end
+        end
+
+        return nil
 end
+
+local function notifyEconomy(player: Player, fruit: BasePart, stats: FruitStats?)
+        local economy = resolveEconomy()
+        local fruitId = resolveFruitId(fruit, stats)
+
+        if economy and typeof(economy.GrantFruit) == "function" and fruitId then
+                local ok, result = pcall(economy.GrantFruit, player, fruitId)
+                if ok then
+                        return result
+                else
+                        warn(string.format("[CombatServer] Economy GrantFruit failed: %s", tostring(result)))
+                end
+        end
+
+        local coins, points = computeReward(fruit, stats)
+        if coins == 0 and points == 0 then
+                return nil
+        end
+
+        if economy then
+                local handler = economy.AwardFruitSmash or economy.GrantFruitReward or economy.AwardFruitReward
+                if typeof(handler) == "function" then
+                        local ok, err = pcall(handler, economy, player, coins, points, stats)
+                        if not ok then
+                                warn(string.format("[CombatServer] Economy reward failed: %s", tostring(err)))
+                        end
+                end
+        end
+
+        local coinRemote = Remotes.RE_CoinPointDelta
+        if coinRemote then
+                coinRemote:FireClient(player, {
+                        coins = coins,
+                        points = points,
+                        reason = COIN_REASON,
+                })
+        end
+
+        return {
+                coins = coins,
+                points = points,
+        }
+end
+
 
 local function applyDurabilityWear(player: Player, amount: number, stats: FruitStats?)
 	if amount <= 0 then
@@ -320,14 +358,17 @@ local function processValidHit(player: Player, fruit: BasePart)
 		return
 	end
 
-	fruitState.currentHP = math.max(0, fruitState.currentHP - damage)
+        fruitState.currentHP = math.max(0, fruitState.currentHP - damage)
+
+        pcall(function()
+                fruit:SetAttribute("LastHitTime", os.clock())
+        end)
 
 	local wear = resolveWearAmount(fruit, stats)
 	applyDurabilityWear(player, wear, stats)
 
 	if fruitState.currentHP <= 0 then
-		local coins, points = computeReward(fruit, stats)
-		notifyEconomy(player, coins, points, stats)
+		notifyEconomy(player, fruit, stats)
 		cleanupFruitState(fruit)
 		destroyFruitInstance(fruit)
 	end
