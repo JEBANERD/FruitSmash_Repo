@@ -261,12 +261,16 @@ end
 local function bindInput(): ()
 	local makeTouchButtons = UserInputService.TouchEnabled
 
-	ContextActionService:BindAction(
-		ACTION_SPRINT,
-		onSprintAction,
-		makeTouchButtons,
-		Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonL3, Enum.KeyCode.ButtonR3
-	)
+        ContextActionService:BindAction(
+                ACTION_SPRINT,
+                onSprintAction,
+                makeTouchButtons,
+                Enum.KeyCode.LeftShift,
+                Enum.KeyCode.RightShift,
+                Enum.KeyCode.ButtonL3,
+                Enum.KeyCode.ButtonR3,
+                Enum.KeyCode.ButtonB
+        )
 	if makeTouchButtons then
 		ContextActionService:SetTitle(ACTION_SPRINT, "SPRINT")
 		ContextActionService:SetPosition(ACTION_SPRINT, UDim2.new(0.70, 0, 0.86, 0))

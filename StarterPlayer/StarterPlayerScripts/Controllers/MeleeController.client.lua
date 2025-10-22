@@ -379,13 +379,12 @@ UserInputService.InputBegan:Connect(onInputBegan)
 UserInputService.InputChanged:Connect(onInputChanged)
 
 ContextActionService:BindAction(
-	ACTION_NAME,
-	actionHandler,
-	false,
-	Enum.UserInputType.MouseButton1,
-	Enum.UserInputType.Touch,
-	Enum.KeyCode.ButtonR2,
-	Enum.KeyCode.ButtonL2,
-	Enum.KeyCode.ButtonR1,
-	Enum.KeyCode.ButtonX
+        ACTION_NAME,
+        actionHandler,
+        false,
+        Enum.UserInputType.MouseButton1,
+        Enum.UserInputType.Touch,
+        Enum.KeyCode.ButtonR2,
+        Enum.KeyCode.ButtonL2,
+        Enum.KeyCode.ButtonA
 )
