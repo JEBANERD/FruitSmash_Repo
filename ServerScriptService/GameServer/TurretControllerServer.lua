@@ -16,7 +16,22 @@ local DEBUG_ENABLED = MatchConfig.DebugPrint == true
 local DEFAULT_LEVEL = 1
 local DEFAULT_IDLE_WAIT = 1
 
+local DEFAULT_RATE_MULTIPLIER = 1
+local MIN_RATE_MULTIPLIER = 0
+local MAX_RATE_MULTIPLIER = 20
+
 local arenaStates = {}
+local pendingRateMultipliers = {}
+
+local function resolveArenaKey(arenaId)
+    if arenaId == nil then
+        return nil
+    end
+    if typeof(arenaId) == "string" then
+        return arenaId
+    end
+    return tostring(arenaId)
+end
 
 local function computeShotsPerSecond(level)
     local base = TurretSettings.BaseShotsPerSecond or 0
@@ -204,6 +219,38 @@ local function buildFruitBag(rng, rosterOverride, weightsOverride)
         nextIndex += 1
         return fruitId
     end
+end
+
+local function normalizeMultiplier(value)
+    local numeric = tonumber(value)
+    if not numeric then
+        return DEFAULT_RATE_MULTIPLIER
+    end
+    if numeric < MIN_RATE_MULTIPLIER then
+        return MIN_RATE_MULTIPLIER
+    end
+    if numeric > MAX_RATE_MULTIPLIER then
+        numeric = MAX_RATE_MULTIPLIER
+    end
+    return numeric
+end
+
+local function getRateMultiplier(state)
+    if not state then
+        return DEFAULT_RATE_MULTIPLIER
+    end
+    local multiplier = state.rateMultiplier
+    if typeof(multiplier) ~= "number" then
+        return DEFAULT_RATE_MULTIPLIER
+    end
+    if multiplier < MIN_RATE_MULTIPLIER then
+        multiplier = MIN_RATE_MULTIPLIER
+        state.rateMultiplier = multiplier
+    elseif multiplier > MAX_RATE_MULTIPLIER then
+        multiplier = MAX_RATE_MULTIPLIER
+        state.rateMultiplier = multiplier
+    end
+    return multiplier
 end
 
 local function applyContext(state, context)
@@ -487,6 +534,8 @@ local function runArena(state)
             continue
         end
 
+        local rateMultiplier = getRateMultiplier(state)
+        local shotsPerSecond = computeShotsPerSecond(level) * rateMultiplier
         local shotsPerSecond = computeShotsPerSecond(level)
         local multiplier = state.rateMultiplier
         if typeof(multiplier) == "number" and multiplier >= 0 then
@@ -528,7 +577,8 @@ end
 
 local function startArena(arenaId, context)
     assert(arenaId ~= nil, "arenaId is required")
-    assert(level ~= nil, "level is required")
+    local arenaKey = resolveArenaKey(arenaId)
+    assert(arenaKey ~= nil and arenaKey ~= "", "arenaId is required")
 
     local ok, startErr = pcall(FruitSpawnerServer.Start, arenaId)
     if not ok then
@@ -565,9 +615,14 @@ local function startArena(arenaId, context)
             end
         end)
 
-    local state = arenaStates[arenaId]
+    local state = arenaStates[arenaKey]
     if state then
         applyContext(state, context)
+        if pendingRateMultipliers[arenaKey] ~= nil then
+            state.rateMultiplier = normalizeMultiplier(pendingRateMultipliers[arenaKey])
+            pendingRateMultipliers[arenaKey] = nil
+        end
+        getRateMultiplier(state)
         if not state.running then
             state.running = true
             state.lastShotTime = os.clock()
@@ -577,7 +632,7 @@ local function startArena(arenaId, context)
     end
 
     state = {
-        arenaId = arenaId,
+        arenaId = arenaKey,
         running = true,
         rng = Random.new(),
         rateMultiplier = 1,
@@ -587,23 +642,62 @@ local function startArena(arenaId, context)
         lastWeightsContext = nil,
     }
 
+    state.rateMultiplier = normalizeMultiplier(pendingRateMultipliers[arenaKey])
+    pendingRateMultipliers[arenaKey] = nil
+
     state.nextFruit = buildFruitBag(state.rng)
     applyContext(state, context)
 
-    arenaStates[arenaId] = state
+    arenaStates[arenaKey] = state
     state.thread = task.spawn(runArena, state)
 
     return true
 end
 
+local function setRateMultiplierInternal(arenaId, multiplier)
+    local key = resolveArenaKey(arenaId)
+    if not key then
+        return false, "InvalidArena"
+    end
+    local numeric = normalizeMultiplier(multiplier)
+    local state = arenaStates[key]
+    if state then
+        state.rateMultiplier = numeric
+    else
+        pendingRateMultipliers[key] = numeric
+    end
+    return true, numeric
+end
+
+local function getRateMultiplierForArena(arenaId)
+    local key = resolveArenaKey(arenaId)
+    if not key then
+        return DEFAULT_RATE_MULTIPLIER
+    end
+    local state = arenaStates[key]
+    if state then
+        return getRateMultiplier(state)
+    end
+    local pending = pendingRateMultipliers[key]
+    if pending ~= nil then
+        return normalizeMultiplier(pending)
+    end
+    return DEFAULT_RATE_MULTIPLIER
+end
+
 local function stopArena(arenaId)
-    local state = arenaStates[arenaId]
+    local arenaKey = resolveArenaKey(arenaId)
+    if not arenaKey then
+        return
+    end
+
+    local state = arenaStates[arenaKey]
     if not state then
         return
     end
 
     state.running = false
-    arenaStates[arenaId] = nil
+    arenaStates[arenaKey] = nil
 end
 
 TurretControllerServer.Start = startArena
@@ -631,6 +725,29 @@ end
 
 function TurretControllerServer:SchedulePatterns(arenaId, context)
     return startArena(arenaId, context)
+end
+
+function TurretControllerServer:SetRateMultiplier(arenaIdOrSelf, multiplierOrArenaId, maybeMultiplier)
+    local arenaId
+    local multiplier
+    if maybeMultiplier ~= nil then
+        arenaId = multiplierOrArenaId
+        multiplier = maybeMultiplier
+    else
+        arenaId = arenaIdOrSelf
+        multiplier = multiplierOrArenaId
+    end
+    return setRateMultiplierInternal(arenaId, multiplier)
+end
+
+function TurretControllerServer:GetRateMultiplier(arenaIdOrSelf, maybeArenaId)
+    local arenaId
+    if maybeArenaId ~= nil then
+        arenaId = maybeArenaId
+    else
+        arenaId = arenaIdOrSelf
+    end
+    return getRateMultiplierForArena(arenaId)
 end
 
 return TurretControllerServer
