@@ -1223,6 +1223,36 @@ function RoundDirectorServer.Abort(arenaId)
     end
 end
 
+function RoundDirectorServer.SetLevel(arenaId, level)
+    local state = activeStates[arenaId]
+    if not state or not state.running then
+        return false, "NoArena"
+    end
+
+    local numeric = tonumber(level)
+    if not numeric then
+        return false, "InvalidLevel"
+    end
+
+    numeric = math.max(1, math.floor(numeric + 0.5))
+    state.level = numeric
+    state.wave = 0
+    state.currentLevelSummary = nil
+    state.waveOutcome = nil
+    state.waveStartedAt = nil
+    state.waveDeadline = nil
+
+    updateArenaStateSnapshot(state)
+    broadcastWaveChange(state)
+    callSawblade("UpdateRoundState", state.arenaId, {
+        level = state.level,
+        phase = state.phase,
+        wave = state.wave,
+    })
+
+    return true
+end
+
 function RoundDirectorServer.SkipPrep(arenaId)
     local state = activeStates[arenaId]
     if not state or not state.running or state.phase ~= "Prep" or not state.prepEndTime then
