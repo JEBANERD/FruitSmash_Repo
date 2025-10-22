@@ -25,6 +25,17 @@ local function safeRequire(moduleScript: Instance?): any?
     return result
 end
 
+local function findFirstChildPath(root: Instance?, parts: {string}): Instance?
+    local current: Instance? = root
+    for _, name in ipairs(parts) do
+        if not current then
+            return nil
+        end
+        current = current:FindFirstChild(name)
+    end
+    return current
+end
+
 local SaveSchemaModule = safeRequire(typesFolder:FindFirstChild("SaveSchema"))
 local ShopConfigModule = safeRequire(configFolder:FindFirstChild("ShopConfig"))
 
@@ -184,6 +195,20 @@ local function buildDefaultData(): ProfileData
     return data
 end
 
+local function ensureStats(data: ProfileData): { [string]: any }
+    local stats = data.Stats
+    if type(stats) ~= "table" then
+        stats = {}
+        data.Stats = stats
+    end
+
+    if type(stats.TotalPoints) ~= "number" then
+        stats.TotalPoints = 0
+    end
+
+    return stats
+end
+
 local function ensureInventory(data: ProfileData): Inventory
     if type(data.Inventory) ~= "table" then
         data.Inventory = buildDefaultData().Inventory
@@ -255,9 +280,185 @@ local function refreshQuickbar(player: Player, data: ProfileData?, inventory: In
     end
 end
 
+local economyCandidates = {
+    { "Economy", "EconomyServer" },
+    { "GameServer", "Economy", "EconomyServer" },
+    { "EconomyServer" },
+}
+
+local cachedEconomy: any? = nil
+local attemptedEconomy = false
+local function getEconomyServer(): any?
+    if cachedEconomy ~= nil then
+        return cachedEconomy
+    end
+
+    if attemptedEconomy then
+        return nil
+    end
+
+    attemptedEconomy = true
+
+    for _, parts in ipairs(economyCandidates) do
+        local instance = findFirstChildPath(ServerScriptService, parts)
+        local module = safeRequire(instance)
+        if module then
+            cachedEconomy = module
+            attemptedEconomy = false
+            return cachedEconomy
+        end
+    end
+
+    attemptedEconomy = false
+    return nil
+end
+
+local function coerceWholeNumber(value: any): number?
+    local numeric = if type(value) == "number" then value else tonumber(value)
+    if type(numeric) ~= "number" then
+        return nil
+    end
+
+    if numeric ~= numeric then -- NaN guard
+        return nil
+    end
+
+    local integer = math.floor(numeric + 0.5)
+    if integer < 0 then
+        integer = 0
+    end
+
+    return integer
+end
+
+local attributeConnections: { [Player]: { Coins: RBXScriptConnection?, Points: RBXScriptConnection? } } = {}
+
+local function disconnectAttributeConnections(player: Player)
+    local connections = attributeConnections[player]
+    if not connections then
+        return
+    end
+
+    if connections.Coins then
+        connections.Coins:Disconnect()
+    end
+    if connections.Points then
+        connections.Points:Disconnect()
+    end
+
+    attributeConnections[player] = nil
+end
+
+local function applyCoinsFromValue(data: ProfileData, value: any): boolean
+    local numeric = coerceWholeNumber(value)
+    if numeric == nil then
+        return false
+    end
+
+    if type(data.Coins) ~= "number" or data.Coins ~= numeric then
+        data.Coins = numeric
+        return true
+    end
+
+    return false
+end
+
+local function applyPointsFromValue(data: ProfileData, value: any): boolean
+    local numeric = coerceWholeNumber(value)
+    if numeric == nil then
+        return false
+    end
+
+    local stats = ensureStats(data)
+    if stats.TotalPoints ~= numeric then
+        stats.TotalPoints = numeric
+        return true
+    end
+
+    return false
+end
+
+local function applyEconomySnapshot(player: Player, data: ProfileData)
+    local coinsChanged = false
+    local pointsChanged = false
+
+    local economyServer = getEconomyServer()
+    if economyServer then
+        local totalsFn = (economyServer :: any).Totals
+        if type(totalsFn) == "function" then
+            local ok, totals = pcall(totalsFn, economyServer, player)
+            if not ok then
+                ok, totals = pcall(totalsFn, player)
+            end
+            if ok and type(totals) == "table" then
+                coinsChanged = applyCoinsFromValue(data, totals.coins) or coinsChanged
+                pointsChanged = applyPointsFromValue(data, totals.points) or pointsChanged
+            end
+        end
+    end
+
+    coinsChanged = applyCoinsFromValue(data, player:GetAttribute("Coins")) or coinsChanged
+    pointsChanged = applyPointsFromValue(data, player:GetAttribute("Points")) or pointsChanged
+
+    if coinsChanged then
+        refreshQuickbar(player, data, ensureInventory(data))
+    end
+
+end
+
+local function connectAttributeTracking(player: Player, profile: Profile)
+    disconnectAttributeConnections(player)
+
+    local connections = {
+        Coins = player:GetAttributeChangedSignal("Coins"):Connect(function()
+            local currentProfile = profilesByPlayer[player]
+            if not currentProfile then
+                return
+            end
+
+            local data = currentProfile.Data
+            if type(data) ~= "table" then
+                currentProfile.Data = buildDefaultData()
+                data = currentProfile.Data
+            end
+
+            if applyCoinsFromValue(data, player:GetAttribute("Coins")) then
+                refreshQuickbar(player, data, ensureInventory(data))
+            end
+        end),
+        Points = player:GetAttributeChangedSignal("Points"):Connect(function()
+            local currentProfile = profilesByPlayer[player]
+            if not currentProfile then
+                return
+            end
+
+            local data = currentProfile.Data
+            if type(data) ~= "table" then
+                currentProfile.Data = buildDefaultData()
+                data = currentProfile.Data
+            end
+
+            applyPointsFromValue(data, player:GetAttribute("Points"))
+        end),
+    }
+
+    attributeConnections[player] = connections
+
+    local data = profile.Data
+    if type(data) ~= "table" then
+        profile.Data = buildDefaultData()
+        data = profile.Data
+    end
+
+    applyEconomySnapshot(player, data)
+end
+
 local function ensureProfile(player: Player): Profile
     local existing = profilesByPlayer[player]
     if existing then
+        if not attributeConnections[player] then
+            connectAttributeTracking(player, existing)
+        end
         return existing
     end
 
@@ -271,6 +472,8 @@ local function ensureProfile(player: Player): Profile
     profilesByPlayer[player] = profile
     profilesByUserId[player.UserId] = profile
 
+    connectAttributeTracking(player, profile)
+
     return profile
 end
 
@@ -280,6 +483,8 @@ local function removeProfile(player: Player)
     if userId ~= 0 then
         profilesByUserId[userId] = nil
     end
+
+    disconnectAttributeConnections(player)
 end
 
 local function getTokenCounts(inventory: Inventory): TokenCounts
@@ -433,6 +638,7 @@ function ProfileServer.GrantItem(player: Player, itemId: string): (boolean, stri
         return true, nil
     elseif kind == "Utility" then
         table.insert(inventory.UtilityQueue, itemId)
+        refreshQuickbar(player, data, inventory)
         return true, nil
     end
 
@@ -497,6 +703,7 @@ function ProfileServer.Reset(player: Player)
     end
 
     profile.Data = buildDefaultData()
+    connectAttributeTracking(player, profile)
     refreshQuickbar(player, profile.Data, profile.Data.Inventory)
 end
 
