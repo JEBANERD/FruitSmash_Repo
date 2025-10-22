@@ -9,6 +9,7 @@ local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitFo
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 
 local ArenaServer = require(script.Parent:WaitForChild("ArenaServer"))
+local TargetHealthServer = require(script.Parent:WaitForChild("TargetHealthServer"))
 
 local EconomyServer
 do
@@ -45,6 +46,100 @@ local SHOP_SECONDS = roundSettings.ShopSeconds or 30
 
 local RoundDirectorServer = {}
 local activeStates = {}
+
+local waveCompleteRemote = Remotes and Remotes.WaveComplete or nil
+local levelCompleteRemote = Remotes and Remotes.LevelComplete or nil
+local noticeRemote = Remotes and Remotes.RE_Notice or nil
+
+local function shallowCopy(dictionary)
+    if typeof(dictionary) ~= "table" then
+        return nil
+    end
+
+    local copy = {}
+    for key, value in pairs(dictionary) do
+        copy[key] = value
+    end
+
+    return copy
+end
+
+local function sanitizeInteger(value)
+    local numeric = tonumber(value)
+    if numeric == nil then
+        return 0
+    end
+
+    if numeric >= 0 then
+        return math.floor(numeric + 0.5)
+    end
+
+    return -math.floor(-numeric + 0.5)
+end
+
+local function readPlayerKOs(player)
+    if typeof(player) ~= "Instance" or not player:IsA("Player") then
+        return 0
+    end
+
+    local attr = player:GetAttribute("KOs")
+    if typeof(attr) == "number" then
+        return math.max(0, sanitizeInteger(attr))
+    end
+
+    local leaderstats = player:FindFirstChild("leaderstats")
+    if leaderstats then
+        for _, child in ipairs(leaderstats:GetChildren()) do
+            if child:IsA("NumberValue") and string.lower(child.Name) == "kos" then
+                return math.max(0, sanitizeInteger(child.Value))
+            end
+        end
+    end
+
+    return 0
+end
+
+local function describeDefeatReason(reason)
+    if not reason then
+        return nil
+    end
+
+    local reasonType = reason.type or reason.reason or reason.Kind or reason.kind
+    if reasonType == "target" then
+        if reason.lane then
+            return string.format("Target destroyed (lane %s)", tostring(reason.lane))
+        end
+
+        return "Target destroyed"
+    elseif reasonType == "timeout" then
+        if reason.wave then
+            return string.format("Wave %d timed out", tonumber(reason.wave) or reason.wave)
+        end
+
+        return "Time expired"
+    elseif reasonType == "wave_failure" or reasonType == "wave" then
+        if reason.wave then
+            return string.format("Wave %d failed", tonumber(reason.wave) or reason.wave)
+        end
+
+        return "Wave failed"
+    elseif reasonType == "manual" or reasonType == "abort" then
+        if reason.message or reason.Message then
+            return tostring(reason.message or reason.Message)
+        end
+        return "Round ended"
+    end
+
+    if typeof(reason) == "string" then
+        return reason
+    end
+
+    if typeof(reason.Message) == "string" then
+        return reason.Message
+    end
+
+    return nil
+end
 
 local function updateArenaStateSnapshot(state)
     if not ArenaServer or typeof(ArenaServer.GetArenaState) ~= "function" then
@@ -136,38 +231,287 @@ local function gatherArenaPlayers(state)
     return recipients
 end
 
+local function ensureLevelSummary(state)
+    if not state then
+        return nil
+    end
+
+    local summary = state.currentLevelSummary
+    if summary and summary.level == state.level then
+        return summary
+    end
+
+    local baseline = {}
+    for _, player in ipairs(gatherArenaPlayers(state)) do
+        baseline[player] = readPlayerKOs(player)
+    end
+
+    summary = {
+        level = state.level,
+        perPlayer = {},
+        startKOs = baseline,
+        totalCoins = 0,
+        totalPoints = 0,
+        wavesCleared = 0,
+        startedAt = os.clock(),
+    }
+
+    state.currentLevelSummary = summary
+    return summary
+end
+
+local function accumulateLevelRewards(state, rewards)
+    if not rewards or typeof(rewards) ~= "table" then
+        return
+    end
+
+    local summary = ensureLevelSummary(state)
+    if not summary then
+        return
+    end
+
+    for player, reward in pairs(rewards) do
+        if typeof(player) == "Instance" and player:IsA("Player") and typeof(reward) == "table" then
+            local entry = summary.perPlayer[player]
+            if not entry then
+                entry = { coins = 0, points = 0 }
+                summary.perPlayer[player] = entry
+            end
+
+            local coinsDelta = sanitizeInteger(reward.coinsDelta or reward.CoinsDelta or reward.coins or reward.Coins)
+            local pointsDelta = sanitizeInteger(reward.pointsDelta or reward.PointsDelta or reward.points or reward.Points)
+
+            entry.coins = (entry.coins or 0) + coinsDelta
+            entry.points = (entry.points or 0) + pointsDelta
+            summary.totalCoins = (summary.totalCoins or 0) + coinsDelta
+            summary.totalPoints = (summary.totalPoints or 0) + pointsDelta
+
+            if summary.startKOs[player] == nil then
+                summary.startKOs[player] = readPlayerKOs(player)
+            end
+        end
+    end
+end
+
+local function sendNoticeToPlayers(players, message, kind, extras)
+    if typeof(message) ~= "string" then
+        message = tostring(message)
+    end
+
+    if type(players) ~= "table" then
+        players = {}
+    end
+
+    if noticeRemote then
+        for _, player in ipairs(players) do
+            if typeof(player) == "Instance" and player:IsA("Player") then
+                local payload = { msg = message, kind = kind or "info" }
+                if typeof(extras) == "table" then
+                    for key, value in pairs(extras) do
+                        payload[key] = value
+                    end
+                end
+                noticeRemote:FireClient(player, payload)
+            end
+        end
+    else
+        print(string.format("[RoundDirectorServer] Notice(%s): %s", tostring(kind or "info"), message))
+    end
+end
+
+local function fireWaveCompleteEvent(state, success, metadata)
+    if not waveCompleteRemote or not state then
+        return
+    end
+
+    local payload = {
+        arenaId = state.arenaId,
+        level = state.level,
+        wave = state.wave,
+        success = success,
+    }
+
+    if typeof(metadata) == "table" then
+        for key, value in pairs(metadata) do
+            payload[key] = value
+        end
+    end
+
+    waveCompleteRemote:FireAllClients(payload)
+end
+
+local function fireLevelCompleteEvent(state, metadata)
+    if not levelCompleteRemote or not state then
+        return
+    end
+
+    local payload = {
+        arenaId = state.arenaId,
+        level = state.level,
+    }
+
+    if typeof(metadata) == "table" then
+        for key, value in pairs(metadata) do
+            payload[key] = value
+        end
+    end
+
+    levelCompleteRemote:FireAllClients(payload)
+end
+
+local function finalizeLevelSummary(state, outcome, reason)
+    if not state then
+        return
+    end
+
+    local summary = state.currentLevelSummary or ensureLevelSummary(state)
+    if not summary or summary.dispatched then
+        return
+    end
+
+    summary.dispatched = true
+
+    local players = gatherArenaPlayers(state)
+    local levelNumber = summary.level or state.level or 0
+    local reasonText = describeDefeatReason(reason or state.defeatReason)
+    local outcomeKind = outcome == "victory" and "success" or outcome == "defeat" and "warning" or "info"
+
+    local levelEventPayload
+    if outcome == "victory" then
+        levelEventPayload = {
+            totalCoins = sanitizeInteger(summary.totalCoins or 0),
+            totalPoints = sanitizeInteger(summary.totalPoints or 0),
+            wavesCleared = sanitizeInteger(summary.wavesCleared or 0),
+            players = {},
+        }
+    end
+
+    for _, player in ipairs(players) do
+        local entry = summary.perPlayer[player]
+        local coins = sanitizeInteger(entry and entry.coins or 0)
+        local points = sanitizeInteger(entry and entry.points or 0)
+        local currentKO = readPlayerKOs(player)
+        local baselineKO = summary.startKOs and summary.startKOs[player]
+        if baselineKO == nil then
+            baselineKO = currentKO
+            if summary.startKOs then
+                summary.startKOs[player] = baselineKO
+            end
+        end
+        local koDelta = math.max(0, currentKO - baselineKO)
+
+        local message
+        if outcome == "victory" then
+            message = string.format("Level %d cleared! Coins +%d, Points +%d, KOs %d", levelNumber, coins, points, koDelta)
+        elseif outcome == "defeat" then
+            if reasonText then
+                message = string.format("Level %d failed — %s. Coins +%d, Points +%d, KOs %d", levelNumber, reasonText, coins, points, koDelta)
+            else
+                message = string.format("Level %d failed. Coins +%d, Points +%d, KOs %d", levelNumber, coins, points, koDelta)
+            end
+        else
+            message = string.format("Level %d summary: Coins +%d, Points +%d, KOs %d", levelNumber, coins, points, koDelta)
+        end
+
+        local metadata = {
+            arenaId = state.arenaId,
+            level = levelNumber,
+            coins = coins,
+            points = points,
+            kos = koDelta,
+            outcome = outcome,
+        }
+
+        if reasonText then
+            metadata.reason = reasonText
+        end
+
+        if levelEventPayload then
+            local userId = typeof(player.UserId) == "number" and player.UserId or player.Name
+            levelEventPayload.players[userId] = {
+                userId = typeof(player.UserId) == "number" and player.UserId or nil,
+                name = player.Name,
+                coins = coins,
+                points = points,
+                kos = koDelta,
+            }
+        end
+
+        sendNoticeToPlayers({ player }, message, outcomeKind, metadata)
+    end
+
+    local logPieces = {
+        string.format("arena=%s", tostring(state.arenaId)),
+        string.format("level=%d", levelNumber),
+        string.format("outcome=%s", tostring(outcome or "summary")),
+        string.format("coins=%d", sanitizeInteger(summary.totalCoins or 0)),
+        string.format("points=%d", sanitizeInteger(summary.totalPoints or 0)),
+        string.format("waves=%d", sanitizeInteger(summary.wavesCleared or 0)),
+    }
+
+    if reasonText then
+        table.insert(logPieces, string.format("reason=%s", reasonText))
+    end
+
+    print(string.format("[RoundDirectorServer] Level summary :: %s", table.concat(logPieces, " ")))
+
+    if levelEventPayload then
+        fireLevelCompleteEvent(state, levelEventPayload)
+    end
+
+    state.currentLevelSummary = nil
+end
+
+local function handleLevelCompletePhase(state)
+    if not state then
+        return
+    end
+
+    state.phase = "LevelComplete"
+    state.wave = 0
+    updateArenaStateSnapshot(state)
+    logPhase(state)
+    broadcastWaveChange(state)
+end
+
 local function grantWaveBonus(state)
     if not EconomyServer or typeof(EconomyServer.GrantWaveClear) ~= "function" then
-        return
+        return nil
     end
 
     local players = gatherArenaPlayers(state)
     if #players == 0 then
-        return
+        return nil
     end
 
     local levelValue = state and state.level or 0
-    local ok, err = pcall(EconomyServer.GrantWaveClear, players, levelValue)
+    local ok, result = pcall(EconomyServer.GrantWaveClear, players, levelValue)
     if not ok then
-        warn(string.format("[RoundDirectorServer] GrantWaveClear failed: %s", tostring(err)))
+        warn(string.format("[RoundDirectorServer] GrantWaveClear failed: %s", tostring(result)))
+        return nil
     end
+
+    return result
 end
 
 local function grantLevelBonus(state, level)
     if not EconomyServer or typeof(EconomyServer.GrantLevelClear) ~= "function" then
-        return
+        return nil
     end
 
     local players = gatherArenaPlayers(state)
     if #players == 0 then
-        return
+        return nil
     end
 
     local levelValue = level or (state and state.level) or 0
-    local ok, err = pcall(EconomyServer.GrantLevelClear, players, levelValue)
+    local ok, result = pcall(EconomyServer.GrantLevelClear, players, levelValue)
     if not ok then
-        warn(string.format("[RoundDirectorServer] GrantLevelClear failed: %s", tostring(err)))
+        warn(string.format("[RoundDirectorServer] GrantLevelClear failed: %s", tostring(result)))
+        return nil
     end
+
+    return result
 end
 
 local function sendPrepTimer(state, seconds)
@@ -176,6 +520,62 @@ local function sendPrepTimer(state, seconds)
     end
 
     HUDServer.BroadcastPrep(state.arenaId, seconds)
+end
+
+local function triggerDefeat(state, reason)
+    if not state or state.defeat or state.aborted then
+        return
+    end
+
+    state.defeat = true
+    state.defeatReason = reason or state.defeatReason
+    state.running = false
+    state.phase = "Defeat"
+
+    state.waveOutcome = { status = "failure", reason = state.defeatReason }
+    state.waveDeadline = nil
+    state.waveStartedAt = nil
+
+    ensureLevelSummary(state)
+
+    updateArenaStateSnapshot(state)
+    logPhase(state)
+    sendPrepTimer(state, 0)
+    broadcastWaveChange(state)
+
+    if state.wave and state.wave > 0 then
+        local metadata = {
+            arenaId = state.arenaId,
+            level = state.level,
+            wave = state.wave,
+            reason = describeDefeatReason(state.defeatReason),
+        }
+
+        fireWaveCompleteEvent(state, false, metadata)
+    end
+
+    finalizeLevelSummary(state, "defeat", state.defeatReason)
+end
+
+if TargetHealthServer then
+    local function onTargetGameOver(arenaId, laneId)
+        if arenaId == nil then
+            return
+        end
+
+        local state = activeStates[arenaId]
+        if not state then
+            return
+        end
+
+        triggerDefeat(state, { type = "target", lane = laneId })
+    end
+
+    if typeof(TargetHealthServer.OnGameOver) == "function" then
+        TargetHealthServer.OnGameOver(onTargetGameOver)
+    elseif TargetHealthServer.GameOver and typeof(TargetHealthServer.GameOver.Connect) == "function" then
+        TargetHealthServer.GameOver:Connect(onTargetGameOver)
+    end
 end
 
 local function scheduleWave(state)
@@ -268,21 +668,72 @@ end
 local function runWave(state, waveNumber)
     state.phase = "Wave"
     state.wave = waveNumber
+    state.waveOutcome = nil
+    state.waveStartedAt = os.clock()
+    state.waveDeadline = state.waveStartedAt + WAVE_DURATION_SECONDS
+
+    ensureLevelSummary(state)
 
     updateArenaStateSnapshot(state)
     logPhase(state)
     broadcastWaveChange(state)
     scheduleWave(state)
 
-    local waveEnd = os.clock() + WAVE_DURATION_SECONDS
+    while state.running do
+        local outcome = state.waveOutcome
+        if outcome then
+            if outcome.status == "success" then
+                break
+            elseif outcome.status == "failure" then
+                triggerDefeat(state, outcome.reason or { type = "wave_failure", wave = waveNumber })
+                break
+            end
+        end
 
-    while state.running and os.clock() < waveEnd do
+        local deadline = state.waveDeadline
+        if deadline and os.clock() >= deadline then
+            triggerDefeat(state, { type = "timeout", wave = waveNumber })
+            break
+        end
+
         task.wait(0.1)
     end
 
-    if state.running then
-        grantWaveBonus(state)
+    state.waveDeadline = nil
+
+    if not state.running then
+        return false
     end
+
+    local summary = ensureLevelSummary(state)
+    if summary then
+        summary.wavesCleared = (summary.wavesCleared or 0) + 1
+    end
+
+    local rewards = grantWaveBonus(state)
+    if rewards then
+        accumulateLevelRewards(state, rewards)
+    end
+
+    local metadata = state.waveOutcome and state.waveOutcome.metadata
+    local eventPayload = {}
+    if typeof(metadata) == "table" then
+        for key, value in pairs(metadata) do
+            eventPayload[key] = value
+        end
+    end
+
+    if state.waveStartedAt then
+        local duration = os.clock() - state.waveStartedAt
+        if typeof(eventPayload.duration) ~= "number" or eventPayload.duration <= 0 then
+            eventPayload.duration = duration
+        end
+    end
+
+    fireWaveCompleteEvent(state, true, eventPayload)
+
+    state.waveOutcome = nil
+    state.waveStartedAt = nil
 
     return state.running
 end
@@ -305,7 +756,12 @@ local function runShop(state)
         return false
     end
 
-    grantLevelBonus(state, state.level)
+    local rewards = grantLevelBonus(state, state.level)
+    if rewards then
+        accumulateLevelRewards(state, rewards)
+    end
+
+    finalizeLevelSummary(state, "victory")
 
     state.level += 1
     updateArenaStateSnapshot(state)
@@ -315,6 +771,8 @@ local function runShop(state)
 end
 
 local function runLevel(state)
+    ensureLevelSummary(state)
+
     if not runPrep(state) then
         return false
     end
@@ -328,6 +786,8 @@ local function runLevel(state)
             return false
         end
     end
+
+    handleLevelCompletePhase(state)
 
     if not runShop(state) then
         return false
@@ -380,6 +840,13 @@ function RoundDirectorServer.Start(arenaId, options)
         running = true,
         prepEndTime = nil,
         arenaState = arenaState,
+        defeat = false,
+        aborted = false,
+        currentLevelSummary = nil,
+        waveOutcome = nil,
+        waveStartedAt = nil,
+        waveDeadline = nil,
+        defeatReason = nil,
     }
 
     activeStates[arenaId] = state
@@ -395,7 +862,11 @@ function RoundDirectorServer.Abort(arenaId)
         return
     end
 
+    state.aborted = true
     state.running = false
+    state.phase = "Aborted"
+    updateArenaStateSnapshot(state)
+    broadcastWaveChange(state)
     activeStates[arenaId] = nil
     sendPrepTimer(state, 0)
 end
@@ -416,6 +887,46 @@ function RoundDirectorServer.SkipPrep(arenaId)
     local remaining = math.max(0, math.ceil(state.prepEndTime - os.clock()))
     sendPrepTimer(state, remaining)
     print(string.format("[RoundDirectorServer] arena=%s prep skipped; remaining=%d", state.arenaId, remaining))
+
+    return true
+end
+
+function RoundDirectorServer.ReportWaveComplete(arenaId, metadata)
+    local state = activeStates[arenaId]
+    if not state or not state.running or state.phase ~= "Wave" then
+        return false
+    end
+
+    local existing = state.waveOutcome
+    if existing and existing.status == "failure" then
+        return false
+    end
+
+    local storedMetadata = shallowCopy(metadata) or metadata
+
+    if existing and existing.status == "success" then
+        existing.metadata = storedMetadata
+        return true
+    end
+
+    state.waveOutcome = {
+        status = "success",
+        metadata = storedMetadata,
+    }
+
+    return true
+end
+
+function RoundDirectorServer.ReportWaveFailed(arenaId, reason)
+    local state = activeStates[arenaId]
+    if not state or not state.running or state.phase ~= "Wave" then
+        return false
+    end
+
+    state.waveOutcome = {
+        status = "failure",
+        reason = shallowCopy(reason) or reason,
+    }
 
     return true
 end
