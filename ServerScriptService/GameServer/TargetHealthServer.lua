@@ -5,6 +5,18 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local HUDServer = require(script.Parent:WaitForChild("HUDServer"))
 local ArenaServer = require(ServerScriptService.GameServer.ArenaServer)
 
+local TargetImmunityServer do
+    local ok, result = pcall(function()
+        return require(script.Parent:WaitForChild("TargetImmunityServer"))
+    end)
+
+    if ok then
+        TargetImmunityServer = result
+    else
+        warn(string.format("[TargetHealthServer] Failed to require TargetImmunityServer: %s", tostring(result)))
+    end
+end
+
 local TargetHealthServer = {}
 local startHP = (GameConfig.Targets and GameConfig.Targets.StartHP) or 200
 local scalePct = (GameConfig.Targets and GameConfig.Targets.TenLevelBandScalePct) or 0.10
@@ -13,6 +25,23 @@ local arenas = {}
 
 local gameOverEvent = Instance.new("BindableEvent")
 TargetHealthServer.GameOver = gameOverEvent.Event
+
+local function updateTargetImmunity(arenaId, enabled, durationSeconds, token)
+    local module = TargetImmunityServer
+    if not module then
+        return
+    end
+
+    local setter = module.SetShield
+    if typeof(setter) ~= "function" then
+        return
+    end
+
+    local ok, err = pcall(setter, arenaId, enabled, durationSeconds, token)
+    if not ok then
+        warn(string.format("[TargetHealthServer] Failed to update target immunity: %s", tostring(err)))
+    end
+end
 
 local function computeMaxHP(level)
     local levelValue = math.max(level or 1, 1)
@@ -172,6 +201,7 @@ local function ensureLane(state, laneId)
 end
 
 function TargetHealthServer.ClearArena(arenaId)
+    updateTargetImmunity(arenaId, false, nil, nil)
     arenas[arenaId] = nil
 end
 
@@ -208,6 +238,8 @@ function TargetHealthServer.InitializeArena(arenaId, options)
     state.shieldActive = false
     state.shieldUntil = nil
     state.shieldToken = nil
+
+    updateTargetImmunity(arenaId, false, nil, nil)
 
     snapshotState(state)
 
@@ -284,23 +316,33 @@ function TargetHealthServer.SetShield(arenaId, enabled, durationSeconds)
         return
     end
 
+    local duration = if typeof(durationSeconds) == "number" and durationSeconds > 0 then durationSeconds else nil
+
     if not enabled then
+        local previousToken = state.shieldToken
         state.shieldActive = false
         state.shieldUntil = nil
         state.shieldToken = nil
+        updateTargetImmunity(arenaId, false, nil, previousToken)
         snapshotState(state)
         return
     end
 
     state.shieldActive = true
 
-    if durationSeconds and durationSeconds > 0 then
-        local expireTime = os.clock() + durationSeconds
-        state.shieldUntil = expireTime
-        local token = {}
-        state.shieldToken = token
+    if duration then
+        state.shieldUntil = os.clock() + duration
+    else
+        state.shieldUntil = nil
+    end
 
-        task.delay(durationSeconds, function()
+    local token = {}
+    state.shieldToken = token
+
+    updateTargetImmunity(arenaId, true, duration, token)
+
+    if duration then
+        task.delay(duration, function()
             local currentState = arenas[arenaId]
             if not currentState or currentState ~= state then
                 return
@@ -313,11 +355,9 @@ function TargetHealthServer.SetShield(arenaId, enabled, durationSeconds)
             currentState.shieldActive = false
             currentState.shieldUntil = nil
             currentState.shieldToken = nil
+            updateTargetImmunity(arenaId, false, nil, token)
             snapshotState(currentState)
         end)
-    else
-        state.shieldUntil = nil
-        state.shieldToken = nil
     end
 
     snapshotState(state)
