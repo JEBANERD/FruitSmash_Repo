@@ -16,7 +16,22 @@ local DEBUG_ENABLED = MatchConfig.DebugPrint == true
 local DEFAULT_LEVEL = 1
 local DEFAULT_IDLE_WAIT = 1
 
+local DEFAULT_RATE_MULTIPLIER = 1
+local MIN_RATE_MULTIPLIER = 0
+local MAX_RATE_MULTIPLIER = 20
+
 local arenaStates = {}
+local pendingRateMultipliers = {}
+
+local function resolveArenaKey(arenaId)
+    if arenaId == nil then
+        return nil
+    end
+    if typeof(arenaId) == "string" then
+        return arenaId
+    end
+    return tostring(arenaId)
+end
 
 local function computeShotsPerSecond(level)
     local base = TurretSettings.BaseShotsPerSecond or 0
@@ -26,8 +41,121 @@ local function computeShotsPerSecond(level)
     return base * (1 + pct * effectiveLevel)
 end
 
-local function buildFruitBag(rng)
-    local roster = FruitConfig.All and FruitConfig.All() or FruitConfig.Roster
+local function cloneArray(array)
+    if type(array) ~= "table" then
+        return nil
+    end
+
+    local copy = {}
+    for index, value in ipairs(array) do
+        copy[index] = value
+    end
+
+    return copy
+end
+
+local function cloneDictionary(dictionary)
+    if type(dictionary) ~= "table" then
+        return nil
+    end
+
+    local copy = {}
+    for key, value in pairs(dictionary) do
+        copy[key] = value
+    end
+
+    return copy
+end
+
+local function normalizeWeights(weights)
+    if typeof(weights) ~= "table" then
+        return nil
+    end
+
+    local normalized = {}
+    for key, value in pairs(weights) do
+        local numeric = tonumber(value)
+        if numeric and numeric > 0 then
+            normalized[key] = numeric
+        end
+    end
+
+    if next(normalized) == nil then
+        return nil
+    end
+
+    return normalized
+end
+
+local function resolveRoster(rosterOverride)
+    if typeof(rosterOverride) ~= "table" then
+        local roster = FruitConfig.All and FruitConfig.All() or FruitConfig.Roster
+        if type(roster) == "function" then
+            roster = roster()
+        end
+        return roster
+    end
+
+    if #rosterOverride > 0 then
+        local roster = {}
+        for _, fruitId in ipairs(rosterOverride) do
+            local entry
+            if typeof(fruitId) == "string" or typeof(fruitId) == "number" then
+                if typeof(FruitConfig.Get) == "function" then
+                    entry = FruitConfig.Get(fruitId)
+                end
+                if entry == nil then
+                    local all = FruitConfig.All and FruitConfig.All()
+                    if type(all) == "function" then
+                        all = all()
+                    end
+                    if type(all) == "table" then
+                        entry = all[fruitId]
+                    end
+                end
+            elseif typeof(fruitId) == "table" then
+                entry = fruitId
+                fruitId = entry.Id
+            end
+
+            if type(entry) == "table" then
+                local id = entry.Id or fruitId
+                if id ~= nil then
+                    roster[id] = entry
+                end
+            end
+        end
+
+        if next(roster) ~= nil then
+            return roster
+        end
+    else
+        local roster = {}
+        for key, value in pairs(rosterOverride) do
+            if type(value) == "table" then
+                local id = value.Id or key
+                if id ~= nil then
+                    roster[id] = value
+                end
+            end
+        end
+
+        if next(roster) ~= nil then
+            return roster
+        end
+    end
+
+    local fallback = FruitConfig.All and FruitConfig.All() or FruitConfig.Roster
+    if type(fallback) == "function" then
+        fallback = fallback()
+    end
+
+    return fallback
+end
+
+local function buildFruitBag(rng, rosterOverride, weightsOverride)
+    local roster = resolveRoster(rosterOverride)
+    local weights = normalizeWeights(weightsOverride)
     local bag = {}
 
     if type(roster) == "function" then
@@ -36,7 +164,33 @@ local function buildFruitBag(rng)
 
     for fruitId, entry in pairs(roster) do
         local id = entry and entry.Id or fruitId
-        table.insert(bag, id)
+        if id ~= nil then
+            local weight = 1
+            if weights then
+                local overrideWeight = weights[id] or weights[fruitId]
+                if typeof(overrideWeight) == "number" then
+                    weight = overrideWeight
+                end
+            end
+
+            weight = math.max(0, weight)
+            if weight > 0 then
+                local copies = math.max(1, math.floor(weight + 0.5))
+                for _ = 1, copies do
+                    table.insert(bag, id)
+                end
+            end
+        end
+    end
+
+    if #bag == 0 then
+        if rosterOverride ~= nil or weightsOverride ~= nil then
+            return buildFruitBag(rng)
+        end
+
+        return function()
+            return nil
+        end
     end
 
     table.sort(bag)
@@ -65,6 +219,38 @@ local function buildFruitBag(rng)
         nextIndex += 1
         return fruitId
     end
+end
+
+local function normalizeMultiplier(value)
+    local numeric = tonumber(value)
+    if not numeric then
+        return DEFAULT_RATE_MULTIPLIER
+    end
+    if numeric < MIN_RATE_MULTIPLIER then
+        return MIN_RATE_MULTIPLIER
+    end
+    if numeric > MAX_RATE_MULTIPLIER then
+        numeric = MAX_RATE_MULTIPLIER
+    end
+    return numeric
+end
+
+local function getRateMultiplier(state)
+    if not state then
+        return DEFAULT_RATE_MULTIPLIER
+    end
+    local multiplier = state.rateMultiplier
+    if typeof(multiplier) ~= "number" then
+        return DEFAULT_RATE_MULTIPLIER
+    end
+    if multiplier < MIN_RATE_MULTIPLIER then
+        multiplier = MIN_RATE_MULTIPLIER
+        state.rateMultiplier = multiplier
+    elseif multiplier > MAX_RATE_MULTIPLIER then
+        multiplier = MAX_RATE_MULTIPLIER
+        state.rateMultiplier = multiplier
+    end
+    return multiplier
 end
 
 local function applyContext(state, context)
@@ -99,6 +285,51 @@ local function applyContext(state, context)
         state.laneOverride = context.lanes
     elseif typeof(context.lanes) == "table" then
         state.laneOverride = #context.lanes
+    end
+
+    local rosterChanged = false
+    if typeof(context.fruitRoster) == "table" then
+        if context.fruitRoster ~= state.lastRosterContext then
+            state.lastRosterContext = context.fruitRoster
+            if #context.fruitRoster > 0 then
+                state.fruitRosterOverride = cloneArray(context.fruitRoster) or {}
+            else
+                state.fruitRosterOverride = cloneDictionary(context.fruitRoster) or {}
+            end
+            rosterChanged = true
+        end
+    elseif context.fruitRoster == nil and state.lastRosterContext ~= nil then
+        state.lastRosterContext = nil
+        state.fruitRosterOverride = nil
+        rosterChanged = true
+    end
+
+    local weightsChanged = false
+    if typeof(context.fruitWeights) == "table" then
+        if context.fruitWeights ~= state.lastWeightsContext then
+            state.lastWeightsContext = context.fruitWeights
+            state.fruitWeightsOverride = cloneDictionary(context.fruitWeights)
+            weightsChanged = true
+        end
+    elseif context.fruitWeights == nil and state.lastWeightsContext ~= nil then
+        state.lastWeightsContext = nil
+        state.fruitWeightsOverride = nil
+        weightsChanged = true
+    end
+
+    if rosterChanged or weightsChanged then
+        state.nextFruit = buildFruitBag(state.rng, state.fruitRosterOverride, state.fruitWeightsOverride)
+    end
+
+    local rateMultiplier
+    if typeof(context.fireRateMultiplier) == "number" then
+        rateMultiplier = math.max(0, context.fireRateMultiplier)
+    elseif typeof(context.fireRatePenalty) == "number" then
+        rateMultiplier = math.max(0, 1 - context.fireRatePenalty)
+    end
+
+    if rateMultiplier ~= nil then
+        state.rateMultiplier = rateMultiplier
     end
 end
 
@@ -303,7 +534,13 @@ local function runArena(state)
             continue
         end
 
+        local rateMultiplier = getRateMultiplier(state)
+        local shotsPerSecond = computeShotsPerSecond(level) * rateMultiplier
         local shotsPerSecond = computeShotsPerSecond(level)
+        local multiplier = state.rateMultiplier
+        if typeof(multiplier) == "number" and multiplier >= 0 then
+            shotsPerSecond *= multiplier
+        end
         if shotsPerSecond <= 0 then
             state.lastShotTime = os.clock()
             task.wait(DEFAULT_IDLE_WAIT)
@@ -340,7 +577,8 @@ end
 
 local function startArena(arenaId, context)
     assert(arenaId ~= nil, "arenaId is required")
-    assert(level ~= nil, "level is required")
+    local arenaKey = resolveArenaKey(arenaId)
+    assert(arenaKey ~= nil and arenaKey ~= "", "arenaId is required")
 
     local ok, startErr = pcall(FruitSpawnerServer.Start, arenaId)
     if not ok then
@@ -377,9 +615,14 @@ local function startArena(arenaId, context)
             end
         end)
 
-    local state = arenaStates[arenaId]
+    local state = arenaStates[arenaKey]
     if state then
         applyContext(state, context)
+        if pendingRateMultipliers[arenaKey] ~= nil then
+            state.rateMultiplier = normalizeMultiplier(pendingRateMultipliers[arenaKey])
+            pendingRateMultipliers[arenaKey] = nil
+        end
+        getRateMultiplier(state)
         if not state.running then
             state.running = true
             state.lastShotTime = os.clock()
@@ -389,28 +632,72 @@ local function startArena(arenaId, context)
     end
 
     state = {
-        arenaId = arenaId,
+        arenaId = arenaKey,
         running = true,
         rng = Random.new(),
+        rateMultiplier = 1,
+        fruitRosterOverride = nil,
+        fruitWeightsOverride = nil,
+        lastRosterContext = nil,
+        lastWeightsContext = nil,
     }
+
+    state.rateMultiplier = normalizeMultiplier(pendingRateMultipliers[arenaKey])
+    pendingRateMultipliers[arenaKey] = nil
 
     state.nextFruit = buildFruitBag(state.rng)
     applyContext(state, context)
 
-    arenaStates[arenaId] = state
+    arenaStates[arenaKey] = state
     state.thread = task.spawn(runArena, state)
 
     return true
 end
 
+local function setRateMultiplierInternal(arenaId, multiplier)
+    local key = resolveArenaKey(arenaId)
+    if not key then
+        return false, "InvalidArena"
+    end
+    local numeric = normalizeMultiplier(multiplier)
+    local state = arenaStates[key]
+    if state then
+        state.rateMultiplier = numeric
+    else
+        pendingRateMultipliers[key] = numeric
+    end
+    return true, numeric
+end
+
+local function getRateMultiplierForArena(arenaId)
+    local key = resolveArenaKey(arenaId)
+    if not key then
+        return DEFAULT_RATE_MULTIPLIER
+    end
+    local state = arenaStates[key]
+    if state then
+        return getRateMultiplier(state)
+    end
+    local pending = pendingRateMultipliers[key]
+    if pending ~= nil then
+        return normalizeMultiplier(pending)
+    end
+    return DEFAULT_RATE_MULTIPLIER
+end
+
 local function stopArena(arenaId)
-    local state = arenaStates[arenaId]
+    local arenaKey = resolveArenaKey(arenaId)
+    if not arenaKey then
+        return
+    end
+
+    local state = arenaStates[arenaKey]
     if not state then
         return
     end
 
     state.running = false
-    arenaStates[arenaId] = nil
+    arenaStates[arenaKey] = nil
 end
 
 TurretControllerServer.Start = startArena
@@ -438,6 +725,29 @@ end
 
 function TurretControllerServer:SchedulePatterns(arenaId, context)
     return startArena(arenaId, context)
+end
+
+function TurretControllerServer:SetRateMultiplier(arenaIdOrSelf, multiplierOrArenaId, maybeMultiplier)
+    local arenaId
+    local multiplier
+    if maybeMultiplier ~= nil then
+        arenaId = multiplierOrArenaId
+        multiplier = maybeMultiplier
+    else
+        arenaId = arenaIdOrSelf
+        multiplier = multiplierOrArenaId
+    end
+    return setRateMultiplierInternal(arenaId, multiplier)
+end
+
+function TurretControllerServer:GetRateMultiplier(arenaIdOrSelf, maybeArenaId)
+    local arenaId
+    if maybeArenaId ~= nil then
+        arenaId = maybeArenaId
+    else
+        arenaId = arenaIdOrSelf
+    end
+    return getRateMultiplierForArena(arenaId)
 end
 
 return TurretControllerServer

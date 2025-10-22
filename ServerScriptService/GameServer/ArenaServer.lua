@@ -1,11 +1,14 @@
 local ArenaServer = {}
 
 local HttpService = game:GetService("HttpService")
-local ServerStorage = game:GetService("ServerStorage")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+
+local ContentRegistry = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Content"):WaitForChild("ContentRegistry"))
 
 local ARENA_FOLDER_NAME = "Arenas"
 local BASE_TEMPLATE_NAME = "BaseArena"
+local BASE_TEMPLATE_ASSET_ID = "Arena." .. BASE_TEMPLATE_NAME
 
 local arenaStates = {}
 
@@ -22,8 +25,7 @@ local function getArenasFolder()
 end
 
 local function getBaseArenaTemplate()
-    local templatesFolder = ServerStorage:WaitForChild("ArenaTemplates")
-    local template = templatesFolder:FindFirstChild(BASE_TEMPLATE_NAME)
+    local template = ContentRegistry.GetAsset(BASE_TEMPLATE_ASSET_ID)
 
     if not template then
         error(string.format("Base arena template '%s' is missing", BASE_TEMPLATE_NAME))
@@ -48,9 +50,7 @@ end
 function ArenaServer.SpawnArena(partyId)
     local arenaId = HttpService:GenerateGUID(false)
     local arenasFolder = getArenasFolder()
-    local template = getBaseArenaTemplate()
-
-    local arena = template:Clone()
+    local arena = getBaseArenaTemplate()
     arena.Name = string.format("Arena_%s", arenaId)
     arena:SetAttribute("ArenaId", arenaId)
     arena:SetAttribute("PartyId", partyId)

@@ -89,6 +89,8 @@ do
 end
 
 local SawbladeServer = {}
+local qaDisabledArenas: {[string]: boolean} = {}
+
 local activeStates = {}
 local RoundDirectorServer
 
@@ -680,6 +682,17 @@ local function createBlade(state, lane, laneIndex)
     return blade
 end
 
+local function isQADisabled(arenaId)
+    if arenaId == nil then
+        return false
+    end
+    if typeof(arenaId) == "string" then
+        return qaDisabledArenas[arenaId] == true
+    end
+    local key = tostring(arenaId)
+    return qaDisabledArenas[key] == true
+end
+
 local function refreshLanes(state)
     if not state.running then
         return
@@ -721,6 +734,10 @@ local function updateActivation(state)
     local level = tonumber(state.level) or 0
     local phase = state.phase
     local shouldEnable = obstaclesFlagEnabled and level >= ENABLE_LEVEL and phase == "Wave"
+
+    if isQADisabled(state.arenaId) then
+        shouldEnable = false
+    end
 
     if shouldEnable == state.enabled then
         return
@@ -936,6 +953,42 @@ if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
     (FlagsModule :: any).OnChanged("Obstacles", function(isEnabled)
         applyObstaclesFlag(isEnabled)
     end)
+function SawbladeServer.SetQADisabled(selfOrArenaId, arenaIdOrDisabled, maybeDisabled)
+    local arenaId = selfOrArenaId
+    local disabled = arenaIdOrDisabled
+    if selfOrArenaId == SawbladeServer then
+        arenaId = arenaIdOrDisabled
+        disabled = maybeDisabled
+    end
+    local key = nil
+    if typeof(arenaId) == "string" then
+        key = arenaId
+    elseif arenaId ~= nil then
+        key = tostring(arenaId)
+    end
+    if not key then
+        error("SawbladeServer.SetQADisabled requires an arenaId")
+    end
+    if disabled then
+        qaDisabledArenas[key] = true
+    else
+        qaDisabledArenas[key] = nil
+    end
+    local state = activeStates[key] or activeStates[arenaId]
+    if state then
+        updateActivation(state)
+    end
+    return qaDisabledArenas[key] == true
+end
+
+function SawbladeServer.IsQADisabled(arenaId)
+    if arenaId == nil then
+        return false
+    end
+    if typeof(arenaId) == "string" then
+        return qaDisabledArenas[arenaId] == true
+    end
+    return qaDisabledArenas[tostring(arenaId)] == true
 end
 
 return SawbladeServer

@@ -54,6 +54,19 @@ local ArenaServer = require(script.Parent:WaitForChild("ArenaServer"))
 local TargetHealthServer = require(script.Parent:WaitForChild("TargetHealthServer"))
 local RoundSummaryServer = require(script.Parent:WaitForChild("RoundSummaryServer"))
 
+local AchievementServer
+do
+    local achievementModule = script.Parent:FindFirstChild("AchievementServer")
+    if achievementModule and achievementModule:IsA("ModuleScript") then
+        local ok, result = pcall(require, achievementModule)
+        if ok then
+            AchievementServer = result
+        else
+            warn(string.format("[RoundDirectorServer] Failed to require AchievementServer: %s", tostring(result)))
+        end
+    end
+end
+
 local MatchReturnService
 do
     local matchFolder = ServerScriptService:FindFirstChild("Match")
@@ -117,6 +130,49 @@ local WAVE_DURATION_SECONDS = roundSettings.WaveDurationSeconds or 45
 local WAVES_PER_LEVEL = roundSettings.WavesPerLevel or 5
 local SHOP_SECONDS = roundSettings.ShopSeconds or 30
 
+local LaneConfig = GameConfig.Lanes or {}
+local ObstacleConfig = GameConfig.Obstacles or {}
+
+local LANE_START_COUNT = math.max(0, math.floor((LaneConfig.StartCount or 0) + 0.5))
+local LANE_MAX_COUNT = tonumber(LaneConfig.MaxCount)
+if typeof(LANE_MAX_COUNT) == "number" then
+    LANE_MAX_COUNT = math.max(LANE_START_COUNT, math.floor(LANE_MAX_COUNT + 0.5))
+else
+    LANE_MAX_COUNT = nil
+end
+
+local laneUnlockLevels = {}
+if typeof(LaneConfig.UnlockAt) == "table" then
+    for _, unlock in ipairs(LaneConfig.UnlockAt) do
+        if typeof(unlock) == "number" then
+            table.insert(laneUnlockLevels, math.max(1, math.floor(unlock + 0.5)))
+        end
+    end
+    table.sort(laneUnlockLevels)
+end
+
+local LANE_SMOOTHING_LEVELS = math.max(tonumber(LaneConfig.ExpansionSmoothingLevels) or 0, 0)
+local LANE_EXPANSION_PENALTY = math.clamp(tonumber(LaneConfig.ExpansionTemporaryRatePenalty) or 0, 0, 0.95)
+local OBSTACLE_ENABLE_LEVEL = tonumber(ObstacleConfig.EnableAtLevel) or math.huge
+
+local ROSTER_BANDS = {
+    {
+        minLevel = 1,
+        roster = { "Apple", "Banana", "Orange", "GrapeBundle", "Pineapple" },
+        weights = { Apple = 4, Banana = 3, Orange = 3, GrapeBundle = 2, Pineapple = 1 },
+    },
+    {
+        minLevel = 20,
+        roster = { "Apple", "Banana", "Orange", "GrapeBundle", "Pineapple", "Coconut" },
+        weights = { Apple = 3, Banana = 3, Orange = 2, GrapeBundle = 1, Pineapple = 3, Coconut = 2 },
+    },
+    {
+        minLevel = 30,
+        roster = { "Apple", "Banana", "Orange", "GrapeBundle", "Pineapple", "Coconut", "Watermelon" },
+        weights = { Apple = 2, Banana = 2, Orange = 1, GrapeBundle = 1, Pineapple = 3, Coconut = 3, Watermelon = 2 },
+    },
+}
+
 local RoundDirectorServer = {}
 local activeStates = {}
 
@@ -177,6 +233,162 @@ local function shallowCopy(dictionary)
     end
 
     return copy
+end
+
+local function cloneArray(array)
+    if typeof(array) ~= "table" then
+        return nil
+    end
+
+    local copy = {}
+    for index, value in ipairs(array) do
+        copy[index] = value
+    end
+
+    return copy
+end
+
+local function cloneWeights(weights)
+    if typeof(weights) ~= "table" then
+        return nil
+    end
+
+    local copy = {}
+    local hasEntry = false
+    for key, value in pairs(weights) do
+        local numeric = tonumber(value)
+        if numeric and numeric > 0 then
+            copy[key] = numeric
+            hasEntry = true
+        end
+    end
+
+    if not hasEntry then
+        return nil
+    end
+
+    return copy
+end
+
+local function computeLaneCountForLevel(level)
+    local count = LANE_START_COUNT
+
+    for _, unlockLevel in ipairs(laneUnlockLevels) do
+        if level >= unlockLevel then
+            count += 1
+        end
+    end
+
+    if LANE_MAX_COUNT then
+        count = math.min(count, LANE_MAX_COUNT)
+    end
+
+    return math.max(count, 0)
+end
+
+local function selectRosterBand(level)
+    local selected = ROSTER_BANDS[1]
+
+    for _, band in ipairs(ROSTER_BANDS) do
+        if level >= band.minLevel then
+            selected = band
+        else
+            break
+        end
+    end
+
+    return selected
+end
+
+local function resolveLaneRateMultiplier(state, level)
+    local data = state and state.lanePenaltyData
+    if not data then
+        return 1
+    end
+
+    local basePenalty = math.clamp(tonumber(data.basePenalty) or LANE_EXPANSION_PENALTY or 0, 0, 0.95)
+    if basePenalty <= 0 then
+        state.lanePenaltyData = nil
+        return 1
+    end
+
+    local startLevel = tonumber(data.startLevel) or level
+    local smoothing = math.max(tonumber(data.smoothingLevels) or LANE_SMOOTHING_LEVELS or 0, 0)
+
+    if level < startLevel then
+        return 1 - basePenalty
+    end
+
+    local delta = level - startLevel
+    if smoothing <= 0 then
+        if delta > 0 then
+            state.lanePenaltyData = nil
+            return 1
+        end
+
+        return 1 - basePenalty
+    end
+
+    if delta >= smoothing then
+        state.lanePenaltyData = nil
+        return 1
+    end
+
+    local fraction = 1 - (delta / smoothing)
+    fraction = math.clamp(fraction, 0, 1)
+
+    return 1 - basePenalty * fraction
+end
+
+local function applyDifficultyBands(state)
+    if not state then
+        return
+    end
+
+    local level = math.max(tonumber(state.level) or 1, 1)
+
+    local desiredLaneCount = computeLaneCountForLevel(level)
+    local previousLaneCount = state.activeLaneCount
+    if previousLaneCount ~= desiredLaneCount then
+        state.activeLaneCount = desiredLaneCount
+
+        local arenaState = state.arenaState
+        if typeof(arenaState) == "table" then
+            arenaState.activeLanes = desiredLaneCount
+            arenaState.laneCount = desiredLaneCount
+        end
+
+        if TargetHealthServer and typeof(TargetHealthServer.SetLaneCount) == "function" then
+            local ok, err = pcall(TargetHealthServer.SetLaneCount, state.arenaId, desiredLaneCount)
+            if not ok then
+                warn(string.format("[RoundDirectorServer] Failed to update lane count for arena '%s': %s", tostring(state.arenaId), tostring(err)))
+            end
+        end
+
+        if previousLaneCount and desiredLaneCount > previousLaneCount and LANE_EXPANSION_PENALTY > 0 then
+            state.lanePenaltyData = {
+                startLevel = level,
+                basePenalty = LANE_EXPANSION_PENALTY,
+                smoothingLevels = LANE_SMOOTHING_LEVELS,
+            }
+        elseif previousLaneCount and desiredLaneCount < previousLaneCount then
+            state.lanePenaltyData = nil
+        end
+    elseif state.activeLaneCount == nil then
+        state.activeLaneCount = desiredLaneCount
+    end
+
+    local multiplier = resolveLaneRateMultiplier(state, level)
+    state.currentRateMultiplier = math.clamp(multiplier, 0, 1)
+
+    local rosterBand = selectRosterBand(level)
+    if state.activeRosterBand ~= rosterBand or state.fruitRosterIds == nil then
+        state.activeRosterBand = rosterBand
+        state.fruitRosterIds = cloneArray(rosterBand.roster) or {}
+        state.fruitWeights = cloneWeights(rosterBand.weights)
+    end
+
+    state.obstaclesEnabled = level >= OBSTACLE_ENABLE_LEVEL
 end
 
 local function sanitizeInteger(value)
@@ -453,6 +665,14 @@ local function ensureLevelSummary(state)
 
     state.currentLevelSummary = summary
 
+    if AchievementServer and typeof(AchievementServer.BeginLevel) == "function" then
+        local players = gatherArenaPlayers(state)
+        local okAchievement, achievementErr = pcall(AchievementServer.BeginLevel, state.arenaId, summary.level, players, summary.startedAt)
+        if not okAchievement then
+            warn(string.format("[RoundDirectorServer] AchievementServer.BeginLevel failed: %s", tostring(achievementErr)))
+        end
+    end
+
     if RoundSummaryServer and typeof(RoundSummaryServer.BeginLevel) == "function" then
         local ok, err = pcall(RoundSummaryServer.BeginLevel, state.arenaId, summary.level, summary.startKOs)
         if not ok then
@@ -700,6 +920,22 @@ local function finalizeLevelSummary(state, outcome, reason)
         fireLevelCompleteEvent(state, levelEventPayload)
     end
 
+    local finishClock = os.clock()
+    if AchievementServer and typeof(AchievementServer.HandleLevelComplete) == "function" then
+        local levelInfo = {
+            level = levelNumber,
+            startedAt = summary.startedAt,
+            finishedAt = finishClock,
+            duration = summary.startedAt and math.max(0, finishClock - summary.startedAt) or nil,
+            wavesCleared = sanitizeInteger(summary.wavesCleared or 0),
+        }
+
+        local okAchievement, achievementErr = pcall(AchievementServer.HandleLevelComplete, state.arenaId, outcome, players, perPlayerSummary, levelInfo)
+        if not okAchievement then
+            warn(string.format("[RoundDirectorServer] AchievementServer.HandleLevelComplete failed: %s", tostring(achievementErr)))
+        end
+    end
+
     state.currentLevelSummary = nil
 end
 
@@ -862,6 +1098,23 @@ local function scheduleWave(state)
         level = state.level,
         wave = state.wave,
     }
+
+    if typeof(state.activeLaneCount) == "number" then
+        context.laneCount = state.activeLaneCount
+    end
+
+    if typeof(state.fruitRosterIds) == "table" and #state.fruitRosterIds > 0 then
+        context.fruitRoster = state.fruitRosterIds
+    end
+
+    if typeof(state.fruitWeights) == "table" and next(state.fruitWeights) ~= nil then
+        context.fruitWeights = state.fruitWeights
+    end
+
+    local rateMultiplier = state.currentRateMultiplier
+    if typeof(rateMultiplier) == "number" and rateMultiplier >= 0 then
+        context.fireRateMultiplier = rateMultiplier
+    end
 
     if typeof(TurretController.ScheduleWave) == "function" then
         local ok, err = pcall(TurretController.ScheduleWave, TurretController, state.arenaId, context)
@@ -1077,6 +1330,7 @@ local function runShop(state)
 end
 
 local function runLevel(state)
+    applyDifficultyBands(state)
     ensureLevelSummary(state)
 
     if not runPrep(state) then
@@ -1134,6 +1388,13 @@ local function runLoop(state)
         activeStates[state.arenaId] = nil
     end
 
+    if AchievementServer and typeof(AchievementServer.ResetArena) == "function" then
+        local okAchievementReset, achievementResetErr = pcall(AchievementServer.ResetArena, state.arenaId)
+        if not okAchievementReset then
+            warn(string.format("[RoundDirectorServer] AchievementServer.ResetArena failed: %s", tostring(achievementResetErr)))
+        end
+    end
+
     if RoundSummaryServer and typeof(RoundSummaryServer.Reset) == "function" then
         local okReset, resetErr = pcall(RoundSummaryServer.Reset, state.arenaId)
         if not okReset then
@@ -1183,9 +1444,18 @@ function RoundDirectorServer.Start(arenaId, options)
         defeatReason = nil,
         startedAt = os.clock(),
         finalOutcome = nil,
+        activeLaneCount = nil,
+        lanePenaltyData = nil,
+        currentRateMultiplier = 1,
+        fruitRosterIds = nil,
+        fruitWeights = nil,
+        activeRosterBand = nil,
+        obstaclesEnabled = false,
     }
 
     activeStates[arenaId] = state
+
+    applyDifficultyBands(state)
 
     if telemetryTrack then
         local payload = {
@@ -1253,6 +1523,13 @@ function RoundDirectorServer.Abort(arenaId)
     activeStates[arenaId] = nil
     sendPrepTimer(state, 0)
 
+    if AchievementServer and typeof(AchievementServer.ResetArena) == "function" then
+        local okAchievementReset, achievementResetErr = pcall(AchievementServer.ResetArena, arenaId)
+        if not okAchievementReset then
+            warn(string.format("[RoundDirectorServer] AchievementServer.ResetArena failed: %s", tostring(achievementResetErr)))
+        end
+    end
+
     if RoundSummaryServer and typeof(RoundSummaryServer.Reset) == "function" then
         local okReset, resetErr = pcall(RoundSummaryServer.Reset, arenaId)
         if not okReset then
@@ -1279,6 +1556,36 @@ function RoundDirectorServer.Abort(arenaId)
 
         telemetryTrack("match_end", payload)
     end
+end
+
+function RoundDirectorServer.SetLevel(arenaId, level)
+    local state = activeStates[arenaId]
+    if not state or not state.running then
+        return false, "NoArena"
+    end
+
+    local numeric = tonumber(level)
+    if not numeric then
+        return false, "InvalidLevel"
+    end
+
+    numeric = math.max(1, math.floor(numeric + 0.5))
+    state.level = numeric
+    state.wave = 0
+    state.currentLevelSummary = nil
+    state.waveOutcome = nil
+    state.waveStartedAt = nil
+    state.waveDeadline = nil
+
+    updateArenaStateSnapshot(state)
+    broadcastWaveChange(state)
+    callSawblade("UpdateRoundState", state.arenaId, {
+        level = state.level,
+        phase = state.phase,
+        wave = state.wave,
+    })
+
+    return true
 end
 
 function RoundDirectorServer.SkipPrep(arenaId)
@@ -1347,10 +1654,25 @@ function RoundDirectorServer.GetState(arenaId)
         return nil
     end
 
+    local rosterCopy
+    if typeof(state.fruitRosterIds) == "table" then
+        rosterCopy = cloneArray(state.fruitRosterIds)
+    end
+
+    local weightCopy
+    if typeof(state.fruitWeights) == "table" then
+        weightCopy = shallowCopy(state.fruitWeights)
+    end
+
     return {
         phase = state.phase,
         level = state.level,
         wave = state.wave,
+        laneCount = state.activeLaneCount,
+        fruitRoster = rosterCopy,
+        fruitWeights = weightCopy,
+        fireRateMultiplier = state.currentRateMultiplier,
+        obstaclesEnabled = state.obstaclesEnabled,
     }
 end
 
