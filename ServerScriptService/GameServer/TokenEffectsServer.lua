@@ -10,8 +10,17 @@ local TokenEffectsServer = {}
 
 type EffectState = { [string]: any }
 type PlayerState = { [string]: any }
+type EffectPolicy = {
+        refreshAllowed: boolean?,
+        debounceSeconds: number?,
+        stateKey: string?,
+        displayName: string?,
+        trackState: boolean?,
+        isActive: ((EffectState) -> boolean)?,
+}
 
 local activeEffects: { [Player]: PlayerState } = setmetatable({}, { __mode = "k" })
+local effectCooldowns: { [Player]: { [string]: number } } = setmetatable({}, { __mode = "k" })
 
 local function safeRequire(instance: Instance?): any?
         if not instance then
@@ -36,6 +45,104 @@ local PowerUpsConfig = GameConfig.PowerUps or {}
 
 local ShopConfigModule = require(configFolder:WaitForChild("ShopConfig"))
 local ShopItems = if typeof(ShopConfigModule.All) == "function" then ShopConfigModule.All() else ShopConfigModule.Items or {}
+
+local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
+local Remotes = safeRequire(remotesFolder and remotesFolder:FindFirstChild("RemoteBootstrap"))
+local NoticeRemote: RemoteEvent? = if Remotes then Remotes.RE_Notice else nil
+
+local function getCooldownMap(player: Player): { [string]: number }
+        local map = effectCooldowns[player]
+        if not map then
+                map = {}
+                effectCooldowns[player] = map
+        end
+        return map
+end
+
+local EFFECT_DISPLAY_NAMES = {
+        SpeedBoost = "Speed boost",
+        DoubleCoins = "Double coins",
+        BurstClear = "Burst clear",
+        TargetShield = "Target shield",
+        TargetHealthBoost = "Target health boost",
+        AutoRepairMelee = "Auto-repair",
+}
+
+local function getEffectDisplayName(effectName: string): string
+        return EFFECT_DISPLAY_NAMES[effectName] or effectName
+end
+
+local function sendNotice(player: Player, message: string, kind: string)
+        local remote = NoticeRemote
+        if not remote then
+                return
+        end
+
+        local ok, err = pcall(remote.FireClient, remote, player, {
+                msg = message,
+                kind = kind,
+        })
+
+        if not ok then
+                warn(string.format("[TokenEffects] Failed to send notice: %s", tostring(err)))
+        end
+end
+
+local function isEffectStateActive(effectName: string, effectState: any, policy: EffectPolicy?, now: number): boolean
+        if effectState == nil then
+                return false
+        end
+
+        if policy and policy.isActive then
+                local ok, result = pcall(policy.isActive, effectState)
+                if ok then
+                        return result and true or false
+                else
+                        warn(string.format("[TokenEffects] isActive check failed for %s", effectName))
+                end
+        end
+
+        if typeof(effectState) == "table" then
+                local expiresAt = effectState.expiresAt
+                if typeof(expiresAt) == "number" then
+                        return expiresAt > now
+                end
+        end
+
+        return true
+end
+
+local effectPolicies: { [string]: EffectPolicy } = {
+        SpeedBoost = { refreshAllowed = true, debounceSeconds = 0.5 },
+        DoubleCoins = { refreshAllowed = true, debounceSeconds = 0.5 },
+        AutoRepairMelee = { refreshAllowed = true, debounceSeconds = 0.5 },
+        TargetShield = { refreshAllowed = false, debounceSeconds = 0.5 },
+        BurstClear = { refreshAllowed = false, debounceSeconds = 0.25, trackState = false },
+        TargetHealthBoost = { refreshAllowed = false, debounceSeconds = 0.25, trackState = false },
+}
+
+local function notifyEffectError(player: Player, effectName: string, err: string)
+        local displayName = getEffectDisplayName(effectName)
+
+        if err == "Active" then
+                sendNotice(player, string.format("%s already active.", displayName), "info")
+        elseif err == "Cooldown" then
+                sendNotice(player, string.format("%s is cooling down.", displayName), "info")
+        elseif err == "Disabled" then
+                sendNotice(player, string.format("%s is unavailable right now.", displayName), "warn")
+        elseif err == "NoArena" then
+                sendNotice(player, string.format("%s requires an active arena.", displayName), "warn")
+        elseif err == "NoCharges" or err == "OutOfToken" then
+                sendNotice(player, string.format("No charges left for %s.", displayName), "warn")
+        else
+                sendNotice(player, string.format("Cannot use %s (%s).", displayName, err), "warn")
+        end
+end
+
+local function notifyEffectRefresh(player: Player, effectName: string)
+        local displayName = getEffectDisplayName(effectName)
+        sendNotice(player, string.format("%s refreshed.", displayName), "info")
+end
 
 local tokenEffectById: { [string]: string } = {}
 for id, item in pairs(ShopItems) do
@@ -383,6 +490,33 @@ local function applyTargetShield(player: Player): (boolean, string?)
         local duration = tonumber(config.DurationSeconds) or 0
 
         TargetHealthServer.SetShield(arenaId, true, duration > 0 and duration or nil)
+
+        if duration > 0 then
+                local state = ensureState(player)
+                local effectState = {
+                        arenaId = arenaId,
+                        expiresAt = os.clock() + duration,
+                        token = {},
+                }
+                state.TargetShield = effectState
+
+                local token = effectState.token
+                task.delay(duration, function()
+                        local playerState = activeEffects[player]
+                        local current = playerState and playerState.TargetShield
+                        if current ~= effectState then
+                                return
+                        end
+
+                        if current.token ~= token then
+                                return
+                        end
+
+                        playerState.TargetShield = nil
+                        cleanupState(player)
+                end)
+        end
+
         return true, nil
 end
 
@@ -464,23 +598,62 @@ local function resolveEffectFromTokenId(tokenId: any): string?
         return tokenEffectById[tokenId]
 end
 
-local function executeEffect(player: Player, effectName: string): (boolean, string?)
+local function executeEffect(player: Player, effectName: string): (boolean, string?, boolean?)
         local handler = effectHandlers[effectName]
         if not handler then
-                return false, "UnsupportedEffect"
+                return false, "UnsupportedEffect", nil
+        end
+
+        local policy = effectPolicies[effectName]
+        local trackState = not (policy and policy.trackState == false)
+        local stateKey = if trackState then ((policy and policy.stateKey) or effectName) else nil
+
+        local now = os.clock()
+        local wasActive = false
+
+        if stateKey ~= nil then
+                local playerState = activeEffects[player]
+                local effectState = playerState and playerState[stateKey]
+                if effectState ~= nil then
+                        wasActive = isEffectStateActive(effectName, effectState, policy, now)
+                        if wasActive and not (policy and policy.refreshAllowed) then
+                                return false, "Active", nil
+                        end
+                end
+        end
+
+        local debounceSeconds = if policy and typeof(policy.debounceSeconds) == "number" then math.max(0, policy.debounceSeconds) else 0
+        local cooldownMap
+        if debounceSeconds > 0 then
+                cooldownMap = getCooldownMap(player)
+                local readyAt = cooldownMap[effectName]
+                if readyAt and readyAt > now and not wasActive then
+                        return false, "Cooldown", nil
+                end
+                cooldownMap[effectName] = now + debounceSeconds
         end
 
         local ok, result, err = pcall(handler, player)
         if not ok then
                 warn(string.format("[TokenEffects] Handler '%s' errored: %s", effectName, tostring(result)))
-                return false, "HandlerError"
+                if debounceSeconds > 0 and cooldownMap then
+                        cooldownMap[effectName] = nil
+                end
+                return false, "HandlerError", nil
         end
 
         if result then
-                return true, nil
+                if debounceSeconds > 0 and cooldownMap then
+                        cooldownMap[effectName] = os.clock() + debounceSeconds
+                end
+                return true, nil, wasActive
         end
 
-        return false, err or "ApplyFailed"
+        if debounceSeconds > 0 and cooldownMap then
+                cooldownMap[effectName] = nil
+        end
+
+        return false, err or "ApplyFailed", nil
 end
 
 function TokenEffectsServer.Use(player: Player, effectName: string?, slotIndex: number?)
@@ -525,11 +698,6 @@ function TokenEffectsServer.Use(player: Player, effectName: string?, slotIndex: 
                         return { ok = false, err = "InvalidToken" }
                 end
 
-                local countValue = entry.Count
-                if typeof(countValue) ~= "number" or countValue <= 0 then
-                        return { ok = false, err = "NoCharges" }
-                end
-
                 local resolvedEffect = effectName
                 if resolvedEffect == nil or resolvedEffect == "" then
                         resolvedEffect = resolveEffectFromTokenId(tokenId)
@@ -539,12 +707,19 @@ function TokenEffectsServer.Use(player: Player, effectName: string?, slotIndex: 
                         return { ok = false, err = "UnknownEffect" }
                 end
 
+                local countValue = entry.Count
+                if typeof(countValue) ~= "number" or countValue <= 0 then
+                        notifyEffectError(player, resolvedEffect, "NoCharges")
+                        return { ok = false, err = "NoCharges" }
+                end
+
                 if typeof(effectName) == "string" and effectName ~= "" and effectName ~= resolvedEffect then
                         return { ok = false, err = "EffectMismatch" }
                 end
 
-                local ok, applyErr = executeEffect(player, resolvedEffect)
+                local ok, applyErr, refreshed = executeEffect(player, resolvedEffect)
                 if not ok then
+                        notifyEffectError(player, resolvedEffect, applyErr or "ApplyFailed")
                         return { ok = false, err = applyErr }
                 end
 
@@ -570,19 +745,33 @@ function TokenEffectsServer.Use(player: Player, effectName: string?, slotIndex: 
                         ShopServer.UpdateQuickbarForPlayer(player, data, inventory)
                 end
 
-                return { ok = true, effect = resolvedEffect, remaining = nextCount }
+                if refreshed then
+                        notifyEffectRefresh(player, resolvedEffect)
+                end
+
+                return {
+                        ok = true,
+                        effect = resolvedEffect,
+                        remaining = nextCount,
+                        refreshed = if refreshed then true else nil,
+                }
         end
 
         if typeof(effectName) ~= "string" or effectName == "" then
                 return { ok = false, err = "NoEffect" }
         end
 
-        local ok, applyErr = executeEffect(player, effectName)
+        local ok, applyErr, refreshed = executeEffect(player, effectName)
         if not ok then
+                notifyEffectError(player, effectName, applyErr or "ApplyFailed")
                 return { ok = false, err = applyErr }
         end
 
-        return { ok = true, effect = effectName }
+        if refreshed then
+                notifyEffectRefresh(player, effectName)
+        end
+
+        return { ok = true, effect = effectName, refreshed = if refreshed then true else nil }
 end
 
 function TokenEffectsServer.ExpireAll(player: Player)
@@ -627,7 +816,13 @@ function TokenEffectsServer.ExpireAll(player: Player)
                 state.AutoRepairMelee = nil
         end
 
+        if state.TargetShield then
+                state.TargetShield = nil
+        end
+
         cleanupState(player)
+
+        effectCooldowns[player] = nil
 end
 
 Players.PlayerRemoving:Connect(function(player: Player)
