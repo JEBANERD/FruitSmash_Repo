@@ -427,6 +427,19 @@ function EconomyServer.GrantLevelClear(players: { Player }?, level: number): { [
         })
 end
 
+function EconomyServer.GrantCoins(player: Player, amount: any, metadata: Metadata?): AwardSummary?
+        if typeof(player) ~= "Instance" or not player:IsA("Player") then
+                return nil
+        end
+
+        local delta = toInteger(amount)
+        if delta == nil or delta == 0 then
+                return nil
+        end
+
+        return applyDelta(player, delta, 0, metadata)
+end
+
 function EconomyServer.Totals(player: Player): Totals
         if typeof(player) ~= "Instance" or not player:IsA("Player") then
                 return { coins = 0, points = 0 }
