@@ -50,6 +50,7 @@ type RemoteRefs = {
         PurchaseMade: RemoteEvent,
         PlayerKO: RemoteEvent,
         RE_Notice: RemoteEvent,
+        RE_AchievementToast: RemoteEvent,
         WaveComplete: RemoteEvent,
         RE_SettingsPushed: RemoteEvent,
         RE_SessionLeaderboard: RemoteEvent,
@@ -74,14 +75,15 @@ local Remotes: RemoteRefs = {
 	RE_TargetHP         = getOrCreateEvent("RE_TargetHP"),
 
 	-- Economy / UI
-	RE_CoinPointDelta   = getOrCreateEvent("RE_CoinPointDelta"),
-	RE_QuickbarUpdate   = getOrCreateEvent("RE_QuickbarUpdate"),
-	ShopOpen            = getOrCreateEvent("ShopOpen"),
-	PurchaseMade        = getOrCreateEvent("PurchaseMade"),
+        RE_CoinPointDelta   = getOrCreateEvent("RE_CoinPointDelta"),
+        RE_QuickbarUpdate   = getOrCreateEvent("RE_QuickbarUpdate"),
+        ShopOpen            = getOrCreateEvent("ShopOpen"),
+        PurchaseMade        = getOrCreateEvent("PurchaseMade"),
 
         -- Player status / notices
         PlayerKO            = getOrCreateEvent("PlayerKO"),
         RE_Notice           = getOrCreateEvent("RE_Notice"),
+        RE_AchievementToast = getOrCreateEvent("RE_AchievementToast"),
 
         -- Misc progression
         WaveComplete        = getOrCreateEvent("WaveComplete"),
