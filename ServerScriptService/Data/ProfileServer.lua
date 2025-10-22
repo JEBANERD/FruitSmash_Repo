@@ -692,6 +692,41 @@ function ProfileServer.Serialize(player: Player): ProfileData
     return serialized
 end
 
+function ProfileServer.LoadSerialized(player: Player, serialized: ProfileData?)
+    local profile = ensureProfile(player)
+
+    local data = buildDefaultData()
+    if type(serialized) == "table" then
+        if type(serialized.Coins) == "number" then
+            data.Coins = serialized.Coins
+        end
+
+        if type(serialized.Stats) == "table" then
+            local stats = data.Stats
+            for key, value in pairs(serialized.Stats) do
+                stats[key] = value
+            end
+        end
+
+        if type(serialized.Inventory) == "table" then
+            local inventory = serialized.Inventory
+            local target = data.Inventory
+            target.MeleeLoadout = sanitizeStringList(inventory.MeleeLoadout)
+            target.ActiveMelee = if type(inventory.ActiveMelee) == "string" and inventory.ActiveMelee ~= "" then inventory.ActiveMelee else nil
+            target.TokenCounts = sanitizeTokenCounts(inventory.TokenCounts)
+            target.UtilityQueue = sanitizeStringList(inventory.UtilityQueue)
+            target.OwnedMelee = sanitizeOwnedMelee(inventory.OwnedMelee)
+        end
+    end
+
+    profile.Data = data
+
+    local inventory = ensureInventory(data)
+    refreshQuickbar(player, data, inventory)
+
+    return data
+end
+
 function ProfileServer.GetByUserId(userId: number): Profile?
     return profilesByUserId[userId]
 end
