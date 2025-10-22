@@ -817,6 +817,11 @@ function TokenEffectsServer.ExpireAll(player: Player)
         end
 
         if state.TargetShield then
+                local shieldState = state.TargetShield
+                local arenaId = shieldState and shieldState.arenaId
+                if arenaId ~= nil and TargetHealthServer and typeof(TargetHealthServer.SetShield) == "function" then
+                        pcall(TargetHealthServer.SetShield, arenaId, false)
+                end
                 state.TargetShield = nil
         end
 
