@@ -62,6 +62,109 @@ local configFolder = sharedFolder:WaitForChild("Config")
 local ShopConfig = require(configFolder:WaitForChild("ShopConfig"))
 local ShopItems = (type(ShopConfig.All) == "function" and ShopConfig.All()) or ShopConfig.Items or {}
 
+local function clearDictionary(tbl: { [any]: any })
+        for key in pairs(tbl) do
+                tbl[key] = nil
+        end
+end
+
+local function sanitizeStockValue(rawValue: any): number?
+        if typeof(rawValue) ~= "number" then
+                return nil
+        end
+
+        if rawValue ~= rawValue then -- NaN check
+                return nil
+        end
+
+        if rawValue == math.huge or rawValue == -math.huge then
+                return nil
+        end
+
+        local limit = math.floor(rawValue)
+        if limit < 0 then
+                limit = 0
+        end
+
+        return limit
+end
+
+local function sanitizeStackLimit(rawValue: any): number
+        local limit = sanitizeStockValue(rawValue)
+        if limit == nil then
+                return math.huge
+        end
+        return limit
+end
+
+local initialStockByItem: { [string]: number } = {}
+local remainingStockByItem: { [string]: number } = {}
+
+for itemId, item in pairs(ShopItems) do
+        if type(item) == "table" then
+                local limit = sanitizeStockValue(item.Stock)
+                if limit ~= nil then
+                        initialStockByItem[itemId] = limit
+                        remainingStockByItem[itemId] = limit
+                end
+        end
+end
+
+local function ensureStockEntry(item: any)
+        if type(item) ~= "table" then
+                return
+        end
+
+        local itemId = item.Id
+        if typeof(itemId) ~= "string" or itemId == "" then
+                return
+        end
+
+        if remainingStockByItem[itemId] ~= nil or initialStockByItem[itemId] ~= nil then
+                return
+        end
+
+        local limit = sanitizeStockValue(item.Stock)
+        if limit ~= nil then
+                initialStockByItem[itemId] = limit
+                remainingStockByItem[itemId] = limit
+        end
+end
+
+local function getRemainingStock(itemId: string): number?
+        return remainingStockByItem[itemId]
+end
+
+local function reserveStock(itemId: string): (boolean, number?)
+        local remaining = remainingStockByItem[itemId]
+        if remaining == nil then
+                return true, nil
+        end
+
+        if remaining <= 0 then
+                return false, remaining
+        end
+
+        remaining = remaining - 1
+        remainingStockByItem[itemId] = remaining
+        return true, remaining
+end
+
+local function releaseStock(itemId: string)
+        local remaining = remainingStockByItem[itemId]
+        if remaining == nil then
+                return
+        end
+
+        local limit = initialStockByItem[itemId]
+        remaining = remaining + 1
+        if limit ~= nil and remaining > limit then
+                remaining = limit
+        end
+
+        remainingStockByItem[itemId] = remaining
+end
+
 -- ---------- ProfileServer / EconomyServer resolution ----------
 
 local profileCandidates = {
@@ -316,8 +419,14 @@ end
 
 local function applyTokenPurchase(inventory: any, item: any): (boolean, string?)
         local counts = inventory.TokenCounts
-        local current = counts[item.Id] or 0
-        local limit = item.StackLimit or math.huge
+        local current = counts[item.Id]
+        if typeof(current) ~= "number" then
+                current = 0
+        else
+                current = math.max(0, math.floor(current))
+        end
+
+        local limit = sanitizeStackLimit(item.StackLimit)
         if current >= limit then
                 return false, "StackLimit"
         end
@@ -436,6 +545,22 @@ local function processPurchase(player: Player, itemId: string)
                 return response
         end
 
+        ensureStockEntry(item)
+
+        if typeof(item.Id) ~= "string" or item.Id == "" then
+                item.Id = itemId
+        end
+
+        local stockReserved = false
+        local reservedStockRemaining: number? = nil
+
+        local function releaseReservedStock()
+                if stockReserved then
+                        releaseStock(item.Id)
+                        stockReserved = false
+                end
+        end
+
         local profile = getProfile(player)
         if not profile then
                 response.err = "NoProfile"
@@ -450,13 +575,24 @@ local function processPurchase(player: Player, itemId: string)
                 return response
         end
 
-        local price = tonumber(item.PriceCoins) or 0
-        if price < 0 then
-                price = 0
+        local priceValue = tonumber(item.PriceCoins)
+        if priceValue == nil then
+                priceValue = 0
         end
+        priceValue = math.floor(priceValue)
+        if priceValue < 0 then
+                priceValue = 0
+        end
+
+        local price = priceValue
+        response.price = price
 
         local coins = if type(data.Coins) == "number" then data.Coins else FALLBACK_DEFAULTS.Coins
         coins = resolveCoinsFromEconomy(player, math.max(coins, 0))
+        if typeof(coins) ~= "number" then
+                coins = FALLBACK_DEFAULTS.Coins
+        end
+        coins = math.max(0, math.floor(coins))
 
         if coins < price then
                 response.err = "InsufficientFunds"
@@ -466,20 +602,36 @@ local function processPurchase(player: Player, itemId: string)
         end
 
         local kind = string.lower(tostring(item.Kind or ""))
-        local ok, failureReason = false, nil :: string?
+        local applyFn: ((any, any) -> (boolean, string?))?
         if kind == "melee" then
-                ok, failureReason = applyMeleePurchase(inventory, item)
+                applyFn = applyMeleePurchase
         elseif kind == "token" then
-                ok, failureReason = applyTokenPurchase(inventory, item)
+                applyFn = applyTokenPurchase
         elseif kind == "utility" then
-                ok, failureReason = applyUtilityPurchase(inventory, item)
+                applyFn = applyUtilityPurchase
         else
                 response.err = "UnsupportedKind"
                 sendNotice(player, "That item cannot be purchased right now.", "error")
                 return response
         end
 
+        local reserveOk, newStockRemaining = reserveStock(item.Id)
+        if not reserveOk then
+                response.err = "OutOfStock"
+                response.stockRemaining = newStockRemaining or 0
+                response.stockLimit = initialStockByItem[item.Id]
+                sendNotice(player, "That item is sold out.", "warn")
+                return response
+        end
+
+        if newStockRemaining ~= nil then
+                stockReserved = true
+                reservedStockRemaining = newStockRemaining
+        end
+
+        local ok, failureReason = applyFn(inventory, item)
         if not ok then
+                releaseReservedStock()
                 if failureReason == "StackLimit" then
                         sendNotice(player, "You are already holding the maximum amount of that item.", "warn")
                 elseif failureReason == "AlreadyOwned" then
@@ -507,13 +659,24 @@ local function processPurchase(player: Player, itemId: string)
         response.err = nil
         response.coins = remainingCoins
         response.kind = item.Kind
+        response.price = price
+        response.stockRemaining = reservedStockRemaining
+        response.stockLimit = initialStockByItem[item.Id]
         response.quickbar = quickbarState or QuickbarServer.BuildState(data, inventory)
+
+        if stockReserved then
+                -- Item had limited stock and was successfully consumed; do not release.
+                stockReserved = false
+        end
 
         if Remotes.PurchaseMade then
                 Remotes.PurchaseMade:FireClient(player, {
                         itemId = item.Id,
                         kind = item.Kind,
                         coins = remainingCoins,
+                        price = price,
+                        stockRemaining = response.stockRemaining,
+                        stockLimit = response.stockLimit,
                         quickbar = response.quickbar,
                 })
         end
@@ -630,6 +793,45 @@ end
 
 function ShopServer.BuildQuickbarState(data: any, inventory: any)
         return QuickbarServer.BuildState(data, inventory)
+end
+
+function ShopServer.GetRemainingStock(itemId: string)
+        if typeof(itemId) ~= "string" or itemId == "" then
+                return nil
+        end
+        return getRemainingStock(itemId)
+end
+
+function ShopServer.ResetStock(itemId: string?)
+        if itemId == nil then
+                for id, item in pairs(ShopItems) do
+                        if type(item) == "table" then
+                                ensureStockEntry(item)
+                        end
+                end
+
+                clearDictionary(remainingStockByItem)
+                for id, limit in pairs(initialStockByItem) do
+                        remainingStockByItem[id] = limit
+                end
+                return
+        end
+
+        if typeof(itemId) ~= "string" or itemId == "" then
+                return
+        end
+
+        local configItem = (type(ShopConfig.Get) == "function" and ShopConfig.Get(itemId)) or ShopItems[itemId]
+        if configItem then
+                ensureStockEntry(configItem)
+        end
+
+        local limit = initialStockByItem[itemId]
+        if limit ~= nil then
+                remainingStockByItem[itemId] = limit
+        else
+                remainingStockByItem[itemId] = nil
+        end
 end
 
 QuickbarServer.RegisterInventoryResolver(function(player: Player)
