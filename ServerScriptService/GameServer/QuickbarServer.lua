@@ -8,6 +8,7 @@
 --   BuildState(data, inventory) -> QuickbarState
 --   GetState(player) -> QuickbarState?
 --   GetTokenSlot(player, index) -> QuickbarTokenEntry?
+--   EquipMelee(player, itemId) -> QuickbarState?, string?
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,6 +29,85 @@ local TOKEN_SLOTS = quickbarConfig.TokenSlots or 3
 local DEFAULT_MELEE = (GameConfig.Melee and GameConfig.Melee.DefaultWeapon) or nil
 
 local shopItems = (type(ShopConfig.All) == "function" and ShopConfig.All()) or ShopConfig.Items or {}
+
+local function getShopItem(itemId: string): any?
+        local cached = shopItems[itemId]
+        if typeof(cached) == "table" then
+                return cached
+        end
+
+        if typeof(ShopConfig.Get) == "function" then
+                local ok, item = pcall(ShopConfig.Get, itemId)
+                if ok and typeof(item) == "table" then
+                        shopItems[itemId] = item
+                        return item
+                end
+        end
+
+        return nil
+end
+
+local function coerceNumber(value: any): number?
+        local valueType = typeof(value)
+        if valueType == "number" then
+                return value
+        elseif valueType == "string" then
+                local numeric = tonumber(value)
+                if typeof(numeric) == "number" then
+                        return numeric
+                end
+        end
+
+        return nil
+end
+
+local tokenOrderIndex: {[string]: number} = {}
+local tokenOrderBase = 0
+
+do
+        local sortable: {{ Id: string, Order: number, Price: number, Name: string }} = {}
+
+        for itemId, rawItem in pairs(shopItems) do
+                if typeof(itemId) == "string" and typeof(rawItem) == "table" then
+                        local kind = rawItem.Kind
+                        if typeof(kind) == "string" and string.lower(kind) == "token" then
+                                local orderValue = coerceNumber(rawItem.QuickbarOrder)
+                                        or coerceNumber(rawItem.SortOrder)
+                                        or coerceNumber(rawItem.DisplayOrder)
+                                        or coerceNumber(rawItem.PriceCoins)
+                                        or math.huge
+                                local priceValue = coerceNumber(rawItem.PriceCoins) or math.huge
+                                local nameValue = if typeof(rawItem.Name) == "string" then rawItem.Name else itemId
+
+                                table.insert(sortable, {
+                                        Id = itemId,
+                                        Order = orderValue,
+                                        Price = priceValue,
+                                        Name = nameValue,
+                                })
+                        end
+                end
+        end
+
+        table.sort(sortable, function(a, b)
+                if a.Order ~= b.Order then
+                        return a.Order < b.Order
+                end
+                if a.Price ~= b.Price then
+                        return a.Price < b.Price
+                end
+                if a.Name ~= b.Name then
+                        return a.Name < b.Name
+                end
+                return a.Id < b.Id
+        end)
+
+        for index, entry in ipairs(sortable) do
+                tokenOrderIndex[entry.Id] = index
+        end
+
+        tokenOrderBase = #sortable
+end
 
 export type QuickbarMeleeEntry = { Id: string, Active: boolean }
 export type QuickbarTokenEntry = { Id: string, Count: number, StackLimit: number? }
@@ -192,16 +272,16 @@ local function resolveDataAndInventory(player: Player, data: any?, inventory: an
                 return data, inventory
         end
 
+        local profileData, profileInventory = resolveFromProfileServer(player)
+        if profileData and profileInventory then
+                return profileData, profileInventory
+        end
+
         if inventoryResolver then
                 local ok, resolvedData, resolvedInventory = pcall(inventoryResolver, player)
                 if ok and resolvedData and resolvedInventory then
                         return resolvedData, resolvedInventory
                 end
-        end
-
-        local profileData, profileInventory = resolveFromProfileServer(player)
-        if profileData and profileInventory then
-                return profileData, profileInventory
         end
 
         local defaultsData, defaultsInventory = cloneDefaults()
@@ -217,6 +297,15 @@ local function addMeleeEntry(target: {QuickbarMeleeEntry}, seen: {[string]: bool
         end
         table.insert(target, { Id = meleeId, Active = isActive })
         seen[meleeId] = true
+end
+
+local function insertUniqueString(list: {string}, value: string)
+        for _, existing in ipairs(list) do
+                if existing == value then
+                        return
+                end
+        end
+        table.insert(list, value)
 end
 
 local function buildMeleeEntries(inventory: any): {QuickbarMeleeEntry}
@@ -250,6 +339,13 @@ local function buildMeleeEntries(inventory: any): {QuickbarMeleeEntry}
                 end
         end
 
+        for index, entry in ipairs(entries) do
+                if entry and entry.Active and index ~= 1 then
+                        entries[index], entries[1] = entries[1], entry
+                        break
+                end
+        end
+
         return entries
 end
 
@@ -261,19 +357,66 @@ local function buildTokenEntries(inventory: any): {QuickbarTokenEntry}
         end
 
         local sortable = {}
+        local fallbackOffset = tokenOrderBase
+        local fallbackCount = 0
+
         for tokenId, count in pairs(tokensMap) do
                 if typeof(tokenId) == "string" then
                         local numericCount = if typeof(count) == "number" then count else tonumber(count) or 0
-                        if numericCount > 0 then
-                                table.insert(sortable, {
-                                        Id = tokenId,
-                                        Count = numericCount,
-                                })
+                        if typeof(numericCount) == "number" then
+                                numericCount = math.max(0, math.floor(numericCount))
+                                if numericCount > 0 then
+                                        local item = getShopItem(tokenId)
+                                        local kind = if item and typeof(item.Kind) == "string" then string.lower(item.Kind) else nil
+                                        if kind == "token" then
+                                                local stackLimit = nil
+                                                if item and typeof(item.StackLimit) == "number" then
+                                                        local limitValue = math.floor(item.StackLimit)
+                                                        if limitValue > 0 then
+                                                                stackLimit = limitValue
+                                                        end
+                                                end
+
+                                                if stackLimit then
+                                                        numericCount = math.min(numericCount, stackLimit)
+                                                end
+
+                                                if numericCount > 0 then
+                                                        local orderIndex = tokenOrderIndex[tokenId]
+                                                        if orderIndex == nil then
+                                                                fallbackCount = fallbackCount + 1
+                                                                orderIndex = fallbackOffset + fallbackCount
+                                                        end
+
+                                                        local priceValue = math.huge
+                                                        if item then
+                                                                local price = coerceNumber(item.PriceCoins)
+                                                                if typeof(price) == "number" then
+                                                                        priceValue = price
+                                                                end
+                                                        end
+
+                                                        table.insert(sortable, {
+                                                                Id = tokenId,
+                                                                Count = numericCount,
+                                                                StackLimit = stackLimit,
+                                                                Order = orderIndex,
+                                                                Price = priceValue,
+                                                        })
+                                                end
+                                        end
+                                end
                         end
                 end
         end
 
         table.sort(sortable, function(a, b)
+                if a.Order ~= b.Order then
+                        return a.Order < b.Order
+                end
+                if a.Price ~= b.Price then
+                        return a.Price < b.Price
+                end
                 return a.Id < b.Id
         end)
 
@@ -281,15 +424,10 @@ local function buildTokenEntries(inventory: any): {QuickbarTokenEntry}
                 if #entries >= TOKEN_SLOTS then
                         break
                 end
-                local stackLimit = nil
-                local item = shopItems[entry.Id]
-                if item and typeof(item.StackLimit) == "number" then
-                        stackLimit = item.StackLimit
-                end
                 table.insert(entries, {
                         Id = entry.Id,
                         Count = entry.Count,
-                        StackLimit = stackLimit,
+                        StackLimit = entry.StackLimit,
                 })
         end
 
@@ -310,6 +448,79 @@ function QuickbarServer.BuildState(data: any?, inventory: any?): QuickbarState
         state.tokens = buildTokenEntries(resolvedInventory)
 
         return state
+end
+
+function QuickbarServer.EquipMelee(player: Player, meleeId: string): (QuickbarState?, string?)
+        if typeof(player) ~= "Instance" or not player:IsA("Player") then
+                return nil, "InvalidPlayer"
+        end
+
+        if typeof(meleeId) ~= "string" or meleeId == "" then
+                return nil, "InvalidMelee"
+        end
+
+        local item = getShopItem(meleeId)
+        if item then
+                local kind = item.Kind
+                if typeof(kind) ~= "string" or string.lower(kind) ~= "melee" then
+                        return nil, "NotMelee"
+                end
+        elseif DEFAULT_MELEE ~= meleeId then
+                return nil, "UnknownMelee"
+        end
+
+        local data, inventory = resolveFromProfileServer(player)
+        if not data or not inventory then
+                return nil, "ProfileUnavailable"
+        end
+
+        if typeof(inventory.MeleeLoadout) ~= "table" then
+                inventory.MeleeLoadout = {}
+        end
+        if typeof(inventory.OwnedMelee) ~= "table" then
+                inventory.OwnedMelee = {}
+        end
+
+        local loadout = inventory.MeleeLoadout :: {string}
+        local ownedMap = inventory.OwnedMelee
+
+        local isOwned = false
+        for _, existing in ipairs(loadout) do
+                if existing == meleeId then
+                        isOwned = true
+                        break
+                end
+        end
+
+        if not isOwned and typeof(ownedMap) == "table" then
+                if ownedMap[meleeId] then
+                        isOwned = true
+                end
+        end
+
+        if not isOwned and typeof(DEFAULT_MELEE) == "string" and DEFAULT_MELEE ~= "" then
+                if meleeId == DEFAULT_MELEE then
+                        isOwned = true
+                end
+        end
+
+        if not isOwned then
+                return nil, "NotOwned"
+        end
+
+        if typeof(ownedMap) == "table" then
+                ownedMap[meleeId] = true
+        end
+
+        insertUniqueString(loadout, meleeId)
+        inventory.ActiveMelee = meleeId
+
+        local newState = QuickbarServer.Refresh(player, data, inventory)
+        if not newState then
+                return nil, "RefreshFailed"
+        end
+
+        return newState, nil
 end
 
 function QuickbarServer.RegisterInventoryResolver(resolver: ((Player) -> (any?, any?))?)
