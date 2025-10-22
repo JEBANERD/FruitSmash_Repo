@@ -266,4 +266,67 @@ function ArenaAdapter.GetLaneInfo(arenaId, laneId)
     }
 end
 
+local function gatherTargets(entry)
+    local map = {}
+
+    if entry.targetList then
+        for _, target in ipairs(entry.targetList) do
+            if target then
+                map[target] = true
+            end
+        end
+    end
+
+    if entry.targetsById then
+        for _, target in pairs(entry.targetsById) do
+            if target then
+                map[target] = true
+            end
+        end
+    end
+
+    local list = {}
+    for target in pairs(map) do
+        table.insert(list, target)
+    end
+
+    table.sort(list, function(a, b)
+        return a.Name < b.Name
+    end)
+
+    return list
+end
+
+function ArenaAdapter.GetTargets(arenaId)
+    local entry = ensureArena(arenaId)
+    if not entry then
+        return {}
+    end
+
+    return gatherTargets(entry)
+end
+
+function ArenaAdapter.GetTargetsFolder(arenaId)
+    local entry = ensureArena(arenaId)
+    if not entry then
+        return nil
+    end
+
+    local instance = entry.instance
+    if not instance then
+        return nil
+    end
+
+    return instance:FindFirstChild("Targets")
+end
+
+function ArenaAdapter.GetArenaInstance(arenaId)
+    local entry = ensureArena(arenaId)
+    if not entry then
+        return nil
+    end
+
+    return entry.instance
+end
+
 return ArenaAdapter

@@ -15,6 +15,7 @@
   "Economy":    { "$className": "Folder", "$path": "ServerScriptService/Economy" },
   "Monetization": { "$className": "Folder", "$path": "ServerScriptService/Monetization" },
   "Shop":       { "$className": "Folder", "$path": "ServerScriptService/Shop" },
+  "Obstacles":  { "$className": "Folder", "$path": "ServerScriptService/Obstacles" },
   "Match":      { "$className": "Folder", "$path": "ServerScriptService/Match" },
   "Tools":      { "$className": "Folder", "$path": "ServerScriptService/Tools" }
 },

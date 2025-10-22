@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local Guard = require(ServerScriptService:WaitForChild("Moderation"):WaitForChild("GuardServer"))
 local QuickbarServer = require(script.Parent.Parent:WaitForChild("QuickbarServer"))
 
 -- Remotes (ShopOpen, PurchaseMade, RE_Notice, RF_Purchase)
@@ -244,6 +245,7 @@ local function ensureRemote(name: string, className: "RemoteEvent" | "RemoteFunc
 end
 
 local legacyPurchaseRemote = ensureRemote("RF_RequestPurchase", "RemoteFunction") :: RemoteFunction
+local MAX_PURCHASE_ID_LENGTH = 64
 
 -- ---------- Fallback profiles (when ProfileServer is absent) ----------
 
@@ -727,23 +729,61 @@ local function processPurchase(player: Player, itemId: string)
         return response
 end
 
+local function sanitizePurchasePayload(payload: any): string?
+	if payload == nil then
+		return nil
+	end
+
+	local payloadType = typeof(payload)
+	if payloadType == "string" then
+		if payload == "" then
+			return nil
+		end
+		return payload
+	elseif payloadType == "table" then
+		local candidate = payload.itemId or payload.ItemId or payload.id or payload.Id or payload.sku or payload.Sku
+		if typeof(candidate) == "string" and candidate ~= "" then
+			return candidate
+		end
+	end
+
+	return nil
+end
+
+local function guardPurchaseValidator(_player: Player, payload: any)
+	local itemId = sanitizePurchasePayload(payload)
+	if not itemId then
+		return false, "InvalidItem"
+	end
+
+	if #itemId > MAX_PURCHASE_ID_LENGTH then
+		itemId = string.sub(itemId, 1, MAX_PURCHASE_ID_LENGTH)
+	end
+
+	return true, itemId
+end
+
 local function handlePurchaseRequest(player: Player, payloadOrItemId: any)
-        if typeof(player) ~= "Instance" or not player:IsA("Player") then
-                return { ok = false, err = "InvalidPlayer" }
-        end
+	if typeof(player) ~= "Instance" or not player:IsA("Player") then
+		return { ok = false, err = "InvalidPlayer" }
+	end
 
-        local itemId: string? = nil
-        if typeof(payloadOrItemId) == "string" then
-                itemId = payloadOrItemId
-        elseif typeof(payloadOrItemId) == "table" then
-                itemId = payloadOrItemId.itemId or payloadOrItemId.Id or payloadOrItemId.id
-        end
+	local itemId: string? = nil
+	if typeof(payloadOrItemId) == "string" then
+		itemId = payloadOrItemId
+	elseif typeof(payloadOrItemId) == "table" then
+		itemId = payloadOrItemId.itemId or payloadOrItemId.Id or payloadOrItemId.id
+	end
 
-        if typeof(itemId) ~= "string" or itemId == "" then
-                return { ok = false, err = "InvalidItem" }
-        end
+	if typeof(itemId) ~= "string" or itemId == "" then
+		return { ok = false, err = "InvalidItem" }
+	end
 
-        return processPurchase(player, itemId)
+	if #itemId > MAX_PURCHASE_ID_LENGTH then
+		itemId = string.sub(itemId, 1, MAX_PURCHASE_ID_LENGTH)
+	end
+
+	return processPurchase(player, itemId)
 end
 
 -- ---------- Public API ----------
@@ -757,11 +797,25 @@ function ShopServer.Init()
         end
         initialized = true
 
-        if Remotes.RF_Purchase then
-                Remotes.RF_Purchase.OnServerInvoke = handlePurchaseRequest
-        end
+	if Remotes.RF_Purchase then
+		Guard.WrapRemote(Remotes.RF_Purchase, {
+			remoteName = "RF_Purchase",
+			rateLimit = { maxCalls = 3, interval = 2 },
+			validator = guardPurchaseValidator,
+			rejectResponse = function(reason)
+				return { ok = false, err = reason }
+			end,
+		}, handlePurchaseRequest)
+	end
 
-        legacyPurchaseRemote.OnServerInvoke = handlePurchaseRequest
+	Guard.WrapRemote(legacyPurchaseRemote, {
+		remoteName = "RF_RequestPurchase",
+		rateLimit = { maxCalls = 3, interval = 2 },
+		validator = guardPurchaseValidator,
+		rejectResponse = function(reason)
+			return { ok = false, err = reason }
+		end,
+	}, handlePurchaseRequest)
 
         Players.PlayerRemoving:Connect(function(player)
                 fallbackProfiles[player.UserId] = nil

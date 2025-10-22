@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Workspace = game:GetService("Workspace")
 
+local Guard = require(ServerScriptService:WaitForChild("Moderation"):WaitForChild("GuardServer"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap"))
 local FruitConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("FruitConfig"))
 local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig"))
@@ -350,7 +351,7 @@ local function destroyFruitInstance(fruit: BasePart)
 end
 
 local function processValidHit(player: Player, fruit: BasePart)
-	local stats = determineFruitStats(fruit)
+        local stats = determineFruitStats(fruit)
 	local fruitState = ensureFruitState(fruit, stats)
 
 	local damage = resolveMeleeDamage(player)
@@ -374,9 +375,59 @@ local function processValidHit(player: Player, fruit: BasePart)
 	end
 end
 
+local function sanitizeMeleePayload(payload: any)
+        if typeof(payload) ~= "table" then
+                return nil
+        end
+
+        local fruitCandidate = payload.fruit
+        if typeof(fruitCandidate) ~= "Instance" then
+                fruitCandidate = payload[1]
+        end
+
+        if typeof(fruitCandidate) ~= "Instance" then
+                return nil
+        end
+
+        local sanitized: { [string]: any } = {
+                fruit = fruitCandidate,
+        }
+
+        local fruitId = payload.fruitId or payload.FruitId
+        if typeof(fruitId) == "string" and fruitId ~= "" then
+                sanitized.fruitId = fruitId
+        end
+
+        local hitPosition = payload.position or payload.pos or payload.hitPosition or payload[2]
+        if typeof(hitPosition) == "Vector3" then
+                sanitized.position = hitPosition
+                sanitized.hitPosition = hitPosition
+        end
+
+        return sanitized
+end
+
+local function guardMeleeValidator(_player: Player, payload: any)
+        local sanitized = sanitizeMeleePayload(payload)
+        if not sanitized then
+                return false, "BadPayload"
+        end
+
+        local fruit = sanitized.fruit
+        if typeof(fruit) ~= "Instance" then
+                return false, "BadFruit"
+        end
+
+        if not fruit:IsA("BasePart") and not fruit:IsA("Model") then
+                return false, "BadFruit"
+        end
+
+        return true, sanitized
+end
+
 local function validateSwing(player: Player, payload: any)
-	if typeof(player) ~= "Instance" or not player:IsA("Player") then
-		return
+        if typeof(player) ~= "Instance" or not player:IsA("Player") then
+                return
 	end
 	if typeof(payload) ~= "table" then
 		return
@@ -439,13 +490,17 @@ local function validateSwing(player: Player, payload: any)
 end
 
 function CombatServer.Start()
-	local remote = Remotes.RE_MeleeHitAttempt
-	if not remote then
-		warn("[CombatServer] RE_MeleeHitAttempt remote missing")
-		return
-	end
+        local remote = Remotes.RE_MeleeHitAttempt
+        if not remote then
+                warn("[CombatServer] RE_MeleeHitAttempt remote missing")
+                return
+        end
 
-	remote.OnServerEvent:Connect(validateSwing)
+        Guard.WrapRemote(remote, {
+                remoteName = "RE_MeleeHitAttempt",
+                rateLimit = { maxCalls = 12, interval = 1 },
+                validator = guardMeleeValidator,
+        }, validateSwing)
 end
 
 function CombatServer.SetDependencies(overrides)

@@ -6,6 +6,18 @@ local ArenaAdapter = require(ServerScriptService:WaitForChild("Combat"):WaitForC
 local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig"))
 local HUDServer = require(ServerScriptService:WaitForChild("GameServer"):WaitForChild("HUDServer"))
 
+local TargetImmunityServer do
+    local ok, result = pcall(function()
+        return require(ServerScriptService:WaitForChild("GameServer"):WaitForChild("TargetImmunityServer"))
+    end)
+
+    if ok then
+        TargetImmunityServer = result
+    else
+        warn(string.format("[ProjectileServer] Failed to require TargetImmunityServer: %s", tostring(result)))
+    end
+end
+
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 local TargetConfig = GameConfig.Targets or {}
 
@@ -274,6 +286,22 @@ local function handleHit(state)
     end
 
     state.hitHandled = true
+
+    local arenaId = state.arenaId
+    if arenaId ~= nil then
+        local module = TargetImmunityServer
+        if module and typeof(module.IsShielded) == "function" then
+            local ok, shielded = pcall(module.IsShielded, arenaId)
+            if ok then
+                if shielded then
+                    return
+                end
+            else
+                warn(string.format("[ProjectileServer] Failed to query target immunity for arena %s: %s", tostring(arenaId), tostring(shielded)))
+            end
+        end
+    end
+
     applyDamage(state.arenaId, state.laneId, state.damage)
 end
 
