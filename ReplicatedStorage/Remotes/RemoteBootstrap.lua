@@ -1,54 +1,57 @@
 --!strict
-
---[=[
-    RemoteBootstrap
-    ----------------
-    Lightweight bootstrapper for shared RemoteEvents used throughout the game.
-    Requiring this module ensures the RemoteEvents exist and returns references
-    for other scripts to use when firing signals between the server and clients.
-]=]
+-- RemoteBootstrap: ensures shared remotes exist (Events + Functions)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
+local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes") or Instance.new("Folder")
+remotesFolder.Name = "Remotes"
+remotesFolder.Parent = ReplicatedStorage
 
--- Utility function to fetch an existing RemoteEvent or create it if missing.
-local function getOrCreateRemote(name: string): RemoteEvent
-    local remote = remotesFolder:FindFirstChild(name)
-    if remote == nil then
-        remote = Instance.new("RemoteEvent")
-        remote.Name = name
-        remote.Parent = remotesFolder
-    end
-    return remote :: RemoteEvent
+local function getOrCreateEvent(name: string): RemoteEvent
+	local r = remotesFolder:FindFirstChild(name)
+	if not r then
+		r = Instance.new("RemoteEvent")
+		r.Name = name
+		r.Parent = remotesFolder
+	end
+	return r :: RemoteEvent
 end
 
--- Shared RemoteEvents used across gameplay systems.
+local function getOrCreateFunction(name: string): RemoteFunction
+	local r = remotesFolder:FindFirstChild(name)
+	if not r then
+		r = Instance.new("RemoteFunction")
+		r.Name = name
+		r.Parent = remotesFolder
+	end
+	return r :: RemoteFunction
+end
+
 local Remotes = {
-    -- Fired when the game flow begins to signal all clients the match is starting.
-    GameStart = getOrCreateRemote("GameStart"),
+	-- Match / flow
+	GameStart           = getOrCreateEvent("GameStart"),
+	RE_PrepTimer        = getOrCreateEvent("RE_PrepTimer"),
+	RE_WaveChanged      = getOrCreateEvent("RE_WaveChanged"),
 
-    -- Fired by clients when attempting to register a melee swing hit on a fruit.
-    RE_MeleeHitAttempt = getOrCreateRemote("RE_MeleeHitAttempt"),
+	-- Combat / state
+	RE_MeleeHitAttempt  = getOrCreateEvent("RE_MeleeHitAttempt"),
+	RE_TargetHP         = getOrCreateEvent("RE_TargetHP"),
 
-    -- Fired when a wave of enemies or objectives has been completed.
-    WaveComplete = getOrCreateRemote("WaveComplete"),
+	-- Economy / UI
+	RE_CoinPointDelta   = getOrCreateEvent("RE_CoinPointDelta"),
+	RE_QuickbarUpdate   = getOrCreateEvent("RE_QuickbarUpdate"),
+	ShopOpen            = getOrCreateEvent("ShopOpen"),
+	PurchaseMade        = getOrCreateEvent("PurchaseMade"),
 
-    -- Fired when the shop interface should open for a player.
-    ShopOpen = getOrCreateRemote("ShopOpen"),
+	-- Player status / notices
+	PlayerKO            = getOrCreateEvent("PlayerKO"),
+	RE_Notice           = getOrCreateEvent("RE_Notice"),
 
-    -- Fired when a player makes a purchase from the shop.
-    PurchaseMade = getOrCreateRemote("PurchaseMade"),
+	-- Misc progression
+	WaveComplete        = getOrCreateEvent("WaveComplete"),
 
-    -- Fired when a player has been knocked out and needs to be handled by systems.
-    PlayerKO = getOrCreateRemote("PlayerKO"),
-
-    -- Fired whenever target health or shield values change for an arena.
-    RE_TargetHP = getOrCreateRemote("RE_TargetHP"),
-
-
-    RE_CoinPointDelta = getOrCreateRemote("RE_CoinPointDelta"),
+	-- Functions (client -> server request/response)
+	RF_UseToken         = getOrCreateFunction("RF_UseToken"),
 }
 
-print("[RemoteBootstrap] RemoteEvents initialized")
-
+print("[RemoteBootstrap] RemoteEvents/Functions initialized")
 return Remotes

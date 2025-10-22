@@ -138,7 +138,7 @@ C.UI = {
 
 -- == Match / Teleport Settings ==
 C.Match = {
-	UseTeleport = true,                -- if false, arenas spawn locally
+	UseTeleport = false,                -- if false, arenas spawn locally
 	MatchPlaceId = 88313846397368,     -- your Match place id
 	LobbyPlaceId = game.PlaceId,       -- auto-filled by each place at runtime
 	StartGraceSeconds = 5,             -- delay before starting arena after last teleport
