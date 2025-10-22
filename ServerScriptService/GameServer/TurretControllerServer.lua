@@ -122,6 +122,11 @@ function TurretControllerServer.SchedulePattern(arenaId, level)
     assert(arenaId ~= nil, "arenaId is required")
     assert(level ~= nil, "level is required")
 
+    local ok, startErr = pcall(FruitSpawnerServer.Start, arenaId)
+    if not ok then
+        warn(string.format("[TurretControllerServer] Failed to start FruitSpawnerServer for arena '%s': %s", tostring(arenaId), tostring(startErr)))
+    end
+
     local rng = Random.new()
     local laneCount = getLaneCount(level)
     local shotsPerSecond = computeShotsPerSecond(level)
@@ -144,7 +149,10 @@ function TurretControllerServer.SchedulePattern(arenaId, level)
             for _, lane in ipairs(shotLanes) do
                 local fruitId = nextFruit()
                 if fruitId then
-                    FruitSpawnerServer.SpawnFruit(arenaId, lane, fruitId)
+                    local success, err = pcall(FruitSpawnerServer.Queue, arenaId, lane, fruitId)
+                    if not success then
+                        warn(string.format("[TurretControllerServer] Failed to queue fruit '%s' for arena '%s': %s", tostring(fruitId), tostring(arenaId), tostring(err)))
+                    end
                 end
             end
         end)

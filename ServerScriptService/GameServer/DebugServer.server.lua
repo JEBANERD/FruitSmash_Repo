@@ -198,15 +198,34 @@ end
 giveCoinsEvent.Event:Connect(awardCoins)
 
 local function spawnFruit(arenaId, laneId, fruitId)
-	if not FruitSpawnerServer or type(FruitSpawnerServer.SpawnFruit) ~= "function" then
-		warn("[DebugServer] FruitSpawnerServer.SpawnFruit unavailable")
-		return
-	end
+        if not FruitSpawnerServer then
+                warn("[DebugServer] FruitSpawnerServer unavailable")
+                return
+        end
 
-	local ok, result = pcall(FruitSpawnerServer.SpawnFruit, arenaId, laneId, fruitId)
-	if not ok then
-		warn(string.format("[DebugServer] SpawnFruit failed: %s", result))
-	end
+        if type(FruitSpawnerServer.Start) == "function" then
+                local ok, startErr = pcall(FruitSpawnerServer.Start, arenaId)
+                if not ok then
+                        warn(string.format("[DebugServer] FruitSpawnerServer.Start failed: %s", tostring(startErr)))
+                end
+        end
+
+        if type(FruitSpawnerServer.Queue) == "function" then
+                local ok, result = pcall(FruitSpawnerServer.Queue, arenaId, laneId, fruitId)
+                if not ok then
+                        warn(string.format("[DebugServer] FruitSpawnerServer.Queue failed: %s", tostring(result)))
+                end
+                return
+        end
+
+        if type(FruitSpawnerServer.SpawnFruit) == "function" then
+                local ok, result = pcall(FruitSpawnerServer.SpawnFruit, arenaId, laneId, fruitId)
+                if not ok then
+                        warn(string.format("[DebugServer] SpawnFruit failed: %s", tostring(result)))
+                end
+        else
+                warn("[DebugServer] FruitSpawnerServer.Queue unavailable")
+        end
 end
 
 spawnFruitEvent.Event:Connect(spawnFruit)
