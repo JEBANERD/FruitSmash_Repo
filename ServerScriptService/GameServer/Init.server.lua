@@ -14,6 +14,20 @@ if not ok or not Remotes then
 end
 
 do
+        local settingsModule = script.Parent:FindFirstChild("SettingsServer")
+        if settingsModule and settingsModule:IsA("ModuleScript") then
+                local okSettings, result = pcall(require, settingsModule)
+                if not okSettings then
+                        warn("[Init] SettingsServer require failed:", result)
+                elseif type(result) ~= "table" then
+                        warn("[Init] SettingsServer returned unexpected type")
+                end
+        else
+                warn("[Init] SettingsServer module missing")
+        end
+end
+
+do
         local shopFolder = script.Parent:FindFirstChild("Shop")
         local shopModule = shopFolder and shopFolder:FindFirstChild("ShopServer")
         if shopModule then

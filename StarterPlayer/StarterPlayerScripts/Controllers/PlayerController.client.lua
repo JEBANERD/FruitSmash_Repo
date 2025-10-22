@@ -41,6 +41,7 @@ local character: Model? = nil
 local humanoid: Humanoid? = nil
 
 local currentWalkSpeed: number = 0
+local sprintToggleEnabled: boolean = false
 local isSprintRequested: boolean = false
 local isSprinting: boolean = false
 local currentStamina: number = STAMINA_MAX
@@ -161,11 +162,22 @@ local function resetStamina(): ()
 end
 
 local function setSprintRequest(requested: boolean): ()
-	if not SPRINT_ENABLED then
-		isSprintRequested = false
-		return
-	end
-	isSprintRequested = requested
+        if not SPRINT_ENABLED then
+                isSprintRequested = false
+                return
+        end
+        isSprintRequested = requested
+end
+
+local function updateSprintToggleFromAttribute(): ()
+        local attr = localPlayer:GetAttribute("SprintToggle")
+        local newValue = attr == true
+        if sprintToggleEnabled ~= newValue then
+                sprintToggleEnabled = newValue
+                if not sprintToggleEnabled and isSprintRequested then
+                        setSprintRequest(false)
+                end
+        end
 end
 
 --=============================================================
@@ -230,11 +242,21 @@ end
 --=============================================================
 
 local function onSprintAction(_actionName: string, inputState: Enum.UserInputState, _input: InputObject?): Enum.ContextActionResult
-	if inputState == Enum.UserInputState.Begin then
-		setSprintRequest(true)
-		return Enum.ContextActionResult.Sink
-	elseif inputState == Enum.UserInputState.End or inputState == Enum.UserInputState.Cancel then
-		setSprintRequest(false)
+        if sprintToggleEnabled then
+                if inputState == Enum.UserInputState.Begin then
+                        setSprintRequest(not isSprintRequested)
+                        return Enum.ContextActionResult.Sink
+                elseif inputState == Enum.UserInputState.Cancel then
+                        return Enum.ContextActionResult.Sink
+                end
+                return Enum.ContextActionResult.Pass
+        end
+
+        if inputState == Enum.UserInputState.Begin then
+                setSprintRequest(true)
+                return Enum.ContextActionResult.Sink
+        elseif inputState == Enum.UserInputState.End or inputState == Enum.UserInputState.Cancel then
+                setSprintRequest(false)
 		return Enum.ContextActionResult.Sink
 	end
 	return Enum.ContextActionResult.Pass
@@ -350,11 +372,14 @@ end
 -- Bootstrap
 --=============================================================
 
+updateSprintToggleFromAttribute()
+localPlayer:GetAttributeChangedSignal("SprintToggle"):Connect(updateSprintToggleFromAttribute)
+
 bindInput()
 
 -- Strict-safe initial character fetch (never pass Model? to onCharacterAdded)
 task.defer(function()
-	local existing: Model = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+        local existing: Model = localPlayer.Character or localPlayer.CharacterAdded:Wait()
 	onCharacterAdded(existing)
 end)
 

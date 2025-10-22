@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 local localPlayer: Player = Players.LocalPlayer
 
@@ -14,9 +15,83 @@ local ACTION_NAME = "FruitSmashMeleeSwing"
 local SWING_COOLDOWN_SECONDS = 0.35
 local MAX_MELEE_DISTANCE = 18
 local CLIENT_DISTANCE_PADDING = 4
-local MAX_TARGET_DISTANCE = MAX_MELEE_DISTANCE + CLIENT_DISTANCE_PADDING
 local SWING_RAY_DISTANCE = 60
 local SWING_ANIMATION_ID = "rbxassetid://507771019" -- Sword slash placeholder
+local HIT_POSITION_TOLERANCE = 6
+
+local aimAssistStrength: number = 0.75
+local cameraShakeStrength: number = 0.7
+local currentShakeConnection: RBXScriptConnection? = nil
+
+local function getClientMaxTargetDistance(): number
+        local clamped = math.clamp(aimAssistStrength, 0, 1)
+        return MAX_MELEE_DISTANCE + CLIENT_DISTANCE_PADDING * clamped
+end
+
+local function updateAimAssistFromAttribute(): ()
+        local attr = localPlayer:GetAttribute("AimAssistWindow")
+        if typeof(attr) == "number" then
+                aimAssistStrength = math.clamp(attr, 0, 1)
+        else
+                aimAssistStrength = 0.75
+        end
+end
+
+local function updateCameraShakeStrength(): ()
+        local attr = localPlayer:GetAttribute("CameraShakeStrength")
+        if typeof(attr) == "number" then
+                cameraShakeStrength = math.clamp(attr, 0, 3)
+        else
+                cameraShakeStrength = 0.7
+        end
+end
+
+local function playCameraShake(): ()
+        if cameraShakeStrength <= 0 then
+                return
+        end
+
+        local camera = Workspace.CurrentCamera
+        if not camera then
+                return
+        end
+
+        local duration = 0.2
+        local amplitude = 0.4 * cameraShakeStrength
+        local startTime = os.clock()
+        local previousOffset = Vector3.zero
+
+        if currentShakeConnection then
+                currentShakeConnection:Disconnect()
+                currentShakeConnection = nil
+        end
+
+        currentShakeConnection = RunService.RenderStepped:Connect(function()
+                local now = os.clock()
+                local progress = (now - startTime) / duration
+                if progress >= 1 then
+                        if previousOffset.Magnitude > 0 then
+                                camera.CFrame = camera.CFrame * CFrame.new(-previousOffset)
+                        end
+                        if currentShakeConnection then
+                                currentShakeConnection:Disconnect()
+                                currentShakeConnection = nil
+                        end
+                        previousOffset = Vector3.zero
+                        return
+                end
+
+                local decay = 1 - progress
+                local offset = Vector3.new(
+                        math.noise(now * 12, 0, 0),
+                        math.noise(0, now * 14, 0),
+                        0
+                ) * amplitude * decay
+
+                camera.CFrame = camera.CFrame * CFrame.new(offset - previousOffset)
+                previousOffset = offset
+        end)
+end
 
 local pointerLocation: Vector2? = nil
 local lastSwingTime = -math.huge
@@ -263,22 +338,22 @@ local function resolveSwingTarget(inputObject: InputObject?): (BasePart?, Vector
 		end
 	end
 
-	if character then
-		local rootPart = character:FindFirstChild("HumanoidRootPart")
-		if rootPart and camera then
-			local forward = camera.CFrame.LookVector
-			local searchPosition = rootPart.Position + forward * (MAX_MELEE_DISTANCE * 0.75)
-			local fallbackPart = findNearestFruit(searchPosition, MAX_TARGET_DISTANCE)
-			if fallbackPart then
-				return fallbackPart, fallbackPart.Position
-			end
-		elseif rootPart then
-			local fallbackPart = findNearestFruit(rootPart.Position, MAX_TARGET_DISTANCE)
-			if fallbackPart then
-				return fallbackPart, fallbackPart.Position
-			end
-		end
-	end
+        if character then
+                local rootPart = character:FindFirstChild("HumanoidRootPart")
+                if rootPart and camera then
+                        local forward = camera.CFrame.LookVector
+                        local searchPosition = rootPart.Position + forward * (MAX_MELEE_DISTANCE * 0.75)
+                        local fallbackPart = findNearestFruit(searchPosition, getClientMaxTargetDistance())
+                        if fallbackPart then
+                                return fallbackPart, fallbackPart.Position
+                        end
+                elseif rootPart then
+                        local fallbackPart = findNearestFruit(rootPart.Position, getClientMaxTargetDistance())
+                        if fallbackPart then
+                                return fallbackPart, fallbackPart.Position
+                        end
+                end
+        end
 
 	return nil, nil
 end
@@ -303,28 +378,44 @@ local function fireSwing(inputObject: InputObject?)
 		return
 	end
 
-	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-	if rootPart then
-		local referencePosition = hitPosition or fruitPart.Position
-		local distance = (rootPart.Position - referencePosition).Magnitude
-		if distance > MAX_TARGET_DISTANCE then
-			return
-		end
-	end
+        local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+                local referencePosition = hitPosition or fruitPart.Position
+                local distance = (rootPart.Position - referencePosition).Magnitude
+                local maxTargetDistance = getClientMaxTargetDistance()
+                if distance > maxTargetDistance then
+                        if typeof(hitPosition) == "Vector3" then
+                                local rootToHit = (rootPart.Position - hitPosition).Magnitude
+                                local hitToFruit = (hitPosition - fruitPart.Position).Magnitude
+                                if rootToHit > maxTargetDistance or hitToFruit > HIT_POSITION_TOLERANCE then
+                                        return
+                                end
+                        else
+                                return
+                        end
+                elseif typeof(hitPosition) == "Vector3" then
+                        local hitToFruit = (hitPosition - fruitPart.Position).Magnitude
+                        if hitToFruit > HIT_POSITION_TOLERANCE then
+                                return
+                        end
+                end
+        end
 
-	lastSwingTime = now
+        lastSwingTime = now
 
 	playSwingAnimation()
 
-	local fruitIdValue = fruitPart:GetAttribute("FruitId")
-	local fruitId = if typeof(fruitIdValue) == "string" and fruitIdValue ~= "" then fruitIdValue else fruitPart.Name
-	local attackPosition = hitPosition or fruitPart.Position
+        local fruitIdValue = fruitPart:GetAttribute("FruitId")
+        local fruitId = if typeof(fruitIdValue) == "string" and fruitIdValue ~= "" then fruitIdValue else fruitPart.Name
+        local attackPosition = hitPosition or fruitPart.Position
 
-	meleeRemote:FireServer({
-		fruit = fruitPart,
-		fruitId = fruitId,
-		position = attackPosition,
-	})
+        playCameraShake()
+
+        meleeRemote:FireServer({
+                fruit = fruitPart,
+                fruitId = fruitId,
+                position = attackPosition,
+        })
 end
 
 local function actionHandler(actionName: string, inputState: Enum.UserInputState, inputObject: InputObject?)
@@ -354,17 +445,23 @@ local function onInputBegan(input: InputObject, processed: boolean)
 end
 
 local function onInputChanged(input: InputObject, processed: boolean)
-	if processed then
-		return
-	end
+        if processed then
+                return
+        end
 
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		recordPointerFromInput(input)
-	end
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                recordPointerFromInput(input)
+        end
 end
 
+updateAimAssistFromAttribute()
+localPlayer:GetAttributeChangedSignal("AimAssistWindow"):Connect(updateAimAssistFromAttribute)
+
+updateCameraShakeStrength()
+localPlayer:GetAttributeChangedSignal("CameraShakeStrength"):Connect(updateCameraShakeStrength)
+
 if localPlayer.Character then
-	setCharacter(localPlayer.Character)
+        setCharacter(localPlayer.Character)
 end
 
 localPlayer.CharacterAdded:Connect(function(newCharacter)
