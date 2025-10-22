@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local HUDServer = require(script.Parent:WaitForChild("HUDServer"))
 local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -66,19 +67,12 @@ local function logPhase(state)
 end
 
 local function broadcastWaveChange(state)
-    local event = Remotes and Remotes.RE_WaveChanged
-    if not event then
+    if not HUDServer or typeof(HUDServer.WaveChanged) ~= "function" then
         return
     end
 
-    local payload = {
-        arenaId = state.arenaId,
-        level = state.level,
-        wave = state.phase == "Wave" and state.wave or 0,
-        phase = state.phase,
-    }
-
-    event:FireAllClients(payload)
+    local waveValue = state.phase == "Wave" and state.wave or 0
+    HUDServer.WaveChanged(state.arenaId, waveValue, state.level, state.phase)
 end
 
 local function gatherArenaPlayers(state)
@@ -177,18 +171,11 @@ local function grantLevelBonus(state, level)
 end
 
 local function sendPrepTimer(state, seconds)
-    local event = Remotes and Remotes.RE_PrepTimer
-    if not event then
+    if not HUDServer or typeof(HUDServer.BroadcastPrep) ~= "function" then
         return
     end
 
-    local numeric = tonumber(seconds)
-    if numeric then
-        numeric = math.max(0, math.floor(numeric + 0.5))
-        event:FireAllClients(numeric)
-    else
-        event:FireAllClients(seconds)
-    end
+    HUDServer.BroadcastPrep(state.arenaId, seconds)
 end
 
 local function scheduleWave(state)
