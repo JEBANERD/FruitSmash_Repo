@@ -76,6 +76,7 @@ local Remotes: RemoteRefs = {
 	WaveComplete        = getOrCreateEvent("WaveComplete"),
 
         -- Functions (client -> server request/response)
+        RF_Purchase         = getOrCreateFunction("RF_Purchase"),
         RF_UseToken         = getOrCreateFunction("RF_UseToken"),
 }
 
