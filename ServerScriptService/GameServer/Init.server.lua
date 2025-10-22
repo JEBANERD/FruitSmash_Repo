@@ -37,6 +37,31 @@ do
         end
 end
 
+do
+        local sss = game:GetService("ServerScriptService")
+        local combatFolder = sss and sss:FindFirstChild("Combat")
+        local hitModule = combatFolder and combatFolder:FindFirstChild("HitValidationServer")
+        if hitModule then
+                local okCombat, hitServer = pcall(require, hitModule)
+                if okCombat then
+                        local initMethod = hitServer and hitServer.Init
+                        if type(initMethod) == "function" then
+                                local okInit, initErr = pcall(initMethod, hitServer)
+                                if not okInit then
+                                        okInit, initErr = pcall(initMethod)
+                                end
+                                if not okInit then
+                                        warn("[Init] HitValidationServer.Init failed:", initErr)
+                                end
+                        end
+                else
+                        warn("[Init] Failed to require HitValidationServer:", hitServer)
+                end
+        else
+                warn("[Init] Combat/HitValidationServer missing")
+        end
+end
+
 -- Ensure Workspace/Arenas exists
 local arenas = workspace:FindFirstChild("Arenas") or Instance.new("Folder", workspace)
 arenas.Name = "Arenas"
