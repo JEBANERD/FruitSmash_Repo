@@ -10,6 +10,22 @@ local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModu
 
 local ArenaServer = require(script.Parent:WaitForChild("ArenaServer"))
 
+local MatchReturnService
+do
+    local matchFolder = ServerScriptService:FindFirstChild("Match")
+    if matchFolder then
+        local returnModule = matchFolder:FindFirstChild("MatchReturnService")
+        if returnModule and returnModule:IsA("ModuleScript") then
+            local ok, result = pcall(require, returnModule)
+            if ok then
+                MatchReturnService = result
+            else
+                warn(string.format("[RoundDirectorServer] Failed to require MatchReturnService: %s", tostring(result)))
+            end
+        end
+    end
+end
+
 local EconomyServer
 do
     local economyFolder = ServerScriptService:FindFirstChild("Economy")
@@ -307,6 +323,20 @@ local function runShop(state)
 
     grantLevelBonus(state, state.level)
 
+    if MatchReturnService and typeof(MatchReturnService.ReturnArena) == "function" then
+        local ok, shouldStop = pcall(MatchReturnService.ReturnArena, state.arenaId, {
+            reason = "LevelComplete",
+            level = state.level,
+            wave = state.wave,
+        })
+        if not ok then
+            warn(string.format("[RoundDirectorServer] MatchReturnService.ReturnArena failed: %s", tostring(shouldStop)))
+        elseif shouldStop then
+            state.running = false
+            return false
+        end
+    end
+
     state.level += 1
     updateArenaStateSnapshot(state)
     broadcastWaveChange(state)
@@ -396,6 +426,18 @@ function RoundDirectorServer.Abort(arenaId)
     end
 
     state.running = false
+
+    if MatchReturnService and typeof(MatchReturnService.ReturnArena) == "function" then
+        local ok, result = pcall(MatchReturnService.ReturnArena, arenaId, {
+            reason = "Abort",
+            level = state.level,
+            wave = state.wave,
+        })
+        if not ok then
+            warn(string.format("[RoundDirectorServer] MatchReturnService.ReturnArena (abort) failed: %s", tostring(result)))
+        end
+    end
+
     activeStates[arenaId] = nil
     sendPrepTimer(state, 0)
 end
