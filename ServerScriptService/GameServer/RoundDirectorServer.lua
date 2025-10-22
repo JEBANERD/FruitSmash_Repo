@@ -32,6 +32,7 @@ local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModu
 
 local ArenaServer = require(script.Parent:WaitForChild("ArenaServer"))
 local TargetHealthServer = require(script.Parent:WaitForChild("TargetHealthServer"))
+local RoundSummaryServer = require(script.Parent:WaitForChild("RoundSummaryServer"))
 
 local MatchReturnService
 do
@@ -389,9 +390,18 @@ local function ensureLevelSummary(state)
         totalPoints = 0,
         wavesCleared = 0,
         startedAt = os.clock(),
+        roundSummarySent = false,
     }
 
     state.currentLevelSummary = summary
+
+    if RoundSummaryServer and typeof(RoundSummaryServer.BeginLevel) == "function" then
+        local ok, err = pcall(RoundSummaryServer.BeginLevel, state.arenaId, summary.level, summary.startKOs)
+        if not ok then
+            warn(string.format("[RoundDirectorServer] RoundSummaryServer.BeginLevel failed: %s", tostring(err)))
+        end
+    end
+
     return summary
 end
 
@@ -516,6 +526,8 @@ local function finalizeLevelSummary(state, outcome, reason)
     local outcomeKind = outcome == "victory" and "success" or outcome == "defeat" and "warning" or "info"
 
     local levelEventPayload
+    local perPlayerSummary: { [Player]: { coins: number, points: number, kos: number } } = {}
+    local totalKoDelta = 0
     if outcome == "victory" then
         levelEventPayload = {
             totalCoins = sanitizeInteger(summary.totalCoins or 0),
@@ -538,6 +550,13 @@ local function finalizeLevelSummary(state, outcome, reason)
             end
         end
         local koDelta = math.max(0, currentKO - baselineKO)
+
+        perPlayerSummary[player] = {
+            coins = coins,
+            points = points,
+            kos = koDelta,
+        }
+        totalKoDelta += koDelta
 
         local message
         if outcome == "victory" then
@@ -579,6 +598,31 @@ local function finalizeLevelSummary(state, outcome, reason)
         sendNoticeToPlayers({ player }, message, outcomeKind, metadata)
     end
 
+    if not summary.roundSummarySent and RoundSummaryServer and typeof(RoundSummaryServer.Publish) == "function" then
+        if #players > 0 then
+            local publishPayload = {
+                level = levelNumber,
+                outcome = outcome,
+                reason = reasonText,
+                totals = {
+                    coins = sanitizeInteger(summary.totalCoins or 0),
+                    points = sanitizeInteger(summary.totalPoints or 0),
+                    wavesCleared = sanitizeInteger(summary.wavesCleared or 0),
+                    kos = sanitizeNonNegativeInteger(totalKoDelta),
+                },
+                players = perPlayerSummary,
+                recipients = players,
+            }
+
+            local okPublish, publishErr = pcall(RoundSummaryServer.Publish, state.arenaId, publishPayload)
+            if not okPublish then
+                warn(string.format("[RoundDirectorServer] RoundSummaryServer.Publish failed: %s", tostring(publishErr)))
+            else
+                summary.roundSummarySent = true
+            end
+        end
+    end
+
     local logPieces = {
         string.format("arena=%s", tostring(state.arenaId)),
         string.format("level=%d", levelNumber),
@@ -611,6 +655,13 @@ local function handleLevelCompletePhase(state)
     updateArenaStateSnapshot(state)
     logPhase(state)
     broadcastWaveChange(state)
+
+    local rewards = grantLevelBonus(state, state.level)
+    if rewards then
+        accumulateLevelRewards(state, rewards)
+    end
+
+    finalizeLevelSummary(state, "victory")
 end
 
 local function grantWaveBonus(state)
@@ -921,13 +972,6 @@ local function runShop(state)
         return false
     end
 
-    local rewards = grantLevelBonus(state, state.level)
-    if rewards then
-        accumulateLevelRewards(state, rewards)
-    end
-
-    finalizeLevelSummary(state, "victory")
-
     if MatchReturnService and typeof(MatchReturnService.ReturnArena) == "function" then
         local ok, shouldStop = pcall(MatchReturnService.ReturnArena, state.arenaId, {
             reason = "LevelComplete",
@@ -1030,6 +1074,13 @@ local function runLoop(state)
 
     if activeStates[state.arenaId] == state then
         activeStates[state.arenaId] = nil
+    end
+
+    if RoundSummaryServer and typeof(RoundSummaryServer.Reset) == "function" then
+        local okReset, resetErr = pcall(RoundSummaryServer.Reset, state.arenaId)
+        if not okReset then
+            warn(string.format("[RoundDirectorServer] RoundSummaryServer.Reset failed: %s", tostring(resetErr)))
+        end
     end
 end
 
@@ -1143,6 +1194,13 @@ function RoundDirectorServer.Abort(arenaId)
     callSawblade("Stop", arenaId)
     activeStates[arenaId] = nil
     sendPrepTimer(state, 0)
+
+    if RoundSummaryServer and typeof(RoundSummaryServer.Reset) == "function" then
+        local okReset, resetErr = pcall(RoundSummaryServer.Reset, arenaId)
+        if not okReset then
+            warn(string.format("[RoundDirectorServer] RoundSummaryServer.Reset failed: %s", tostring(resetErr)))
+        end
+    end
 
     if telemetryTrack and reportOutcome then
         local payload = {

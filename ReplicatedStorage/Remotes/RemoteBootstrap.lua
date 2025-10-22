@@ -41,6 +41,7 @@ type RemoteRefs = {
         RE_PrepTimer: RemoteEvent,
         RE_WaveChanged: RemoteEvent,
         PartyUpdate: RemoteEvent,
+        RE_RoundSummary: RemoteEvent,
         RE_MeleeHitAttempt: RemoteEvent,
         RE_TargetHP: RemoteEvent,
         RE_CoinPointDelta: RemoteEvent,
@@ -63,9 +64,10 @@ local Remotes: RemoteRefs = {
         RE_PrepTimer        = getOrCreateEvent("RE_PrepTimer"),
         RE_WaveChanged      = getOrCreateEvent("RE_WaveChanged"),
         PartyUpdate         = getOrCreateEvent("PartyUpdate"),
+        RE_RoundSummary     = getOrCreateEvent("RE_RoundSummary"),
 
-	-- Combat / state
-	RE_MeleeHitAttempt  = getOrCreateEvent("RE_MeleeHitAttempt"),
+        -- Combat / state
+        RE_MeleeHitAttempt  = getOrCreateEvent("RE_MeleeHitAttempt"),
 	RE_TargetHP         = getOrCreateEvent("RE_TargetHP"),
 
 	-- Economy / UI
