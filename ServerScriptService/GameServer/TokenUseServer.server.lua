@@ -10,6 +10,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Guard = require(ServerScriptService:WaitForChild("Moderation"):WaitForChild("GuardServer"))
 local Remotes = require(ReplicatedStorage.Remotes.RemoteBootstrap)
 local TokenEffectsServer = require(script.Parent:WaitForChild("TokenEffectsServer"))
+local RoundSummaryServer = require(script.Parent:WaitForChild("RoundSummaryServer"))
 
 local useTokenRemote: RemoteFunction? = Remotes and Remotes.RF_UseToken or nil
 
@@ -104,23 +105,30 @@ local function handleUseToken(player: Player, request: UseTokenRequest?)
 	local effectName = request and request.effect or nil
 	local slotIndex = request and request.slot or nil
 
-	local result = TokenEffectsServer.Use(player, effectName, slotIndex)
-	if typeof(result) ~= "table" then
-		return { ok = false, err = "NoResult" }
-	end
+        local result = TokenEffectsServer.Use(player, effectName, slotIndex)
+        if typeof(result) ~= "table" then
+                return { ok = false, err = "NoResult" }
+        end
 
-	if result.ok and Remotes.RE_Notice then
-		local messageEffect = result.effect or effectName or "token"
-		local okNotice, errNotice = pcall(Remotes.RE_Notice.FireClient, Remotes.RE_Notice, player, {
-			msg = string.format("Token used: %s", tostring(messageEffect)),
-			kind = "info",
-		})
-		if not okNotice then
-			warn(string.format("[TokenUseServer] Failed to send notice: %s", tostring(errNotice)))
-		end
-	end
+        if result.ok and Remotes.RE_Notice then
+                local messageEffect = result.effect or effectName or "token"
+                local okNotice, errNotice = pcall(Remotes.RE_Notice.FireClient, Remotes.RE_Notice, player, {
+                        msg = string.format("Token used: %s", tostring(messageEffect)),
+                        kind = "info",
+                })
+                if not okNotice then
+                        warn(string.format("[TokenUseServer] Failed to send notice: %s", tostring(errNotice)))
+                end
+        end
 
-	return result
+        if result.ok and RoundSummaryServer and typeof(RoundSummaryServer.RecordTokenUse) == "function" then
+                local okRecord, recordErr = pcall(RoundSummaryServer.RecordTokenUse, player)
+                if not okRecord then
+                        warn(string.format("[TokenUseServer] Failed to record token use: %s", tostring(recordErr)))
+                end
+        end
+
+        return result
 end
 
 if useTokenRemote then

@@ -4,10 +4,34 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local FruitConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("FruitConfig"))
 local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig"))
 local RemotesModule = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap"))
+
+local submitLeaderboardScore: ((Player, number) -> ())? = nil
+
+do
+        local dataFolder = ServerScriptService:FindFirstChild("Data")
+        local leaderboardModule = dataFolder and dataFolder:FindFirstChild("LeaderboardServer")
+        if leaderboardModule and leaderboardModule:IsA("ModuleScript") then
+                local ok, moduleResult = pcall(require, leaderboardModule)
+                if ok and typeof(moduleResult) == "table" then
+                        local submitFn = (moduleResult :: any).SubmitScore
+                        if typeof(submitFn) == "function" then
+                                submitLeaderboardScore = function(player: Player, points: number)
+                                        local success, err = pcall(submitFn, player, points)
+                                        if not success then
+                                                warn(string.format("[EconomyServer] Leaderboard SubmitScore failed: %s", tostring(err)))
+                                        end
+                                end
+                        end
+                else
+                        warn(string.format("[EconomyServer] Failed to require LeaderboardServer: %s", tostring(moduleResult)))
+                end
+        end
+end
 
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 local EconomyConfig = GameConfig.Economy or {}
@@ -183,6 +207,10 @@ local function updateAttributes(player: Player, wallet: Wallet)
 
         player:SetAttribute("Coins", wallet.coins)
         player:SetAttribute("Points", wallet.points)
+
+        if submitLeaderboardScore then
+                submitLeaderboardScore(player, wallet.points)
+        end
 end
 
 local function formatLog(player: Player, coinsDelta: number, pointsDelta: number, wallet: Wallet, metadata: Metadata?)
@@ -425,6 +453,19 @@ function EconomyServer.GrantLevelClear(players: { Player }?, level: number): { [
                 reason = "LevelClear",
                 level = level,
         })
+end
+
+function EconomyServer.GrantCoins(player: Player, amount: any, metadata: Metadata?): AwardSummary?
+        if typeof(player) ~= "Instance" or not player:IsA("Player") then
+                return nil
+        end
+
+        local delta = toInteger(amount)
+        if delta == nil or delta == 0 then
+                return nil
+        end
+
+        return applyDelta(player, delta, 0, metadata)
 end
 
 function EconomyServer.Totals(player: Player): Totals

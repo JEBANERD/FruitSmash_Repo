@@ -41,6 +41,7 @@ type RemoteRefs = {
         RE_PrepTimer: RemoteEvent,
         RE_WaveChanged: RemoteEvent,
         PartyUpdate: RemoteEvent,
+        RE_RoundSummary: RemoteEvent,
         RE_MeleeHitAttempt: RemoteEvent,
         RE_TargetHP: RemoteEvent,
         RE_CoinPointDelta: RemoteEvent,
@@ -51,11 +52,13 @@ type RemoteRefs = {
         RE_Notice: RemoteEvent,
         WaveComplete: RemoteEvent,
         RE_SettingsPushed: RemoteEvent,
+        RE_SessionLeaderboard: RemoteEvent,
         RF_JoinQueue: RemoteFunction,
         RF_LeaveQueue: RemoteFunction,
         RF_UseToken: RemoteFunction,
         RF_SaveSettings: RemoteFunction,
         RF_Tutorial: RemoteFunction,
+        RF_GetGlobalLeaderboard: RemoteFunction,
 }
 
 local Remotes: RemoteRefs = {
@@ -64,9 +67,10 @@ local Remotes: RemoteRefs = {
         RE_PrepTimer        = getOrCreateEvent("RE_PrepTimer"),
         RE_WaveChanged      = getOrCreateEvent("RE_WaveChanged"),
         PartyUpdate         = getOrCreateEvent("PartyUpdate"),
+        RE_RoundSummary     = getOrCreateEvent("RE_RoundSummary"),
 
-	-- Combat / state
-	RE_MeleeHitAttempt  = getOrCreateEvent("RE_MeleeHitAttempt"),
+        -- Combat / state
+        RE_MeleeHitAttempt  = getOrCreateEvent("RE_MeleeHitAttempt"),
 	RE_TargetHP         = getOrCreateEvent("RE_TargetHP"),
 
 	-- Economy / UI
@@ -85,6 +89,9 @@ local Remotes: RemoteRefs = {
         -- Settings / accessibility
         RE_SettingsPushed   = getOrCreateEvent("RE_SettingsPushed"),
 
+        -- Leaderboards
+        RE_SessionLeaderboard = getOrCreateEvent("RE_SessionLeaderboard"),
+
         -- Functions (client -> server request/response)
         RF_Purchase         = getOrCreateFunction("RF_Purchase"),
         RF_JoinQueue        = getOrCreateFunction("RF_JoinQueue"),
@@ -92,6 +99,7 @@ local Remotes: RemoteRefs = {
         RF_UseToken         = getOrCreateFunction("RF_UseToken"),
         RF_SaveSettings     = getOrCreateFunction("RF_SaveSettings"),
         RF_Tutorial         = getOrCreateFunction("RF_Tutorial"),
+        RF_GetGlobalLeaderboard = getOrCreateFunction("RF_GetGlobalLeaderboard"),
 }
 
 table.freeze(Remotes)

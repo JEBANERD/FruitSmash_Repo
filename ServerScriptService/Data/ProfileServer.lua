@@ -40,6 +40,7 @@ local saveServiceModule = script.Parent:FindFirstChild("SaveService")
 local SaveService = if saveServiceModule then safeRequire(saveServiceModule) else nil
 local saveServiceLoadAsync = if SaveService and typeof((SaveService :: any).LoadAsync) == "function" then (SaveService :: any).LoadAsync else nil
 local saveServiceSaveAsync = if SaveService and typeof((SaveService :: any).SaveAsync) == "function" then (SaveService :: any).SaveAsync else nil
+local saveServiceUpdateAsync = if SaveService and typeof((SaveService :: any).UpdateAsync) == "function" then (SaveService :: any).UpdateAsync else nil
 
 local SaveSchemaModule = safeRequire(typesFolder:FindFirstChild("SaveSchema"))
 local ShopConfigModule = safeRequire(configFolder:FindFirstChild("ShopConfig"))
@@ -100,6 +101,64 @@ type Profile = {
     UserId: number,
     Data: ProfileData,
 }
+
+local function hasProfileShape(payload: any): boolean
+    if type(payload) ~= "table" then
+        return false
+    end
+
+    if payload.Coins ~= nil then
+        return true
+    end
+
+    if type(payload.Stats) == "table" then
+        return true
+    end
+
+    if type(payload.Inventory) == "table" then
+        return true
+    end
+
+    if type(payload.Settings) == "table" then
+        return true
+    end
+
+    return false
+end
+
+local function resolveSerializedProfile(payload: any): ProfileData?
+    if type(payload) ~= "table" then
+        return nil
+    end
+
+    local embedded = (payload :: any).Profile
+    if type(embedded) == "table" then
+        return embedded
+    end
+
+    if hasProfileShape(payload) then
+        return payload
+    end
+
+    return nil
+end
+
+local function ensureSaveContainer(payload: any): {[string]: any}
+    if type(payload) ~= "table" then
+        return {}
+    end
+
+    local cast = payload :: any
+    if type(cast.Profile) == "table" or type(cast.DailyRewards) == "table" then
+        return cast
+    end
+
+    if hasProfileShape(payload) then
+        return { Profile = payload }
+    end
+
+    return cast
+end
 
 if typeof(settingsPalettesConfig) == "table" then
         for _, entry in ipairs(settingsPalettesConfig) do
@@ -938,20 +997,21 @@ function ProfileServer.LoadSerialized(player: Player, serialized: ProfileData?)
     local profile = ensureProfile(player)
 
     local data = buildDefaultData()
-    if type(serialized) == "table" then
-        if type(serialized.Coins) == "number" then
-            data.Coins = serialized.Coins
+    local source = resolveSerializedProfile(serialized)
+    if type(source) == "table" then
+        if type(source.Coins) == "number" then
+            data.Coins = source.Coins
         end
 
-        if type(serialized.Stats) == "table" then
+        if type(source.Stats) == "table" then
             local stats = data.Stats
-            for key, value in pairs(serialized.Stats) do
+            for key, value in pairs(source.Stats) do
                 stats[key] = value
             end
         end
 
-        if type(serialized.Inventory) == "table" then
-            local inventory = serialized.Inventory
+        if type(source.Inventory) == "table" then
+            local inventory = source.Inventory
             local target = data.Inventory
             target.MeleeLoadout = sanitizeStringList(inventory.MeleeLoadout)
             target.ActiveMelee = if type(inventory.ActiveMelee) == "string" and inventory.ActiveMelee ~= "" then inventory.ActiveMelee else nil
@@ -959,8 +1019,8 @@ function ProfileServer.LoadSerialized(player: Player, serialized: ProfileData?)
             target.UtilityQueue = sanitizeStringList(inventory.UtilityQueue)
             target.OwnedMelee = sanitizeOwnedMelee(inventory.OwnedMelee)
         end
-        if type(serialized.Settings) == "table" then
-            data.Settings = sanitizeSettingsData(serialized.Settings)
+        if type(source.Settings) == "table" then
+            data.Settings = sanitizeSettingsData(source.Settings)
         end
     end
 
@@ -1076,17 +1136,38 @@ end
 local function handlePlayerRemoving(player: Player)
     local serialized = ProfileServer.Serialize(player)
 
-    if saveServiceSaveAsync then
-        local userId = getNumericUserId(player)
-        local ok, saveSuccess, saveErr = pcall(saveServiceSaveAsync, userId, serialized)
+    local userId = getNumericUserId(player)
+
+    local function legacySave()
+        if saveServiceSaveAsync then
+            local ok, saveSuccess, saveErr = pcall(saveServiceSaveAsync, userId, serialized)
+            if not ok then
+                warn(string.format("[ProfileServer] Save error for %s (%d): %s", player.Name, userId, tostring(saveSuccess)))
+            elseif not saveSuccess then
+                local message = if saveErr then tostring(saveErr) else "Unknown error"
+                warn(string.format("[ProfileServer] Save failed for %s (%d): %s", player.Name, userId, message))
+            end
+        else
+            warnSaveUnavailable()
+        end
+    end
+
+    if saveServiceUpdateAsync then
+        local ok, updatedPayload, saveErr = pcall(saveServiceUpdateAsync, userId, function(payload)
+            local container = ensureSaveContainer(payload)
+            container.Profile = serialized
+            return container
+        end)
+
         if not ok then
-            warn(string.format("[ProfileServer] Save error for %s (%d): %s", player.Name, userId, tostring(saveSuccess)))
-        elseif not saveSuccess then
-            local message = if saveErr then tostring(saveErr) else "Unknown error"
-            warn(string.format("[ProfileServer] Save failed for %s (%d): %s", player.Name, userId, message))
+            warn(string.format("[ProfileServer] Update save error for %s (%d): %s", player.Name, userId, tostring(updatedPayload)))
+            legacySave()
+        elseif saveErr then
+            warn(string.format("[ProfileServer] Update save failed for %s (%d): %s", player.Name, userId, tostring(saveErr)))
+            legacySave()
         end
     else
-        warnSaveUnavailable()
+        legacySave()
     end
 
     removeProfile(player)
