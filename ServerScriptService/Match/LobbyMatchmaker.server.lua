@@ -5,6 +5,7 @@
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 local HttpService = game:GetService("HttpService")
 
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
@@ -14,6 +15,20 @@ local matchConfig = GameConfig.Get().Match or {}
 local TELEPORT_ENABLED = matchConfig.UseTeleport ~= false
 local MATCH_PLACE_ID = matchConfig.MatchPlaceId
 local DEBUG_PRINT = matchConfig.DebugPrint ~= false
+
+local RETRY_MIN_SECONDS = math.max(1, matchConfig.TeleportRetryMinSeconds or 10)
+local RETRY_MAX_SECONDS = math.max(RETRY_MIN_SECONDS, matchConfig.TeleportRetryMaxSeconds or 20)
+local RETRY_JITTER_SECONDS = math.max(0, matchConfig.TeleportRetryJitterSeconds or 4)
+
+local LOCAL_FALLBACK_ENABLED = (matchConfig.LocalFallback == true) or (not TELEPORT_ENABLED)
+local LOCAL_FALLBACK_ON_FAILURE = matchConfig.LocalFallbackOnFailure
+if LOCAL_FALLBACK_ON_FAILURE == nil then
+        LOCAL_FALLBACK_ON_FAILURE = LOCAL_FALLBACK_ENABLED
+else
+        LOCAL_FALLBACK_ON_FAILURE = LOCAL_FALLBACK_ON_FAILURE == true
+end
+
+local retryRandom = Random.new()
 
 local MAX_PARTY_SIZE = 4
 
@@ -29,6 +44,9 @@ type Party = {
         memberMap: { [Player]: boolean },
         queued: boolean,
         teleporting: boolean,
+        retryCount: number,
+        pendingRetry: boolean,
+        retryToken: string?,
 }
 
 local partiesById: { [string]: Party } = {}
@@ -36,10 +54,345 @@ local partyByPlayer: { [Player]: Party } = {}
 local partyQueue: { Party } = {}
 local processingQueue = false
 
+local localArenaServer: any = nil
+local localRoundDirector: any = nil
+local LOCAL_SUPPORT_READY = false
+
+if LOCAL_FALLBACK_ENABLED then
+        local gameServerFolder = ServerScriptService:FindFirstChild("GameServer")
+
+        local function tryRequire(childName: string)
+                if not gameServerFolder then
+                        return nil
+                end
+
+                local module = gameServerFolder:FindFirstChild(childName)
+                if not module or not module:IsA("ModuleScript") then
+                        return nil
+                end
+
+                local ok, result = pcall(require, module)
+                if not ok then
+                        warn(string.format("[LobbyMatchmaker] Failed to require %s: %s", childName, tostring(result)))
+                        return nil
+                end
+
+                return result
+        end
+
+        localArenaServer = tryRequire("ArenaServer")
+        localRoundDirector = tryRequire("RoundDirectorServer")
+
+        if localArenaServer and typeof(localArenaServer.SpawnArena) == "function" and typeof(localArenaServer.GetArenaState) == "function" then
+                LOCAL_SUPPORT_READY = true
+        else
+                LOCAL_FALLBACK_ENABLED = false
+                LOCAL_FALLBACK_ON_FAILURE = false
+                localArenaServer = nil
+                localRoundDirector = nil
+        end
+end
+
+local LOCAL_MATCH_READY = LOCAL_SUPPORT_READY
+
 local function debugPrint(message: string, ...)
         if DEBUG_PRINT then
                 print(string.format("[LobbyMatchmaker] " .. message, ...))
         end
+end
+
+local function findLocalSpawnTarget(instance: Instance): Instance?
+        local patterns = { "spawn", "start", "entry", "platform" }
+
+        for _, descendant in ipairs(instance:GetDescendants()) do
+                if descendant:IsA("BasePart") then
+                        local lowerName = string.lower(descendant.Name)
+                        for _, pattern in ipairs(patterns) do
+                                if string.find(lowerName, pattern, 1, true) then
+                                        return descendant
+                                end
+                        end
+
+                        if descendant:GetAttribute("Spawn") or descendant:GetAttribute("PlayerSpawn") then
+                                return descendant
+                        end
+                elseif descendant:IsA("Attachment") then
+                        local lowerName = string.lower(descendant.Name)
+                        for _, pattern in ipairs(patterns) do
+                                if string.find(lowerName, pattern, 1, true) then
+                                        return descendant
+                                end
+                        end
+                end
+        end
+
+        local primary = instance:FindFirstChildWhichIsA("BasePart")
+        if primary then
+                return primary
+        end
+
+        return instance
+end
+
+local function computeLocalSpawnCFrame(arenaState: any): CFrame?
+        if typeof(arenaState) ~= "table" then
+                return nil
+        end
+
+        local instance = arenaState.instance
+        if typeof(instance) ~= "Instance" then
+                return nil
+        end
+
+        local target = findLocalSpawnTarget(instance)
+        if not target then
+                        return nil
+        end
+
+        if target:IsA("BasePart") then
+                return target.CFrame
+        elseif target:IsA("Attachment") then
+                return target.WorldCFrame
+        elseif typeof((target :: any).GetPivot) == "function" then
+                local ok, pivot = pcall((target :: any).GetPivot, target)
+                if ok then
+                        return pivot
+                end
+        end
+
+        if typeof((instance :: any).GetPivot) == "function" then
+                local ok, pivot = pcall((instance :: any).GetPivot, instance)
+                if ok then
+                        return pivot
+                end
+        end
+
+        return nil
+end
+
+local function registerArenaPlayerLocal(arenaState: any, player: Player)
+        if typeof(arenaState) ~= "table" then
+                return
+        end
+
+        local playersList = arenaState.players
+        if typeof(playersList) ~= "table" then
+                playersList = {}
+                arenaState.players = playersList
+        end
+
+        for _, entry in ipairs(playersList) do
+                local candidate = entry
+                if typeof(entry) == "table" then
+                        candidate = entry.player or entry.Player or entry.owner
+                end
+
+                if candidate == player then
+                        return
+                end
+        end
+
+        table.insert(playersList, player)
+end
+
+local function movePlayerToLocalArena(player: Player, spawnCFrame: CFrame?, slotIndex: number)
+        if not spawnCFrame then
+                return
+        end
+
+        local offsetRow = math.floor((slotIndex - 1) / 2)
+        local offsetColumn = (slotIndex - 1) % 2
+        local offset = CFrame.new((offsetColumn * 6) - 3, 3, offsetRow * 6)
+        local targetCFrame = spawnCFrame * offset
+
+        local function apply(character: Model)
+                if typeof((character :: any).PivotTo) == "function" then
+                        (character :: any):PivotTo(targetCFrame)
+                        return
+                end
+
+                local root = character:FindFirstChild("HumanoidRootPart")
+                if root and root:IsA("BasePart") then
+                        root.CFrame = targetCFrame
+                end
+        end
+
+        local character = player.Character
+        if character and character:IsA("Model") then
+                apply(character)
+        end
+
+        local connection: RBXScriptConnection? = nil
+        connection = player.CharacterAdded:Connect(function(newCharacter)
+                if newCharacter and newCharacter:IsA("Model") then
+                        apply(newCharacter)
+                end
+                if connection then
+                        connection:Disconnect()
+                        connection = nil
+                end
+        end)
+
+        task.delay(5, function()
+                if connection then
+                        connection:Disconnect()
+                        connection = nil
+                end
+        end)
+end
+
+local function startLocalMatch(partyId: string, players: { Player }): boolean
+        if not LOCAL_MATCH_READY or not localArenaServer then
+                return false
+        end
+
+        local spawnArena = localArenaServer.SpawnArena
+        local getArenaState = localArenaServer.GetArenaState
+
+        if typeof(spawnArena) ~= "function" or typeof(getArenaState) ~= "function" then
+                return false
+        end
+
+        local okReserve, arenaIdOrErr = pcall(spawnArena, partyId)
+        if not okReserve then
+                warn(string.format("[LobbyMatchmaker] Local fallback failed to spawn arena: %s", tostring(arenaIdOrErr)))
+                return false
+        end
+
+        local arenaId = arenaIdOrErr
+        if typeof(arenaId) ~= "string" then
+                arenaId = tostring(arenaId)
+        end
+
+        if not arenaId or arenaId == "" then
+                warn("[LobbyMatchmaker] Local fallback returned empty arena id")
+                return false
+        end
+
+        local arenaState: any = nil
+        local okState, stateResult = pcall(getArenaState, arenaId)
+        if okState and typeof(stateResult) == "table" then
+                arenaState = stateResult
+        end
+
+        local spawnCFrame = computeLocalSpawnCFrame(arenaState)
+
+        for index, member in ipairs(players) do
+                if member.Parent == Players then
+                        registerArenaPlayerLocal(arenaState, member)
+                        member:SetAttribute("PartyId", partyId)
+                        member:SetAttribute("ArenaId", arenaId)
+                        movePlayerToLocalArena(member, spawnCFrame, index)
+                end
+        end
+
+        if localRoundDirector and typeof(localRoundDirector.Start) == "function" then
+                        task.defer(function()
+                                local okStart, startErr = pcall(localRoundDirector.Start, arenaId, nil)
+                                if not okStart then
+                                        warn(string.format("[LobbyMatchmaker] Local fallback RoundDirector.Start failed: %s", tostring(startErr)))
+                                end
+                        end)
+        end
+
+        return true
+end
+
+local function resetPartyRetry(party: Party)
+        party.retryCount = 0
+        party.pendingRetry = false
+        party.retryToken = nil
+end
+
+local function cancelPartyRetry(party: Party)
+        party.pendingRetry = false
+        party.retryToken = nil
+end
+
+local function computeRetryDelay(attempt: number): number
+        local base = RETRY_MIN_SECONDS * (2 ^ math.max(0, attempt - 1))
+        local clamped = math.clamp(base, RETRY_MIN_SECONDS, RETRY_MAX_SECONDS)
+
+        if RETRY_JITTER_SECONDS <= 0 then
+                return clamped
+        end
+
+        local halfJitter = RETRY_JITTER_SECONDS * 0.5
+        local low = math.max(RETRY_MIN_SECONDS, clamped - halfJitter)
+        local high = math.min(RETRY_MAX_SECONDS, clamped + halfJitter)
+        if high <= low then
+                return low
+        end
+
+        local offset = retryRandom:NextNumber(0, high - low)
+        return low + offset
+end
+
+local function schedulePartyRetry(party: Party, reason: string)
+        local attempt = (party.retryCount or 0) + 1
+        local delaySeconds = computeRetryDelay(attempt)
+        party.retryCount = attempt
+        party.pendingRetry = true
+        party.retryToken = HttpService:GenerateGUID(false)
+        party.queued = true
+
+        local reasonText = "teleport error"
+        if typeof(reason) == "string" and reason ~= "" then
+                reasonText = reason
+        end
+        sendNoticeToParty(party, string.format("Matchmaking retry in %d seconds (%s).", math.floor(delaySeconds + 0.5), reasonText), "warning")
+        debugPrint("Party %s retrying in %.1f seconds (%s, attempt %d)", party.id, delaySeconds, reasonText, attempt)
+
+        local retryToken = party.retryToken
+
+        task.delay(delaySeconds, function()
+                if partiesById[party.id] ~= party then
+                        return
+                end
+
+                if party.retryToken ~= retryToken then
+                        return
+                end
+
+                party.pendingRetry = false
+
+                if party.teleporting then
+                        return
+                end
+
+                local alreadyQueued = false
+                for _, queuedParty in ipairs(partyQueue) do
+                        if queuedParty == party then
+                                alreadyQueued = true
+                                break
+                        end
+                end
+
+                if alreadyQueued then
+                        return
+                end
+
+                table.insert(partyQueue, party)
+                sendPartyUpdate(party, "queued")
+                scheduleQueueProcessing()
+        end)
+end
+
+local function releasePartyForMatch(party: Party)
+        cancelPartyRetry(party)
+        partiesById[party.id] = nil
+
+        for _, member in ipairs(party.members) do
+                if partyByPlayer[member] == party then
+                        partyByPlayer[member] = nil
+                end
+        end
+
+        table.clear(party.members)
+        table.clear(party.memberMap)
+        party.host = nil
+        party.queued = false
+        party.teleporting = true
 end
 
 local function getPlayerSummary(player: Player)
@@ -98,6 +451,7 @@ end
 
 local function disbandParty(party: Party, noticeMessage: string?)
         removePartyFromQueue(party)
+        resetPartyRetry(party)
         partiesById[party.id] = nil
 
         if noticeMessage then
@@ -179,6 +533,9 @@ local function createParty(host: Player, members: { Player }): Party
                 memberMap = {},
                 queued = false,
                 teleporting = false,
+                retryCount = 0,
+                pendingRetry = false,
+                retryToken = nil,
         }
 
         partiesById[partyId] = party
@@ -238,85 +595,135 @@ local function removePlayerFromParty(party: Party, player: Player, shouldDisband
 end
 
 local function processQueue()
-        if processingQueue then
-                return
-        end
+	if processingQueue then
+		return
+	end
 
-        processingQueue = true
+	processingQueue = true
 
-        while #partyQueue > 0 do
-                local party = partyQueue[1]
+	while #partyQueue > 0 do
+		local party = partyQueue[1]
 
-                if not party then
-                        table.remove(partyQueue, 1)
-                elseif party.teleporting then
-                        table.remove(partyQueue, 1)
-                else
-                        local playersToTeleport = {}
-                        for _, member in ipairs(party.members) do
-                                if member.Parent == Players then
-                                        table.insert(playersToTeleport, member)
+		if not party then
+			table.remove(partyQueue, 1)
+		elseif party.teleporting then
+			table.remove(partyQueue, 1)
+		elseif party.pendingRetry then
+			table.remove(partyQueue, 1)
+		else
+			local playersToTeleport = {}
+			for _, member in ipairs(party.members) do
+				if member.Parent == Players then
+					table.insert(playersToTeleport, member)
+				end
+			end
+
+			if #playersToTeleport == 0 then
+				table.remove(partyQueue, 1)
+				debugPrint("Party %s removed from queue (no active members)", party.id)
+				disbandParty(party)
+			else
+				table.remove(partyQueue, 1)
+
+                                local matchPlaceValid = typeof(MATCH_PLACE_ID) == "number" and MATCH_PLACE_ID > 0
+                                local teleportDisabled = not TELEPORT_ENABLED
+                                local canTeleport = (not teleportDisabled) and matchPlaceValid
+                                local fallbackReason = "teleport unavailable"
+                                if teleportDisabled then
+                                        fallbackReason = "teleport disabled"
+                                elseif not matchPlaceValid then
+                                        fallbackReason = "match place unavailable"
                                 end
-                        end
 
-                        if #playersToTeleport == 0 then
-                                debugPrint("Party %s removed from queue (no active members)", party.id)
-                                disbandParty(party)
-                                table.remove(partyQueue, 1)
-                        elseif not TELEPORT_ENABLED then
-                                warn("[LobbyMatchmaker] Teleport requested while disabled")
-                                break
-                        elseif typeof(MATCH_PLACE_ID) ~= "number" or MATCH_PLACE_ID <= 0 then
-                                warn("[LobbyMatchmaker] Invalid MatchPlaceId; cannot teleport")
-                                sendNoticeToParty(party, "Match place is not configured. Please try again later.", "error")
-                                disbandParty(party)
-                                table.remove(partyQueue, 1)
-                        else
-                                local reserveOk, accessCodeOrErr = pcall(TeleportService.ReserveServer, TeleportService, MATCH_PLACE_ID)
-                                if not reserveOk then
-                                        warn(string.format("[LobbyMatchmaker] ReserveServer failed: %s", tostring(accessCodeOrErr)))
-                                        sendNoticeToParty(party, "Unable to reserve a match server. Retrying shortly...", "warning")
-                                        task.wait(2)
-                                else
-                                        local accessCode: string = accessCodeOrErr
-                                        party.teleporting = true
-                                        party.queued = false
-                                        table.remove(partyQueue, 1)
+				local function runLocalFallback(reason: string): boolean
+					if not LOCAL_MATCH_READY then
+						return false
+					end
 
-                                        sendPartyUpdate(party, "teleporting")
-                                        debugPrint("Teleporting party %s with %d members", party.id, #playersToTeleport)
+					if reason ~= "" then
+						debugPrint("Attempting local fallback for party %s (%s)", party.id, reason)
+					else
+						debugPrint("Attempting local fallback for party %s", party.id)
+					end
 
-                                        local teleportDataMembers = {}
-                                        for _, member in ipairs(playersToTeleport) do
-                                                table.insert(teleportDataMembers, getPlayerSummary(member))
-                                        end
+					local success = startLocalMatch(party.id, playersToTeleport)
+					if success then
+						resetPartyRetry(party)
+						sendPartyUpdate(party, "local")
+						sendNoticeToParty(party, "Match server unavailable; running local arena in this server.", "info")
+						debugPrint("Party %s started local fallback arena (%d members)", party.id, #playersToTeleport)
+						releasePartyForMatch(party)
+						return true
+					end
 
-                                        local teleportData = {
-                                                partyId = party.id,
-                                                members = teleportDataMembers,
-                                        }
+					warn(string.format("[LobbyMatchmaker] Local fallback failed for party %s", party.id))
+					return false
+				end
 
-                                        local teleportOk, teleportErr = pcall(function()
-                                                TeleportService:TeleportToPrivateServer(MATCH_PLACE_ID, accessCode, playersToTeleport, nil, teleportData)
-                                        end)
+				if not canTeleport then
+					if runLocalFallback(fallbackReason) then
+						-- handled via local fallback
+					else
+						if teleportDisabled then
+							warn("[LobbyMatchmaker] Teleport requested while disabled and no fallback succeeded")
+						else
+							warn("[LobbyMatchmaker] Invalid MatchPlaceId; cannot teleport")
+						end
+						sendNoticeToParty(party, "Matchmaking temporarily unavailable. Please try again later.", "error")
+						schedulePartyRetry(party, fallbackReason)
+					end
+				else
+					local reserveOk, accessCodeOrErr = pcall(TeleportService.ReserveServer, TeleportService, MATCH_PLACE_ID)
+					if not reserveOk then
+						warn(string.format("[LobbyMatchmaker] ReserveServer failed: %s", tostring(accessCodeOrErr)))
+						if LOCAL_FALLBACK_ON_FAILURE and runLocalFallback("reserve failure") then
+							-- handled
+						else
+							schedulePartyRetry(party, "reserve failure")
+						end
+					else
+						local accessCode: string = accessCodeOrErr
+						party.teleporting = true
+						party.queued = false
+						cancelPartyRetry(party)
 
-                                        if not teleportOk then
-                                                warn(string.format("[LobbyMatchmaker] Teleport failed for party %s: %s", party.id, tostring(teleportErr)))
-                                                party.teleporting = false
-                                                party.queued = true
-                                                table.insert(partyQueue, 1, party)
-                                                sendPartyUpdate(party, "queued")
-                                                sendNoticeToParty(party, "Teleport failed. Re-queueing...", "warning")
-                                                task.wait(2)
-                                        else
-                                                debugPrint("Teleport initiated for party %s (code %s)", party.id, accessCode)
-                                        end
-                                end
-                        end
-                end
-        end
+						sendPartyUpdate(party, "teleporting")
+						debugPrint("Teleporting party %s with %d members", party.id, #playersToTeleport)
 
-        processingQueue = false
+						local teleportDataMembers = {}
+						for _, member in ipairs(playersToTeleport) do
+							table.insert(teleportDataMembers, getPlayerSummary(member))
+						end
+
+						local teleportData = {
+							partyId = party.id,
+							members = teleportDataMembers,
+						}
+
+						local teleportOk, teleportErr = pcall(function()
+							TeleportService:TeleportToPrivateServer(MATCH_PLACE_ID, accessCode, playersToTeleport, nil, teleportData)
+						end)
+
+						if not teleportOk then
+							warn(string.format("[LobbyMatchmaker] Teleport failed for party %s: %s", party.id, tostring(teleportErr)))
+							party.teleporting = false
+							party.queued = true
+							if LOCAL_FALLBACK_ON_FAILURE and runLocalFallback("teleport failure") then
+								-- handled
+							else
+								schedulePartyRetry(party, tostring(teleportErr))
+							end
+						else
+							debugPrint("Teleport initiated for party %s (code %s)", party.id, accessCode)
+							resetPartyRetry(party)
+						end
+					end
+				end
+			end
+		end
+	end
+
+	processingQueue = false
 end
 
 local function scheduleQueueProcessing()
@@ -324,17 +731,16 @@ local function scheduleQueueProcessing()
 end
 
 local function handleJoinQueue(player: Player, options: any?)
-        if not TELEPORT_ENABLED then
-                return {
-                        ok = false,
-                        error = "TeleportDisabled",
-                }
-        end
+        local canTeleport = TELEPORT_ENABLED and typeof(MATCH_PLACE_ID) == "number" and MATCH_PLACE_ID > 0
 
-        if typeof(MATCH_PLACE_ID) ~= "number" or MATCH_PLACE_ID <= 0 then
+        if not canTeleport and not LOCAL_MATCH_READY then
+                local errorCode = "MatchPlaceUnavailable"
+                if not TELEPORT_ENABLED then
+                        errorCode = "TeleportDisabled"
+                end
                 return {
                         ok = false,
-                        error = "MatchPlaceUnavailable",
+                        error = errorCode,
                 }
         end
 
