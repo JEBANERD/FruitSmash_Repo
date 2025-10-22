@@ -52,6 +52,20 @@ if turretModule then
     end
 end
 
+local SawbladeServer
+do
+    local obstaclesFolder = script.Parent:FindFirstChild("Obstacles")
+    local sawbladeModule = obstaclesFolder and obstaclesFolder:FindFirstChild("SawbladeServer")
+    if sawbladeModule then
+        local ok, result = pcall(require, sawbladeModule)
+        if ok then
+            SawbladeServer = result
+        else
+            warn(string.format("[RoundDirectorServer] Failed to require SawbladeServer: %s", tostring(result)))
+        end
+    end
+end
+
 local roundSettings = GameConfig.Rounds or {}
 local DEFAULT_PREP_SECONDS = roundSettings.PrepSeconds or 30
 local SKIP_PREP_SECONDS = roundSettings.PrepFloorButtonSeconds or 3
@@ -157,6 +171,22 @@ local function describeDefeatReason(reason)
     return nil
 end
 
+local function callSawblade(methodName, arenaId, ...)
+    if not SawbladeServer then
+        return
+    end
+
+    local method = SawbladeServer[methodName]
+    if typeof(method) ~= "function" then
+        return
+    end
+
+    local ok, err = pcall(method, SawbladeServer, arenaId, ...)
+    if not ok then
+        warn(string.format("[RoundDirectorServer] SawbladeServer.%s failed: %s", tostring(methodName), tostring(err)))
+    end
+end
+
 local function updateArenaStateSnapshot(state)
     if not ArenaServer or typeof(ArenaServer.GetArenaState) ~= "function" then
         return
@@ -174,6 +204,11 @@ local function updateArenaStateSnapshot(state)
 end
 
 local function logPhase(state)
+    callSawblade("UpdateRoundState", state.arenaId, {
+        level = state.level,
+        phase = state.phase,
+        wave = state.wave,
+    })
     print(string.format("[RoundDirectorServer] arena=%s phase=%s level=%d wave=%d", state.arenaId, state.phase, state.level, state.wave))
 end
 
@@ -833,6 +868,8 @@ local function runLoop(state)
         end
     end
 
+    callSawblade("Stop", state.arenaId)
+
     if activeStates[state.arenaId] == state then
         activeStates[state.arenaId] = nil
     end
@@ -881,6 +918,12 @@ function RoundDirectorServer.Start(arenaId, options)
 
     activeStates[arenaId] = state
 
+    callSawblade("Start", arenaId, {
+        level = state.level,
+        phase = state.phase,
+        wave = state.wave,
+    })
+
     task.spawn(runLoop, state)
 
     return state
@@ -909,6 +952,12 @@ function RoundDirectorServer.Abort(arenaId)
     state.phase = "Aborted"
     updateArenaStateSnapshot(state)
     broadcastWaveChange(state)
+    callSawblade("UpdateRoundState", arenaId, {
+        level = state.level,
+        phase = state.phase,
+        wave = state.wave,
+    })
+    callSawblade("Stop", arenaId)
     activeStates[arenaId] = nil
     sendPrepTimer(state, 0)
 end
