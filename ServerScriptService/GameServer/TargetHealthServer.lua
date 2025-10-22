@@ -292,6 +292,65 @@ function TargetHealthServer.SetShield(arenaId, enabled, durationSeconds)
     snapshotState(state)
 end
 
+function TargetHealthServer.ApplyHealthBoost(arenaId, bonusPct, healPct)
+    assert(arenaId ~= nil, "arenaId is required")
+
+    local state = ensureArena(arenaId)
+    if not state or state.gameOver then
+        return false
+    end
+
+    local numericBonus = if typeof(bonusPct) == "number" then bonusPct else 0
+    local numericHeal = if typeof(healPct) == "number" then healPct else 0
+
+    if numericBonus <= 0 and numericHeal <= 0 then
+        return false
+    end
+
+    local currentMax = state.maxHP or computeMaxHP(state.level or 1)
+    if currentMax <= 0 then
+        currentMax = computeMaxHP(state.level or 1)
+    end
+
+    local newMax = currentMax
+    if numericBonus > 0 then
+        newMax = math.max(1, math.floor(currentMax * (1 + numericBonus) + 0.5))
+        state.maxHP = newMax
+    end
+
+    local healAmount = 0
+    if numericHeal > 0 then
+        healAmount = math.floor(newMax * numericHeal + 0.5)
+    end
+
+    local laneCount = state.laneCount or 0
+    for laneIndex = 1, laneCount do
+        local laneState = ensureLane(state, laneIndex)
+        if laneState then
+            local currentHP = laneState.currentHP or newMax
+            if healAmount > 0 then
+                currentHP = math.min(newMax, currentHP + healAmount)
+            else
+                currentHP = math.min(newMax, currentHP)
+            end
+            laneState.currentHP = currentHP
+        end
+    end
+
+    for laneIndex, laneState in pairs(state.lanes) do
+        if laneIndex > laneCount and laneState then
+            local currentHP = laneState.currentHP or newMax
+            if healAmount > 0 then
+                currentHP = math.min(newMax, currentHP + healAmount)
+            end
+            laneState.currentHP = math.min(newMax, currentHP)
+        end
+    end
+
+    snapshotState(state)
+    return true
+end
+
 function TargetHealthServer.GetArenaState(arenaId)
     return arenas[arenaId]
 end

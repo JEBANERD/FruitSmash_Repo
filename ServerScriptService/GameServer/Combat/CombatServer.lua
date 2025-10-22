@@ -320,7 +320,11 @@ local function processValidHit(player: Player, fruit: BasePart)
 		return
 	end
 
-	fruitState.currentHP = math.max(0, fruitState.currentHP - damage)
+        fruitState.currentHP = math.max(0, fruitState.currentHP - damage)
+
+        pcall(function()
+                fruit:SetAttribute("LastHitTime", os.clock())
+        end)
 
 	local wear = resolveWearAmount(fruit, stats)
 	applyDurabilityWear(player, wear, stats)
