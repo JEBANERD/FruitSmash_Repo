@@ -72,7 +72,62 @@ local ArenaServer = safeRequire(gameServerFolder, "ArenaServer")
 local RoundDirectorServer = safeRequire(gameServerFolder, "RoundDirectorServer")
 local QuickbarServer = safeRequire(gameServerFolder, "QuickbarServer")
 
-local playerContexts: { [Player]: { partyId: string, arenaId: string, connection: RBXScriptConnection? } } = {}
+type PlayerContext = { partyId: string, arenaId: string, connection: RBXScriptConnection? }
+type RecentContext = { partyId: string, arenaId: string, expiresAt: number }
+
+local playerContexts: { [Player]: PlayerContext } = {}
+local RECENT_CONTEXT_LIFETIME_SECONDS = 60
+local recentPartyContexts: { [number]: RecentContext } = {}
+
+local function getUserId(player: Player): number?
+    local userId = player.UserId
+    if typeof(userId) == "number" and userId ~= 0 then
+        return userId
+    end
+
+    return nil
+end
+
+local function getRecentContext(userId: number?): RecentContext?
+    if not userId then
+        return nil
+    end
+
+    local record = recentPartyContexts[userId]
+    if not record then
+        return nil
+    end
+
+    if record.expiresAt <= os.clock() then
+        recentPartyContexts[userId] = nil
+        return nil
+    end
+
+    return record
+end
+
+local function setRecentContext(userId: number?, partyId: string?, arenaId: string?)
+    if not userId then
+        return
+    end
+
+    if not partyId or not arenaId then
+        recentPartyContexts[userId] = nil
+        return
+    end
+
+    recentPartyContexts[userId] = {
+        partyId = partyId,
+        arenaId = arenaId,
+        expiresAt = os.clock() + RECENT_CONTEXT_LIFETIME_SECONDS,
+    }
+end
+
+local function clearRecentContext(userId: number?)
+    if userId then
+        recentPartyContexts[userId] = nil
+    end
+end
 
 local function toStringId(value: any): string?
     local valueType = typeof(value)
@@ -228,6 +283,37 @@ local function canJoinArena(arenaId: string?): (boolean, string?)
     return false, toStringId(phase) or tostring(phase)
 end
 
+local function isArenaInPrep(arenaId: string?): boolean
+    if not arenaId then
+        return false
+    end
+
+    if not RoundDirectorServer then
+        return true
+    end
+
+    local getState = (RoundDirectorServer :: any).GetState
+    if typeof(getState) ~= "function" then
+        return true
+    end
+
+    local ok, state = pcall(getState, arenaId)
+    if not ok or typeof(state) ~= "table" then
+        return true
+    end
+
+    local phase = state.phase
+    if phase == nil then
+        return true
+    end
+
+    if typeof(phase) == "string" then
+        return phase == "Prep"
+    end
+
+    return false
+end
+
 local function notifyPlayer(player: Player, message: string)
     if noticeRemote then
         local payload = {
@@ -307,7 +393,7 @@ local function computeSpawnCFrame(arenaState: any): CFrame?
     return nil
 end
 
-local function moveCharacterToSpawn(player: Player, context: { partyId: string, arenaId: string, connection: RBXScriptConnection? })
+local function moveCharacterToSpawn(player: Player, context: PlayerContext)
     if not ArenaServer then
         return
     end
@@ -377,7 +463,7 @@ local function registerArenaPlayer(arenaState: any, player: Player)
     table.insert(playersList, player)
 end
 
-local function deregisterArenaPlayer(context: { partyId: string, arenaId: string, connection: RBXScriptConnection? }, player: Player)
+local function deregisterArenaPlayer(context: PlayerContext, player: Player)
     if not ArenaServer then
         return
     end
@@ -438,6 +524,7 @@ local function trackCharacter(player: Player)
 end
 
 local function handlePlayerAdded(player: Player)
+    local userId = getUserId(player)
     local joinData
     local ok, result = pcall(function()
         return player:GetJoinData()
@@ -454,19 +541,36 @@ local function handlePlayerAdded(player: Player)
     end
 
     local partyId = extractPartyId(teleportData) or extractPartyId(joinData)
+    local explicitArenaId = extractArenaId(teleportData) or extractArenaId(joinData)
+    local cachedContext = getRecentContext(userId)
+    if cachedContext then
+        if partyId and partyId ~= cachedContext.partyId then
+            clearRecentContext(userId)
+            cachedContext = nil
+        else
+            partyId = partyId or cachedContext.partyId
+            explicitArenaId = explicitArenaId or cachedContext.arenaId
+        end
+    end
+
     if not partyId then
         return
     end
 
-    local explicitArenaId = extractArenaId(teleportData) or extractArenaId(joinData)
     local arenaId, arenaState = resolveArena(partyId, explicitArenaId)
     if not arenaId then
+        if userId then
+            clearRecentContext(userId)
+        end
         warn(string.format("%s %s joined party %s but no arena was found", TAG, player.Name, partyId))
         return
     end
 
     local allowed, phase = canJoinArena(arenaId)
     if not allowed then
+        if userId then
+            clearRecentContext(userId)
+        end
         local message = string.format("Match already in progress (phase: %s).", phase or "unknown")
         notifyPlayer(player, message)
         task.defer(function()
@@ -475,13 +579,17 @@ local function handlePlayerAdded(player: Player)
         return
     end
 
-    local context = {
+    local context: PlayerContext = {
         partyId = partyId,
         arenaId = arenaId,
         connection = nil,
     }
 
     playerContexts[player] = context
+
+    if userId then
+        clearRecentContext(userId)
+    end
 
     player:SetAttribute("PartyId", partyId)
     player:SetAttribute("ArenaId", arenaId)
@@ -532,7 +640,11 @@ end
 
 local function handlePlayerRemoving(player: Player)
     local context = playerContexts[player]
+    local userId = getUserId(player)
     if not context then
+        if userId then
+            clearRecentContext(userId)
+        end
         return
     end
 
@@ -548,6 +660,14 @@ local function handlePlayerRemoving(player: Player)
             partyId = context.partyId,
             arenaId = context.arenaId,
         })
+    end
+
+    if userId then
+        if isArenaInPrep(context.arenaId) then
+            setRecentContext(userId, context.partyId, context.arenaId)
+        else
+            clearRecentContext(userId)
+        end
     end
 
     deregisterArenaPlayer(context, player)
