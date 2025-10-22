@@ -129,73 +129,95 @@ local spawnFruitEvent = ensureEvent("SpawnFruit")
 local fastPrepEvent = ensureEvent("FastPrep")
 
 local function awardCoins(player, amount)
-	if not EconomyServer or type(EconomyServer.AwardFruit) ~= "function" then
-		warn("[DebugServer] EconomyServer.AwardFruit unavailable")
-		return
-	end
+        local grantHandler
+        local grantName = "GrantFruit"
 
-	if typeof(player) ~= "Instance" or not player:IsA("Player") then
-		warn("[DebugServer] GiveCoins expects a Player instance")
-		return
-	end
+        if EconomyServer then
+                if typeof(EconomyServer.GrantFruit) == "function" then
+                        grantHandler = EconomyServer.GrantFruit
+                        grantName = "GrantFruit"
+                elseif typeof(EconomyServer.AwardFruit) == "function" then
+                        grantHandler = EconomyServer.AwardFruit
+                        grantName = "AwardFruit"
+                end
+        end
 
-	local numericAmount = tonumber(amount)
-	if not numericAmount then
-		warn("[DebugServer] GiveCoins amount must be a number")
-		return
-	end
+        if typeof(grantHandler) ~= "function" then
+                warn("[DebugServer] EconomyServer.GrantFruit unavailable")
+                return
+        end
 
-	numericAmount = math.floor(numericAmount)
-	if numericAmount <= 0 then
-		return
-	end
+        if typeof(player) ~= "Instance" or not player:IsA("Player") then
+                warn("[DebugServer] GiveCoins expects a Player instance")
+                return
+        end
 
-	if #fruitDenominations == 0 then
-		warn("[DebugServer] No fruit coin denominations available")
-		return
-	end
+        local numericAmount = tonumber(amount)
+        if not numericAmount then
+                warn("[DebugServer] GiveCoins amount must be a number")
+                return
+        end
 
-	local remaining = numericAmount
-	local totalAwarded = 0
+        numericAmount = math.floor(numericAmount)
+        if numericAmount <= 0 then
+                return
+        end
 
-	for _, entry in ipairs(fruitDenominations) do
-		if remaining <= 0 then
-			break
-		end
+        if #fruitDenominations == 0 then
+                warn("[DebugServer] No fruit coin denominations available")
+                return
+        end
 
-		local coinsPerFruit = math.max(entry.coins, 1)
-		while remaining >= coinsPerFruit do
-			local ok, coinsDelta = pcall(EconomyServer.AwardFruit, player, entry.id)
-			if not ok then
-				warn(string.format("[DebugServer] AwardFruit failed for %s: %s", entry.id, coinsDelta))
-				break
-			end
+        local remaining = numericAmount
+        local totalAwarded = 0
 
-			coinsDelta = coinsDelta or 0
-			if coinsDelta <= 0 then
-				warn(string.format("[DebugServer] AwardFruit returned %d coins for %s", coinsDelta, entry.id))
-				break
-			end
+        for _, entry in ipairs(fruitDenominations) do
+                if remaining <= 0 then
+                        break
+                end
 
-			remaining -= coinsDelta
-			totalAwarded += coinsDelta
+                local coinsPerFruit = math.max(entry.coins, 1)
+                while remaining >= coinsPerFruit do
+                        local ok, result = pcall(grantHandler, player, entry.id)
+                        if not ok then
+                                warn(string.format("[DebugServer] %s failed for %s: %s", grantName, entry.id, tostring(result)))
+                                break
+                        end
 
-			if remaining < coinsPerFruit then
-				break
-			end
-		end
-	end
+                        local coinsDelta = 0
+                        if typeof(result) == "number" then
+                                coinsDelta = result
+                        elseif typeof(result) == "table" then
+                                local deltaValue = result.coinsDelta or result.coins
+                                if typeof(deltaValue) == "number" then
+                                        coinsDelta = deltaValue
+                                end
+                        end
 
-	if remaining > 0 then
-		warn(string.format(
-			"[DebugServer] Unable to grant full amount. Remaining: %d coins (awarded %d)",
-			remaining,
-			totalAwarded
-			))
-	end
+                        coinsDelta = coinsDelta or 0
+                        if coinsDelta <= 0 then
+                                warn(string.format("[DebugServer] %s returned %d coins for %s", grantName, coinsDelta, entry.id))
+                                break
+                        end
+
+                        remaining -= coinsDelta
+                        totalAwarded += coinsDelta
+
+                        if remaining < coinsPerFruit then
+                                break
+                        end
+                end
+        end
+
+        if remaining > 0 then
+                warn(string.format(
+                        "[DebugServer] Unable to grant full amount. Remaining: %d coins (awarded %d)",
+                        remaining,
+                        totalAwarded
+                        ))
+        end
 end
 
-giveCoinsEvent.Event:Connect(awardCoins)
 
 local function spawnFruit(arenaId, laneId, fruitId)
         if not FruitSpawnerServer then
