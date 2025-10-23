@@ -108,6 +108,114 @@ type Profile = {
     Data: ProfileData,
 }
 
+type SaveContainer = {[string]: any}
+
+type MigrationContext = {
+    player: Player?,
+    userId: number,
+    fromVersion: number,
+    toVersion: number,
+}
+
+type MigrationHandler = (SaveContainer, MigrationContext) -> ()
+
+local DEFAULT_SCHEMA_VERSION = 1
+local CURRENT_SCHEMA_VERSION = DEFAULT_SCHEMA_VERSION
+
+local schemaMigrations: {[number]: MigrationHandler} = {}
+local migrationInfoLogged: {[number]: boolean} = {}
+local migrationWarnLogged: {[number]: boolean} = {}
+
+local function normalizeSchemaVersion(value: any): number?
+    if typeof(value) == "number" then
+        if value ~= value then
+            return nil
+        end
+        return math.floor(value)
+    elseif typeof(value) == "string" and value ~= "" then
+        local numeric = tonumber(value)
+        if typeof(numeric) == "number" then
+            return math.floor(numeric)
+        end
+    end
+
+    return nil
+end
+
+local function parseSchemaVersion(value: any): number
+    local normalized = normalizeSchemaVersion(value)
+    if normalized == nil then
+        return 0
+    end
+
+    if normalized < 0 then
+        return 0
+    end
+
+    return normalized
+end
+
+local function logMigrationStep(fromVersion: number, toVersion: number)
+    if migrationInfoLogged[toVersion] then
+        return
+    end
+
+    migrationInfoLogged[toVersion] = true
+    print(string.format("[ProfileServer] Applying profile schema migration v%d -> v%d", fromVersion, toVersion))
+end
+
+local function warnMissingMigration(fromVersion: number, toVersion: number, userId: number)
+    if migrationWarnLogged[toVersion] then
+        return
+    end
+
+    migrationWarnLogged[toVersion] = true
+    warn(string.format(
+        "[ProfileServer] Missing profile schema migration v%d -> v%d; profile for user %d will reset to defaults.",
+        fromVersion,
+        toVersion,
+        userId
+    ))
+end
+
+local function registerMigrationInternal(versionValue: any, handler: any): (() -> ())?
+    if typeof(handler) ~= "function" then
+        return nil
+    end
+
+    local normalized = normalizeSchemaVersion(versionValue)
+    if normalized == nil then
+        return nil
+    end
+
+    if normalized < 0 then
+        normalized = 0
+    end
+
+    schemaMigrations[normalized] = handler :: MigrationHandler
+
+    return function()
+        if schemaMigrations[normalized] == handler then
+            schemaMigrations[normalized] = nil
+        end
+    end
+end
+
+if typeof(SaveSchemaModule) == "table" then
+    local versionValue = (SaveSchemaModule :: any).SchemaVersion or (SaveSchemaModule :: any).Version
+    local resolvedVersion = normalizeSchemaVersion(versionValue)
+    if resolvedVersion then
+        CURRENT_SCHEMA_VERSION = math.max(DEFAULT_SCHEMA_VERSION, resolvedVersion)
+    end
+
+    local migrationsValue = (SaveSchemaModule :: any).Migrations
+    if typeof(migrationsValue) == "table" then
+        for key, handler in pairs(migrationsValue) do
+            registerMigrationInternal(key, handler)
+        end
+    end
+end
+
 local function hasProfileShape(payload: any): boolean
     if type(payload) ~= "table" then
         return false
@@ -457,6 +565,63 @@ local function buildDefaultData(): ProfileData
     data.Settings = sanitizeSettingsData(data.Settings)
 
     return data
+end
+
+local function runSchemaMigrations(container: SaveContainer, player: Player?, userId: number): SaveContainer
+    if typeof(container) ~= "table" then
+        container = {}
+    end
+
+    local targetVersion = CURRENT_SCHEMA_VERSION
+    local currentVersion = parseSchemaVersion((container :: any).SchemaVersion)
+
+    if currentVersion >= targetVersion then
+        (container :: any).SchemaVersion = targetVersion
+        return container
+    end
+
+    local context: MigrationContext = {
+        player = player,
+        userId = userId,
+        fromVersion = currentVersion,
+        toVersion = currentVersion,
+    }
+
+    local version = currentVersion
+    while version < targetVersion do
+        local nextVersion = version + 1
+        local handler = schemaMigrations[version]
+        if handler then
+            logMigrationStep(version, nextVersion)
+            context.fromVersion = version
+            context.toVersion = nextVersion
+            local ok, err = pcall(handler, container, context)
+            if not ok then
+                warn(string.format(
+                    "[ProfileServer] Migration v%d -> v%d failed for user %d: %s",
+                    version,
+                    nextVersion,
+                    userId,
+                    tostring(err)
+                ))
+                break
+            end
+        else
+            if version >= DEFAULT_SCHEMA_VERSION then
+                warnMissingMigration(version, nextVersion, userId)
+                (container :: any).Profile = buildDefaultData()
+            end
+        end
+        version = nextVersion
+    end
+
+    if version >= targetVersion then
+        (container :: any).SchemaVersion = targetVersion
+    else
+        (container :: any).SchemaVersion = version
+    end
+
+    return container
 end
 
 local function ensureTutorialStat(stats: { [string]: any }?): boolean
@@ -1008,6 +1173,13 @@ local function serializeProfileData(profile: Profile?): ProfileData?
     return serialized
 end
 
+local function upsertSerializedProfile(payload: any, serialized: ProfileData): SaveContainer
+    local container = ensureSaveContainer(payload)
+    (container :: any).SchemaVersion = CURRENT_SCHEMA_VERSION
+    (container :: any).Profile = serialized
+    return container
+end
+
 function ProfileServer.Serialize(player: Player): ProfileData
     local profile = profilesByPlayer[player]
     local serialized = serializeProfileData(profile)
@@ -1021,8 +1193,12 @@ end
 function ProfileServer.LoadSerialized(player: Player, serialized: ProfileData?)
     local profile = ensureProfile(player)
 
+    local userId = getNumericUserId(player)
+    local container = ensureSaveContainer(serialized)
+    container = runSchemaMigrations(container, player, userId)
+
     local data = buildDefaultData()
-    local source = resolveSerializedProfile(serialized)
+    local source = resolveSerializedProfile(container)
     if type(source) == "table" then
         if type(source.Coins) == "number" then
             data.Coins = source.Coins
@@ -1086,6 +1262,22 @@ function ProfileServer.SetTutorialCompleted(player: Player, completed: boolean?)
     local stats = ensureStats(data)
     stats[TUTORIAL_STAT_KEY] = completed == true
     return syncTutorialAttribute(player, data)
+end
+
+function ProfileServer.RegisterMigration(fromVersion: number, handler: MigrationHandler): () -> ()
+    local disconnect = registerMigrationInternal(fromVersion, handler)
+    if disconnect == nil then
+        return function() end
+    end
+
+    local disconnected = false
+    return function()
+        if disconnected then
+            return
+        end
+        disconnected = true
+        disconnect()
+    end
 end
 
 local saveServiceLoadWarned = false
@@ -1165,7 +1357,8 @@ local function handlePlayerRemoving(player: Player)
 
     local function legacySave()
         if saveServiceSaveAsync then
-            local ok, saveSuccess, saveErr = pcall(saveServiceSaveAsync, userId, serialized)
+            local container = upsertSerializedProfile(nil, serialized)
+            local ok, saveSuccess, saveErr = pcall(saveServiceSaveAsync, userId, container)
             if not ok then
                 warn(string.format("[ProfileServer] Save error for %s (%d): %s", player.Name, userId, tostring(saveSuccess)))
             elseif not saveSuccess then
@@ -1179,9 +1372,7 @@ local function handlePlayerRemoving(player: Player)
 
     if saveServiceUpdateAsync then
         local ok, updatedPayload, saveErr = pcall(saveServiceUpdateAsync, userId, function(payload)
-            local container = ensureSaveContainer(payload)
-            container.Profile = serialized
-            return container
+            return upsertSerializedProfile(payload, serialized)
         end)
 
         if not ok then
@@ -1230,11 +1421,11 @@ if saveServiceRegisterCheckpoint then
             return payload
         end
 
-        local container = ensureSaveContainer(payload)
-        container.Profile = serialized
-        return container
+        return upsertSerializedProfile(payload, serialized)
     end)
 end
+
+ProfileServer.SchemaVersion = CURRENT_SCHEMA_VERSION
 
 return ProfileServer
 
