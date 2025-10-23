@@ -1,0 +1,36 @@
+{
+  "updated": "2024-05-08T00:00:00Z",
+  "icon": {
+    "filename": "icon/FruitSmash_Icon.png",
+    "robloxAssetId": "rbxassetid://13865093421",
+    "status": "uploaded",
+    "notes": "512x512 hero icon exported from design/fruit-smash/icon_final.psd"
+  },
+  "screenshots": [
+    {
+      "filename": "screenshots/01-classic-match.png",
+      "robloxAssetId": "rbxassetid://13865093422",
+      "status": "uploaded",
+      "caption": "Classic mode showdown with power-up overlays"
+    },
+    {
+      "filename": "screenshots/02-coop-boss.png",
+      "robloxAssetId": "rbxassetid://13865093423",
+      "status": "uploaded",
+      "caption": "Four-player co-op boss encounter in Jungle Jam"
+    },
+    {
+      "filename": "screenshots/03-custom-loadout.png",
+      "robloxAssetId": "rbxassetid://13865093424",
+      "status": "uploaded",
+      "caption": "Loadout customization with seasonal skins"
+    }
+  ],
+  "trailer": {
+    "filename": "trailer/FruitSmash_Trailer.mp4",
+    "robloxAssetId": "rbxassetid://13865093425",
+    "status": "uploaded",
+    "durationSeconds": 58,
+    "notes": "Rendered from marketing/videos/fruit-smash-trailer-final.prproj"
+  }
+}
