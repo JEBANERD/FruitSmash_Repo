@@ -10,6 +10,8 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
+local CameraFeelBus = require(script.Parent:WaitForChild("CameraFeelBus"))
+
 --// Player
 local localPlayer: Player = Players.LocalPlayer
 localPlayer:WaitForChild("PlayerGui") -- ensure GUI tree exists for mobile virtual buttons
@@ -45,6 +47,7 @@ local sprintToggleEnabled: boolean = false
 local isSprintRequested: boolean = false
 local isSprinting: boolean = false
 local currentStamina: number = STAMINA_MAX
+local reportedSprintState: boolean? = nil
 
 --// Actions
 local ACTION_SPRINT = "FruitSmash_Sprint"
@@ -180,6 +183,18 @@ local function updateSprintToggleFromAttribute(): ()
         end
 end
 
+local function applySprintState(newValue: boolean): ()
+        if isSprinting ~= newValue then
+                isSprinting = newValue
+        end
+        if reportedSprintState ~= newValue then
+                reportedSprintState = newValue
+                CameraFeelBus.ReportSprint(newValue)
+        end
+end
+
+applySprintState(false)
+
 --=============================================================
 -- Tick / Update
 --=============================================================
@@ -190,44 +205,40 @@ local function updateSprint(dt: number): ()
 		return
 	end
 
-	if not SPRINT_ENABLED then
-		if isSprinting then
-			isSprinting = false
-		end
-		if STAMINA_ENABLED and currentStamina < STAMINA_MAX then
-			currentStamina = math.min(STAMINA_MAX, currentStamina + STAMINA_REGEN_PER_SEC * dt)
-		end
-		applyHumanoidWalkSpeed()
-		return
-	end
+        if not SPRINT_ENABLED then
+                applySprintState(false)
+                if STAMINA_ENABLED and currentStamina < STAMINA_MAX then
+                        currentStamina = math.min(STAMINA_MAX, currentStamina + STAMINA_REGEN_PER_SEC * dt)
+                end
+                applyHumanoidWalkSpeed()
+                return
+        end
 
-	if h.Health <= 0 then
-		if isSprinting then
-			isSprinting = false
-		end
-		if STAMINA_ENABLED and currentStamina < STAMINA_MAX then
-			currentStamina = math.min(STAMINA_MAX, currentStamina + STAMINA_REGEN_PER_SEC * dt)
-		end
-		applyHumanoidWalkSpeed()
-		return
-	end
+        if h.Health <= 0 then
+                applySprintState(false)
+                if STAMINA_ENABLED and currentStamina < STAMINA_MAX then
+                        currentStamina = math.min(STAMINA_MAX, currentStamina + STAMINA_REGEN_PER_SEC * dt)
+                end
+                applyHumanoidWalkSpeed()
+                return
+        end
 
 	local isMoving = h.MoveDirection.Magnitude > 0.05
 	local staminaOK = (not STAMINA_ENABLED) or currentStamina > 0
 
 	local shouldSprint = isSprintRequested and isMoving and staminaOK
-	isSprinting = shouldSprint
+        applySprintState(shouldSprint)
 
-	if STAMINA_ENABLED then
-		if shouldSprint then
-			currentStamina = math.max(0, currentStamina - STAMINA_DRAIN_PER_SEC * dt)
-			if currentStamina <= 0 then
-				isSprinting = false
-				isSprintRequested = false
-			end
-		else
-			currentStamina = math.min(STAMINA_MAX, currentStamina + STAMINA_REGEN_PER_SEC * dt)
-		end
+        if STAMINA_ENABLED then
+                if shouldSprint then
+                        currentStamina = math.max(0, currentStamina - STAMINA_DRAIN_PER_SEC * dt)
+                        if currentStamina <= 0 then
+                                applySprintState(false)
+                                isSprintRequested = false
+                        end
+                else
+                        currentStamina = math.min(STAMINA_MAX, currentStamina + STAMINA_REGEN_PER_SEC * dt)
+                end
 	end
 
 	applyHumanoidWalkSpeed()
@@ -326,12 +337,12 @@ local function prepareHumanoid(h: Humanoid): ()
 	currentWalkSpeed = 0
 	applyHumanoidWalkSpeed()
 
-	if conHumanoidDied then conHumanoidDied:Disconnect(); conHumanoidDied = nil end
-	conHumanoidDied = h.Died:Connect(function()
-		isSprinting = false
-		isSprintRequested = false
-		applyHumanoidWalkSpeed()
-	end)
+        if conHumanoidDied then conHumanoidDied:Disconnect(); conHumanoidDied = nil end
+        conHumanoidDied = h.Died:Connect(function()
+                applySprintState(false)
+                isSprintRequested = false
+                applyHumanoidWalkSpeed()
+        end)
 
 	if conHeartbeat then conHeartbeat:Disconnect(); conHeartbeat = nil end
 	conHeartbeat = RunService.Heartbeat:Connect(onHeartbeat)
@@ -360,16 +371,16 @@ local function onCharacterAdded(newChar: Model): ()
 		conCharacterRemoving:Disconnect()
 		conCharacterRemoving = nil
 	end
-	conCharacterRemoving = c.AncestryChanged:Connect(function(_inst: Instance, parent: Instance?)
-		if parent == nil then
-			disconnectAll()
-			character = nil
-			humanoid = nil
-			isSprintRequested = false
-			isSprinting = false
-			currentWalkSpeed = 0
-		end
-	end)
+        conCharacterRemoving = c.AncestryChanged:Connect(function(_inst: Instance, parent: Instance?)
+                if parent == nil then
+                        disconnectAll()
+                        character = nil
+                        humanoid = nil
+                        isSprintRequested = false
+                        applySprintState(false)
+                        currentWalkSpeed = 0
+                end
+        end)
 end
 
 --=============================================================
@@ -398,12 +409,12 @@ end)
 -- Ensure references remain valid (handles teleports within same place etc.)
 RunService.Heartbeat:Connect(function()
 	local c: Model? = character
-	if c and not c:IsDescendantOf(Workspace) then
-		disconnectAll()
-		character = nil
-		humanoid = nil
-		isSprintRequested = false
-		isSprinting = false
-		currentWalkSpeed = 0
-	end
+        if c and not c:IsDescendantOf(Workspace) then
+                disconnectAll()
+                character = nil
+                humanoid = nil
+                isSprintRequested = false
+                applySprintState(false)
+                currentWalkSpeed = 0
+        end
 end)

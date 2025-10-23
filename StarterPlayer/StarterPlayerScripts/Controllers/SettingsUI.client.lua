@@ -4,6 +4,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService")
 local Lighting = game:GetService("Lighting")
 
 local localPlayer: Player = Players.LocalPlayer
@@ -16,6 +18,8 @@ local tutorialRemote: RemoteFunction? = remotesModule and remotesModule.RF_Tutor
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local configFolder = sharedFolder:WaitForChild("Config")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
 local GameConfigModule = require(configFolder:WaitForChild("GameConfig"))
 local GameConfig = if typeof((GameConfigModule :: any).Get) == "function" then (GameConfigModule :: any).Get() else GameConfigModule
 
@@ -81,6 +85,16 @@ local function resolvePaletteId(value: any): string
   return paletteOrder[1].Id
 end
 
+local supportedLocales = Localizer.getSupportedLocales()
+if #supportedLocales == 0 then
+  table.insert(supportedLocales, Localizer.getDefaultLocale())
+end
+
+local localeIndexLookup: {[string]: number} = {}
+for index, localeId in ipairs(supportedLocales) do
+  localeIndexLookup[localeId] = index
+end
+
 local function clampValue(key: string, value: any, fallback: number): number
   local numeric = if typeof(value) == "number" then value else tonumber(value)
   if typeof(numeric) ~= "number" then
@@ -110,6 +124,9 @@ local DEFAULT_SETTINGS = {
   CameraShakeStrength = clampValue("CameraShakeStrength", typeof(defaultsConfig) == "table" and (defaultsConfig :: any).CameraShakeStrength or 0.7, 0.7),
   ColorblindPalette = resolvePaletteId(typeof(defaultsConfig) == "table" and (defaultsConfig :: any).ColorblindPalette or nil),
   TextScale = clampValue("TextScale", typeof(defaultsConfig) == "table" and (defaultsConfig :: any).TextScale or 1, 1),
+  Locale = if typeof(defaultsConfig) == "table" and typeof((defaultsConfig :: any).Locale) == "string"
+    then Localizer.normalizeLocale((defaultsConfig :: any).Locale)
+    else Localizer.getDefaultLocale(),
 }
 
 local currentSettings = {
@@ -118,6 +135,7 @@ local currentSettings = {
   CameraShakeStrength = DEFAULT_SETTINGS.CameraShakeStrength,
   ColorblindPalette = DEFAULT_SETTINGS.ColorblindPalette,
   TextScale = DEFAULT_SETTINGS.TextScale,
+  Locale = DEFAULT_SETTINGS.Locale,
 }
 
 local COLOR_CORRECTION_NAME = "FruitSmash_Colorblind"
@@ -131,6 +149,127 @@ end
 
 local currentTextScale = currentSettings.TextScale or 1
 local trackedTextConnections: {RBXScriptConnection} = {}
+local controllerConnections: {RBXScriptConnection} = {}
+local focusOrder: {GuiObject} = {}
+local focusCleanupConnections: {[GuiObject]: RBXScriptConnection} = {}
+local toggleButton: TextButton? = nil
+local mainFrame: Frame? = nil
+local panelVisible = false
+
+local ACTION_TOGGLE_SETTINGS = "FruitSmash_Settings_Toggle"
+
+local function trackControllerConnection(connection: RBXScriptConnection)
+  table.insert(controllerConnections, connection)
+end
+
+local function isGamepadInputType(inputType: Enum.UserInputType): boolean
+  if inputType == Enum.UserInputType.Gamepad then
+    return true
+  end
+  local name = tostring(inputType)
+  return string.find(name, "Gamepad") ~= nil
+end
+
+local function cleanupFocusable(object: GuiObject)
+  local connection = focusCleanupConnections[object]
+  if connection then
+    connection:Disconnect()
+    focusCleanupConnections[object] = nil
+  end
+  for index, entry in ipairs(focusOrder) do
+    if entry == object then
+      table.remove(focusOrder, index)
+      break
+    end
+  end
+end
+
+local function rebuildFocusChain()
+  if toggleButton then
+    if panelVisible and toggleButton.Parent then
+      toggleButton.NextSelectionUp = nil
+    else
+      toggleButton.NextSelectionDown = nil
+      toggleButton.NextSelectionUp = nil
+    end
+  end
+
+  local previous: GuiObject? = if panelVisible and toggleButton and toggleButton.Parent then toggleButton else nil
+
+  for _, object in ipairs(focusOrder) do
+    local withinPanel = object.Parent and (not mainFrame or object:IsDescendantOf(mainFrame))
+    if panelVisible and withinPanel and object.Visible ~= false and (not object:IsA("GuiButton") or object.Active ~= false) then
+      if previous then
+        previous.NextSelectionDown = object
+      end
+      object.NextSelectionUp = previous
+      previous = object
+    else
+      object.NextSelectionUp = nil
+      object.NextSelectionDown = nil
+    end
+  end
+
+  if panelVisible and previous and previous ~= toggleButton then
+    previous.NextSelectionDown = nil
+  end
+end
+
+local function registerFocusable(object: GuiObject)
+  for _, entry in ipairs(focusOrder) do
+    if entry == object then
+      return
+    end
+  end
+
+  object.Selectable = true
+  focusCleanupConnections[object] = object.AncestryChanged:Connect(function(_, parent)
+    if parent == nil then
+      cleanupFocusable(object)
+      rebuildFocusChain()
+    end
+  end)
+  table.insert(focusOrder, object)
+  rebuildFocusChain()
+end
+
+local gamepadPreferred = isGamepadInputType(UserInputService:GetLastInputType())
+
+local function focusFirstControl()
+  if not gamepadPreferred then
+    return
+  end
+
+  if panelVisible then
+    for _, object in ipairs(focusOrder) do
+      if object.Parent and object.Visible ~= false then
+        GuiService.SelectedObject = object
+        return
+      end
+    end
+  end
+
+  if toggleButton and toggleButton.Parent then
+    GuiService.SelectedObject = toggleButton
+  end
+end
+
+local function setGamepadPreferred(preferred: boolean)
+  if gamepadPreferred == preferred then
+    return
+  end
+
+  gamepadPreferred = preferred
+  if not gamepadPreferred then
+    local selected = GuiService.SelectedObject
+    if selected and ((toggleButton and selected == toggleButton) or (mainFrame and selected:IsDescendantOf(mainFrame))) then
+      GuiService.SelectedObject = nil
+    end
+    return
+  end
+
+  focusFirstControl()
+end
 
 local function applyScaleToTextObject(instance: Instance)
   if not instance:IsA("TextLabel") and not instance:IsA("TextButton") and not instance:IsA("TextBox") then
@@ -220,8 +359,44 @@ local aimAssistSliderSet: ((number) -> ())? = nil
 local cameraShakeSliderSet: ((number) -> ())? = nil
 local textScaleSliderSet: ((number) -> ())? = nil
 local paletteValueLabel: TextLabel? = nil
+local localeLabel: TextLabel? = nil
+local localeDescriptionLabel: TextLabel? = nil
+local localeValueLabel: TextLabel? = nil
+local localePreviousButton: TextButton? = nil
+local localeNextButton: TextButton? = nil
 
 local pendingSave = false
+
+local function updateLocaleUI()
+  local localeId = currentSettings.Locale
+  if typeof(localeId) ~= "string" or localeId == "" then
+    localeId = Localizer.getDefaultLocale()
+  end
+  local displayName = Localizer.getLocaleDisplayName(localeId, localeId)
+  if localeLabel then
+    localeLabel.Text = Localizer.t("settings.localeLabel", nil, localeId)
+  end
+  if localeDescriptionLabel then
+    localeDescriptionLabel.Text = Localizer.t("settings.localeDescription", nil, localeId)
+  end
+  if localeValueLabel then
+    localeValueLabel.Text = Localizer.t("settings.localeValue", { name = displayName }, localeId)
+  end
+  if localePreviousButton then
+    localePreviousButton.Text = Localizer.t("settings.localePrevious", nil, localeId)
+    local multiple = #supportedLocales > 1
+    localePreviousButton.Active = multiple
+    localePreviousButton.AutoButtonColor = multiple
+    localePreviousButton.TextTransparency = multiple and 0 or 0.4
+  end
+  if localeNextButton then
+    localeNextButton.Text = Localizer.t("settings.localeNext", nil, localeId)
+    local multiple = #supportedLocales > 1
+    localeNextButton.Active = multiple
+    localeNextButton.AutoButtonColor = multiple
+    localeNextButton.TextTransparency = multiple and 0 or 0.4
+  end
+end
 
 local function scheduleSave()
   if pendingSave or not saveRemote then
@@ -239,6 +414,7 @@ local function scheduleSave()
       CameraShakeStrength = currentSettings.CameraShakeStrength,
       ColorblindPalette = currentSettings.ColorblindPalette,
       TextScale = currentSettings.TextScale,
+      Locale = currentSettings.Locale,
     }
     local ok, result = pcall(function()
       return saveRemote:InvokeServer(payload)
@@ -249,6 +425,10 @@ local function scheduleSave()
       currentSettings.CameraShakeStrength = clampValue("CameraShakeStrength", result.CameraShakeStrength, currentSettings.CameraShakeStrength)
       currentSettings.ColorblindPalette = resolvePaletteId(result.ColorblindPalette)
       currentSettings.TextScale = clampValue("TextScale", result.TextScale, currentSettings.TextScale)
+      if result.Locale ~= nil then
+        currentSettings.Locale = Localizer.normalizeLocale(result.Locale)
+        updateLocaleUI()
+      end
     end
   end)
 end
@@ -316,6 +496,21 @@ local function applySetting(key: string, value: any, skipSave: boolean?)
       updatePaletteUI()
     end
     return
+  elseif key == "Locale" then
+    local newValue = Localizer.normalizeLocale(value)
+    if currentSettings.Locale ~= newValue then
+      currentSettings.Locale = newValue
+      if not localeIndexLookup[newValue] then
+        table.insert(supportedLocales, newValue)
+        localeIndexLookup[newValue] = #supportedLocales
+      end
+      localPlayer:SetAttribute("Locale", newValue)
+      updateLocaleUI()
+      if not skipSave then scheduleSave() end
+    else
+      updateLocaleUI()
+    end
+    return
   elseif key == "TextScale" then
     local newValue = clampValue("TextScale", value, currentSettings.TextScale)
     if currentSettings.TextScale ~= newValue then
@@ -341,6 +536,7 @@ local function applySettings(settingsTable: any, skipSave: boolean?)
   applySetting("CameraShakeStrength", settingsTable.CameraShakeStrength, true)
   applySetting("ColorblindPalette", settingsTable.ColorblindPalette, true)
   applySetting("TextScale", settingsTable.TextScale, true)
+  applySetting("Locale", settingsTable.Locale, true)
   if not skipSave then
     scheduleSave()
   end
@@ -358,25 +554,26 @@ end
 
 local screenGui = createScreenGui()
 
-local toggleButton = Instance.new("TextButton")
+toggleButton = Instance.new("TextButton")
 toggleButton.Name = "ToggleButton"
-toggleButton.Size = UDim2.new(0, 140, 0, 36)
+toggleButton.Size = UDim2.new(0, 160, 0, 44)
 toggleButton.Position = UDim2.new(0, 16, 0, 16)
 toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
 toggleButton.AutoButtonColor = false
 toggleButton.TextColor3 = Color3.new(1, 1, 1)
 toggleButton.Font = Enum.Font.GothamSemibold
-toggleButton.TextSize = 16
+toggleButton.TextSize = 18
 toggleButton.Text = "Settings"
 toggleButton.Parent = screenGui
+toggleButton.Selectable = true
 
-local mainFrame = Instance.new("Frame")
+mainFrame = Instance.new("Frame")
 mainFrame.Name = "Panel"
 mainFrame.Visible = false
 mainFrame.Position = UDim2.new(0, 16, 0, 64)
 mainFrame.Size = UDim2.new(0, 340, 0, 380)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-mainFrame.BackgroundTransparency = 0.05
+mainFrame.BackgroundTransparency = 0.1
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
 
@@ -403,19 +600,21 @@ titleLabel.Parent = mainFrame
 
 local closeButton = Instance.new("TextButton")
 closeButton.Name = "CloseButton"
-closeButton.Size = UDim2.new(0, 80, 0, 28)
-closeButton.Position = UDim2.new(1, -90, 0, 12)
+closeButton.Size = UDim2.new(0, 96, 0, 40)
+closeButton.Position = UDim2.new(1, -106, 0, 14)
 closeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
 closeButton.AutoButtonColor = false
 closeButton.TextColor3 = Color3.new(1, 1, 1)
 closeButton.Font = Enum.Font.Gotham
-closeButton.TextSize = 14
+closeButton.TextSize = 16
 closeButton.Text = "Close"
 closeButton.Parent = mainFrame
 
 local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 8)
 closeCorner.Parent = closeButton
+
+registerFocusable(closeButton)
 
 local contentFrame = Instance.new("Frame")
 contentFrame.Name = "Content"
@@ -477,12 +676,12 @@ local function createToggleRow()
   sprintToggleButton.Name = "SprintModeButton"
   sprintToggleButton.AnchorPoint = Vector2.new(1, 0.5)
   sprintToggleButton.Position = UDim2.new(1, 0, 0.5, 0)
-  sprintToggleButton.Size = UDim2.new(0.35, 0, 0, 36)
+  sprintToggleButton.Size = UDim2.new(0.38, 0, 0, 44)
   sprintToggleButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
   sprintToggleButton.AutoButtonColor = false
   sprintToggleButton.TextColor3 = Color3.new(1, 1, 1)
   sprintToggleButton.Font = Enum.Font.GothamSemibold
-  sprintToggleButton.TextSize = 15
+  sprintToggleButton.TextSize = 16
   sprintToggleButton.Text = "Hold to Sprint"
   sprintToggleButton.Parent = row
 
@@ -490,7 +689,9 @@ local function createToggleRow()
   buttonCorner.CornerRadius = UDim.new(0, 10)
   buttonCorner.Parent = sprintToggleButton
 
-  sprintToggleButton.MouseButton1Click:Connect(function()
+  registerFocusable(sprintToggleButton)
+
+  sprintToggleButton.Activated:Connect(function()
     applySetting("SprintToggle", not currentSettings.SprintToggle)
   end)
 
@@ -526,25 +727,31 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
   valueLabel.Text = ""
   valueLabel.Parent = row
 
-  local sliderTrack = Instance.new("Frame")
+  local sliderTrack = Instance.new("TextButton")
   sliderTrack.Name = key .. "Track"
   sliderTrack.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
   sliderTrack.BorderSizePixel = 0
+  sliderTrack.AutoButtonColor = false
+  sliderTrack.Text = ""
   sliderTrack.Position = UDim2.new(0, 0, 0, 48)
-  sliderTrack.Size = UDim2.new(1, 0, 0, 8)
+  sliderTrack.Size = UDim2.new(1, 0, 0, 12)
   sliderTrack.Parent = row
+
+  registerFocusable(sliderTrack)
 
   local fill = Instance.new("Frame")
   fill.BackgroundColor3 = Color3.fromRGB(120, 180, 255)
   fill.BorderSizePixel = 0
   fill.Size = UDim2.new(0, 0, 1, 0)
+  fill.ZIndex = sliderTrack.ZIndex + 1
   fill.Parent = sliderTrack
 
   local knob = Instance.new("Frame")
   knob.BackgroundColor3 = Color3.fromRGB(200, 220, 255)
-  knob.Size = UDim2.new(0, 14, 0, 14)
+  knob.Size = UDim2.new(0, 18, 0, 18)
   knob.AnchorPoint = Vector2.new(0.5, 0.5)
   knob.Position = UDim2.new(0, 0, 0.5, 0)
+  knob.ZIndex = sliderTrack.ZIndex + 2
   knob.Parent = sliderTrack
 
   local knobCorner = Instance.new("UICorner")
@@ -553,6 +760,9 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
 
   local currentValue = minValue
   local dragging = false
+  local lastThumbstickStep = 0
+  local THUMBSTICK_DEADZONE = 0.25
+  local THUMBSTICK_REPEAT = 0.18
 
   local function formatValue(value: number): string
     if formatter then
@@ -584,6 +794,20 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
     end
   end
 
+  local function stepBy(deltaSteps: number)
+    if deltaSteps == 0 then
+      return
+    end
+    local increment = step
+    if increment <= 0 then
+      increment = (maxValue - minValue) / 20
+      if increment == 0 then
+        increment = 0.05
+      end
+    end
+    commit(currentValue + increment * deltaSteps, true)
+  end
+
   local function updateFromInput(positionX: number)
     local trackPosition = sliderTrack.AbsolutePosition.X
     local trackSize = sliderTrack.AbsoluteSize.X
@@ -608,15 +832,40 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
           end
         end
       end)
+    elseif input.UserInputType == Enum.UserInputType.Gamepad1 then
+      if input.KeyCode == Enum.KeyCode.DPadLeft then
+        stepBy(-1)
+      elseif input.KeyCode == Enum.KeyCode.DPadRight then
+        stepBy(1)
+      end
     end
   end)
 
   sliderTrack.InputChanged:Connect(function(input)
-    if not dragging then
+    if dragging then
+      if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        updateFromInput(input.Position.X)
+      end
       return
     end
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-      updateFromInput(input.Position.X)
+
+    if input.UserInputType == Enum.UserInputType.Gamepad1 and input.KeyCode == Enum.KeyCode.Thumbstick1 then
+      if GuiService.SelectedObject ~= sliderTrack then
+        lastThumbstickStep = 0
+        return
+      end
+
+      local direction = input.Position.X
+      local magnitude = math.abs(direction)
+      if magnitude > THUMBSTICK_DEADZONE then
+        local now = os.clock()
+        if now - lastThumbstickStep >= THUMBSTICK_REPEAT then
+          stepBy(direction > 0 and 1 or -1)
+          lastThumbstickStep = now
+        end
+      else
+        lastThumbstickStep = 0
+      end
     end
   end)
 
@@ -644,6 +893,10 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
     end
   end)
 
+  sliderTrack.SelectionLost:Connect(function()
+    lastThumbstickStep = 0
+  end)
+
   if key == "AimAssistWindow" then
     aimAssistSliderSet = function(value)
       currentValue = value
@@ -668,17 +921,118 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
   end
 end
 
+local function selectLocaleByOffset(delta: number)
+  if #supportedLocales <= 1 then
+    return
+  end
+  local currentId = currentSettings.Locale
+  local index = localeIndexLookup[currentId]
+  if not index then
+    index = 1
+  end
+  local newIndex = ((index - 1 + delta) % #supportedLocales) + 1
+  local target = supportedLocales[newIndex]
+  if target then
+    applySetting("Locale", target)
+  end
+end
+
+local function createLocaleRow()
+  local row = Instance.new("Frame")
+  row.Name = "LocaleRow"
+  row.BackgroundTransparency = 1
+  row.Size = UDim2.new(1, 0, 0, 72)
+  row.LayoutOrder = #contentFrame:GetChildren() + 1
+  row.Parent = contentFrame
+
+  localeLabel = Instance.new("TextLabel")
+  localeLabel.BackgroundTransparency = 1
+  localeLabel.Size = UDim2.new(1, -120, 0, 22)
+  localeLabel.Font = Enum.Font.Gotham
+  localeLabel.TextSize = 16
+  localeLabel.TextColor3 = Color3.new(1, 1, 1)
+  localeLabel.TextXAlignment = Enum.TextXAlignment.Left
+  localeLabel.Parent = row
+
+  localeDescriptionLabel = Instance.new("TextLabel")
+  localeDescriptionLabel.BackgroundTransparency = 1
+  localeDescriptionLabel.Size = UDim2.new(1, -120, 0, 18)
+  localeDescriptionLabel.Position = UDim2.new(0, 0, 0, 24)
+  localeDescriptionLabel.Font = Enum.Font.Gotham
+  localeDescriptionLabel.TextSize = 13
+  localeDescriptionLabel.TextColor3 = Color3.fromRGB(170, 170, 190)
+  localeDescriptionLabel.TextXAlignment = Enum.TextXAlignment.Left
+  localeDescriptionLabel.TextWrapped = true
+  localeDescriptionLabel.Parent = row
+
+  localeValueLabel = Instance.new("TextLabel")
+  localeValueLabel.BackgroundTransparency = 1
+  localeValueLabel.Size = UDim2.new(0.6, 0, 0, 22)
+  localeValueLabel.Position = UDim2.new(0, 0, 0, 46)
+  localeValueLabel.Font = Enum.Font.GothamSemibold
+  localeValueLabel.TextSize = 16
+  localeValueLabel.TextColor3 = Color3.new(1, 1, 1)
+  localeValueLabel.TextXAlignment = Enum.TextXAlignment.Left
+  localeValueLabel.Parent = row
+
+  localePreviousButton = Instance.new("TextButton")
+  localePreviousButton.Size = UDim2.new(0, 36, 0, 32)
+  localePreviousButton.Position = UDim2.new(0.72, 0, 0, 40)
+  localePreviousButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
+  localePreviousButton.AutoButtonColor = #supportedLocales > 1
+  localePreviousButton.Active = #supportedLocales > 1
+  localePreviousButton.TextColor3 = Color3.new(1, 1, 1)
+  localePreviousButton.Font = Enum.Font.GothamSemibold
+  localePreviousButton.TextSize = 16
+  localePreviousButton.Parent = row
+
+  localeNextButton = Instance.new("TextButton")
+  localeNextButton.Size = UDim2.new(0, 36, 0, 32)
+  localeNextButton.Position = UDim2.new(0.85, 0, 0, 40)
+  localeNextButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
+  localeNextButton.AutoButtonColor = #supportedLocales > 1
+  localeNextButton.Active = #supportedLocales > 1
+  localeNextButton.TextColor3 = Color3.new(1, 1, 1)
+  localeNextButton.Font = Enum.Font.GothamSemibold
+  localeNextButton.TextSize = 16
+  localeNextButton.Parent = row
+
+  local cornerPrev = Instance.new("UICorner")
+  cornerPrev.CornerRadius = UDim.new(0, 8)
+  cornerPrev.Parent = localePreviousButton
+
+  local cornerNext = Instance.new("UICorner")
+  cornerNext.CornerRadius = UDim.new(0, 8)
+  cornerNext.Parent = localeNextButton
+
+  localePreviousButton.MouseButton1Click:Connect(function()
+    if #supportedLocales > 1 then
+      selectLocaleByOffset(-1)
+    end
+  end)
+
+  localeNextButton.MouseButton1Click:Connect(function()
+    if #supportedLocales > 1 then
+      selectLocaleByOffset(1)
+    end
+  end)
+
+  updateLocaleUI()
+end
+
 local function createPaletteRow()
   local row = Instance.new("Frame")
   row.Name = "PaletteRow"
   row.BackgroundTransparency = 1
-  row.Size = UDim2.new(1, 0, 0, 52)
+  row.Size = UDim2.new(1, 0, 0, 60)
   row.LayoutOrder = #contentFrame:GetChildren() + 1
   row.Parent = contentFrame
 
-  paletteValueLabel = Instance.new("TextLabel")
+  paletteValueLabel = Instance.new("TextButton")
+  paletteValueLabel.Name = "PaletteValue"
   paletteValueLabel.BackgroundTransparency = 1
-  paletteValueLabel.Size = UDim2.new(0.7, 0, 0, 22)
+  paletteValueLabel.AutoButtonColor = false
+  paletteValueLabel.Size = UDim2.new(0.7, 0, 0, 26)
   paletteValueLabel.Font = Enum.Font.Gotham
   paletteValueLabel.TextSize = 16
   paletteValueLabel.TextColor3 = Color3.new(1, 1, 1)
@@ -686,26 +1040,30 @@ local function createPaletteRow()
   paletteValueLabel.Text = ""
   paletteValueLabel.Parent = row
 
+  registerFocusable(paletteValueLabel)
+
   local previousButton = Instance.new("TextButton")
-  previousButton.Size = UDim2.new(0, 36, 0, 32)
-  previousButton.Position = UDim2.new(0.72, 0, 0, 10)
+  previousButton.Size = UDim2.new(0, 44, 0, 44)
+  previousButton.Position = UDim2.new(0.72, 0, 0, 8)
   previousButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
   previousButton.AutoButtonColor = false
   previousButton.TextColor3 = Color3.new(1, 1, 1)
   previousButton.Font = Enum.Font.GothamSemibold
-  previousButton.TextSize = 16
+  previousButton.TextSize = 18
   previousButton.Text = "<"
+  previousButton.Selectable = false
   previousButton.Parent = row
 
   local nextButton = Instance.new("TextButton")
-  nextButton.Size = UDim2.new(0, 36, 0, 32)
-  nextButton.Position = UDim2.new(0.85, 0, 0, 10)
+  nextButton.Size = UDim2.new(0, 44, 0, 44)
+  nextButton.Position = UDim2.new(0.85, 0, 0, 8)
   nextButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
   nextButton.AutoButtonColor = false
   nextButton.TextColor3 = Color3.new(1, 1, 1)
   nextButton.Font = Enum.Font.GothamSemibold
-  nextButton.TextSize = 16
+  nextButton.TextSize = 18
   nextButton.Text = ">"
+  nextButton.Selectable = false
   nextButton.Parent = row
 
   local cornerA = Instance.new("UICorner")
@@ -716,6 +1074,8 @@ local function createPaletteRow()
   cornerB.CornerRadius = UDim.new(0, 8)
   cornerB.Parent = nextButton
 
+  local paletteThumbstickTime = 0
+
   local function selectByOffset(delta: number)
     local currentId = currentSettings.ColorblindPalette
     local index = paletteIndexLookup[currentId] or 1
@@ -723,12 +1083,53 @@ local function createPaletteRow()
     applySetting("ColorblindPalette", paletteOrder[newIndex].Id)
   end
 
-  previousButton.MouseButton1Click:Connect(function()
+  previousButton.Activated:Connect(function()
     selectByOffset(-1)
   end)
 
-  nextButton.MouseButton1Click:Connect(function()
+  nextButton.Activated:Connect(function()
     selectByOffset(1)
+  end)
+
+  paletteValueLabel.Activated:Connect(function()
+    selectByOffset(1)
+  end)
+
+  paletteValueLabel.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Gamepad1 then
+      if input.KeyCode == Enum.KeyCode.DPadLeft then
+        selectByOffset(-1)
+      elseif input.KeyCode == Enum.KeyCode.DPadRight then
+        selectByOffset(1)
+      end
+    end
+  end)
+
+  paletteValueLabel.InputChanged:Connect(function(input)
+    if input.UserInputType ~= Enum.UserInputType.Gamepad1 or input.KeyCode ~= Enum.KeyCode.Thumbstick1 then
+      return
+    end
+
+    if GuiService.SelectedObject ~= paletteValueLabel then
+      paletteThumbstickTime = 0
+      return
+    end
+
+    local axis = input.Position.X
+    if math.abs(axis) < 0.3 then
+      paletteThumbstickTime = 0
+      return
+    end
+
+    local now = os.clock()
+    if now - paletteThumbstickTime >= 0.2 then
+      selectByOffset(axis > 0 and 1 or -1)
+      paletteThumbstickTime = now
+    end
+  end)
+
+  paletteValueLabel.SelectionLost:Connect(function()
+    paletteThumbstickTime = 0
   end)
 
   updatePaletteUI()
@@ -769,12 +1170,12 @@ local function createTutorialResetRow()
   button.Name = "ResetTutorialButton"
   button.AnchorPoint = Vector2.new(1, 0)
   button.Position = UDim2.new(1, 0, 0, 30)
-  button.Size = UDim2.new(0, 150, 0, 36)
+  button.Size = UDim2.new(0, 160, 0, 44)
   button.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
   button.AutoButtonColor = false
   button.TextColor3 = Color3.new(1, 1, 1)
   button.Font = Enum.Font.GothamSemibold
-  button.TextSize = 15
+  button.TextSize = 16
   button.Text = "Reset Tutorial"
   button.Parent = row
 
@@ -790,8 +1191,10 @@ local function createTutorialResetRow()
     return
   end
 
+  registerFocusable(button)
+
   local busy = false
-  button.MouseButton1Click:Connect(function()
+  button.Activated:Connect(function()
     if busy then
       return
     end
@@ -833,6 +1236,44 @@ local function createTutorialResetRow()
   end)
 end
 
+local function setPanelVisible(visible: boolean)
+  if panelVisible == visible then
+    if mainFrame then
+      if visible then
+        mainFrame.Visible = true
+      else
+        mainFrame.BackgroundTransparency = 0.1
+        mainFrame.Visible = false
+      end
+    end
+    return
+  end
+
+  panelVisible = visible
+
+  if mainFrame then
+    if visible then
+      mainFrame.Visible = true
+      TweenService:Create(mainFrame, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0.05,
+      }):Play()
+    else
+      mainFrame.BackgroundTransparency = 0.1
+      mainFrame.Visible = false
+    end
+  end
+
+  rebuildFocusChain()
+
+  if visible then
+    if gamepadPreferred then
+      focusFirstControl()
+    end
+  elseif gamepadPreferred and toggleButton and toggleButton.Parent then
+    GuiService.SelectedObject = toggleButton
+  end
+end
+
 local function formatPercentage(value: number): string
   return string.format("%d%%", math.floor(math.clamp(value, 0, 1) * 100 + 0.5))
 end
@@ -855,15 +1296,59 @@ createSliderRow("Camera Shake Strength", "CameraShakeStrength", 0, 1, 0.05, form
 createPaletteRow()
 
 createSectionLabel("UI")
+createLocaleRow()
 createSliderRow("Text Scale", "TextScale", clampValue("TextScale", 0.8, 0.8), clampValue("TextScale", 1.4, 1.4), 0.05, formatTextScale)
 
 createSectionLabel("Onboarding")
 createTutorialResetRow()
 
+trackControllerConnection(UserInputService.LastInputTypeChanged:Connect(function(newType)
+  if isGamepadInputType(newType) then
+    setGamepadPreferred(true)
+  elseif not UserInputService.GamepadEnabled then
+    setGamepadPreferred(false)
+  end
+end))
+
+trackControllerConnection(UserInputService.GamepadConnected:Connect(function()
+  setGamepadPreferred(true)
+end))
+
+trackControllerConnection(UserInputService.GamepadDisconnected:Connect(function()
+  if not UserInputService.GamepadEnabled then
+    setGamepadPreferred(false)
+  else
+    setGamepadPreferred(isGamepadInputType(UserInputService:GetLastInputType()))
+  end
+end))
+
+do
+  local okOpened, menuOpened = pcall(function()
+    return GuiService.MenuOpened
+  end)
+  if okOpened and menuOpened then
+    trackControllerConnection((menuOpened :: any):Connect(function()
+      setPanelVisible(false)
+    end))
+  end
+end
+
+ContextActionService:UnbindAction(ACTION_TOGGLE_SETTINGS)
+ContextActionService:BindAction(ACTION_TOGGLE_SETTINGS, function(_actionName: string, state: Enum.UserInputState)
+  if state ~= Enum.UserInputState.Begin then
+    return Enum.ContextActionResult.Pass
+  end
+  setPanelVisible(not panelVisible)
+  return Enum.ContextActionResult.Sink
+end, false, Enum.KeyCode.ButtonSelect)
+
+setGamepadPreferred(gamepadPreferred or UserInputService.GamepadEnabled)
+
 applyColorblindPalette(currentSettings.ColorblindPalette)
 refreshAllText()
 updateSprintToggleUI()
 updatePaletteUI()
+updateLocaleUI()
 
 local function requestInitialSettings()
   if not saveRemote then
@@ -890,15 +1375,24 @@ end
 
 requestInitialSettings()
 
-toggleButton.MouseButton1Click:Connect(function()
-  mainFrame.Visible = not mainFrame.Visible
-  if mainFrame.Visible then
-    TweenService:Create(mainFrame, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0.05 }):Play()
-  end
+toggleButton.Activated:Connect(function()
+  setPanelVisible(not panelVisible)
 end)
 
-closeButton.MouseButton1Click:Connect(function()
-  mainFrame.Visible = false
+closeButton.Activated:Connect(function()
+  setPanelVisible(false)
+end)
+
+script.Destroying:Connect(function()
+  ContextActionService:UnbindAction(ACTION_TOGGLE_SETTINGS)
+  for _, connection in ipairs(controllerConnections) do
+    connection:Disconnect()
+  end
+  table.clear(controllerConnections)
+  for _, connection in pairs(focusCleanupConnections) do
+    connection:Disconnect()
+  end
+  table.clear(focusCleanupConnections)
 end)
 
 applySettings(currentSettings, true)

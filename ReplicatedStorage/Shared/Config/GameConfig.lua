@@ -50,6 +50,7 @@ C.Player = {
                         CameraShakeStrength = 0.7,
                         ColorblindPalette = "Off",
                         TextScale = 1,
+                        Locale = "en",
                 },
                 Limits = {
                         AimAssistWindow = { Min = 0, Max = 1 },
@@ -147,10 +148,25 @@ C.Obstacles = {
 
 -- == Economy ==
 C.Economy = {
-	CoinsPerFruitOverride = nil, -- use FruitConfig values when nil
-	WaveClearBonus = { Base = 20, PerLevel = 5 },     -- 20 + 5*Level
-	LevelClearBonus = { Base = 50, PerLevel = 20 },   -- 50 + 20*Level
-	PointsPerFruitOverride = nil, -- use FruitConfig values when nil
+        CoinsPerFruitOverride = nil, -- use FruitConfig values when nil
+        WaveClearBonus = {
+                -- Each band starts counting PerLevel from its MinLevel to ease tuning
+                Bands = {
+                        { MinLevel = 1,  Base = 14, PointsBase = 6,  PerLevel = 1, PointsPerLevel = 1 },
+                        { MinLevel = 10, Base = 22, PointsBase = 8,  PerLevel = 1, PointsPerLevel = 1 },
+                        { MinLevel = 20, Base = 28, PointsBase = 10, PerLevel = 1, PointsPerLevel = 1 },
+                        { MinLevel = 30, Base = 34, PointsBase = 12, PerLevel = 1, PointsPerLevel = 1 },
+                },
+        },
+        LevelClearBonus = {
+                Bands = {
+                        { MinLevel = 1,  Base = 35, PointsBase = 18, PerLevel = 2, PointsPerLevel = 1 },
+                        { MinLevel = 10, Base = 60, PointsBase = 22, PerLevel = 3, PointsPerLevel = 1 },
+                        { MinLevel = 20, Base = 80, PointsBase = 26, PerLevel = 3, PointsPerLevel = 2 },
+                        { MinLevel = 30, Base = 95, PointsBase = 30, PerLevel = 3, PointsPerLevel = 2 },
+                },
+        },
+        PointsPerFruitOverride = nil, -- use FruitConfig values when nil
 }
 
 -- == Rerolls & Continues ==

@@ -87,7 +87,11 @@ if messageBody == "" then
     messageBody = "version=unknown"
 end
 
-print(string.format("[VersionAnnounce] Fruit Smash %s", messageBody))
+local prettyVersion = version ~= "" and version or "unknown"
+local prettyCommit = commit ~= "" and commit or "unknown"
+local metadataSuffix = messageBody ~= "" and string.format(" [%s]", messageBody) or ""
+
+print(string.format("[VersionAnnounce] FruitSmash v%s (commit %s)%s", prettyVersion, prettyCommit, metadataSuffix))
 
 pcall(game.SetAttribute, game, "BuildVersion", version)
 pcall(game.SetAttribute, game, "BuildCommit", commit)

@@ -227,6 +227,10 @@ local function formatStateSummary(): string
         if typeof(phase) == "string" and phase ~= "" then
                 table.insert(pieces, phase)
         end
+        local laneCount = currentState.laneCount
+        if typeof(laneCount) == "number" and laneCount > 0 then
+                table.insert(pieces, string.format("%d lanes", laneCount))
+        end
         local prepRemaining = currentState.prepRemaining
         if typeof(prepRemaining) == "number" then
                 table.insert(pieces, string.format("Prep %ds", prepRemaining))
@@ -294,6 +298,21 @@ local turretRow = createRow()
 local turretBox = createTextBox(turretRow, "Rate", if typeof(currentState.turretRate) == "number" then string.format("%.2f", currentState.turretRate) else "1.00")
 local turretButton = createTextButton(turretRow, "Apply Rate")
 
+local macrosLabel = createLabel("Regression Macros", 18, true)
+macrosLabel.LayoutOrder = 30
+
+local macroRow1 = createRow()
+local macroSkipPrepButton = createTextButton(macroRow1, "Macro: Skip Prep")
+local macroSetLevelButton = createTextButton(macroRow1, "Macro: Set Level")
+
+local macroRow2 = createRow()
+local macroGrantTokensButton = createTextButton(macroRow2, "Macro: Grant Tokens")
+local macroAddCoinsButton = createTextButton(macroRow2, "Macro: Add Coins")
+
+local macroRow3 = createRow()
+local macroStressSpawnButton = createTextButton(macroRow3, "Macro: Stress Spawn")
+local macroClearFruitButton = createTextButton(macroRow3, "Macro: Clear Fruit")
+
 local function refreshState(silent: boolean?)
         local payload = {}
         if currentArenaId then
@@ -309,6 +328,15 @@ local function toggleObstacles()
                 arenaId = currentArenaId,
                 disabled = not disabled,
         })
+        handleResponse(response)
+end
+
+local function runMacro(macroId: string)
+        local payload = { macro = macroId }
+        if currentArenaId then
+                payload.arenaId = currentArenaId
+        end
+        local response = invokeRemote("macro", payload)
         handleResponse(response)
 end
 
@@ -376,6 +404,30 @@ turretButton.MouseButton1Click:Connect(function()
         })
         handleResponse(response)
         updateButtonStates()
+end)
+
+macroSkipPrepButton.MouseButton1Click:Connect(function()
+        runMacro("skipprep")
+end)
+
+macroSetLevelButton.MouseButton1Click:Connect(function()
+        runMacro("setlevel")
+end)
+
+macroGrantTokensButton.MouseButton1Click:Connect(function()
+        runMacro("granttokens")
+end)
+
+macroAddCoinsButton.MouseButton1Click:Connect(function()
+        runMacro("addcoins")
+end)
+
+macroStressSpawnButton.MouseButton1Click:Connect(function()
+        runMacro("stressspawn")
+end)
+
+macroClearFruitButton.MouseButton1Click:Connect(function()
+        runMacro("clearfruit")
 end)
 
 local PANEL_TOGGLE_KEY = Enum.KeyCode.F10

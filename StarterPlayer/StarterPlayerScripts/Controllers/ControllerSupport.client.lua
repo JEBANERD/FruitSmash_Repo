@@ -3,6 +3,7 @@
 local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local localPlayer = Players.LocalPlayer
@@ -26,6 +27,8 @@ local tokenSlotCount = math.clamp(quickbarConfig.TokenSlots or 3, 0, 8)
 if meleeSlotCount + tokenSlotCount <= 0 then
         return
 end
+
+local CameraFeelBus = require(script.Parent:WaitForChild("CameraFeelBus"))
 
 type SlotKind = "melee" | "token"
 type SlotDefinition = {
@@ -62,6 +65,8 @@ local function requestUseToken(slotIndex: number): boolean
                 return false
         end
 
+        CameraFeelBus.TokenBump()
+
         local success, result = pcall(function()
                 return remote:InvokeServer(slotIndex)
         end)
@@ -96,6 +101,32 @@ local pageStartIndex = 1
 local connections: { RBXScriptConnection } = {}
 local quickbarConnections: { RBXScriptConnection } = {}
 local boundActions: { string } = {}
+local menuOpen = false
+
+local function isDescendantOfQuickbar(instance: Instance?): boolean
+        while instance do
+                if instance == quickbarFrame then
+                        return true
+                end
+                instance = instance.Parent
+        end
+        return false
+end
+
+local function shouldAllowQuickbarInput(): boolean
+        if not quickbarFrame or not quickbarFrame.Parent then
+                return false
+        end
+        if menuOpen then
+                return false
+        end
+
+        local selected = GuiService.SelectedObject
+        if selected and not isDescendantOfQuickbar(selected) then
+                return false
+        end
+        return true
+end
 
 local function isGamepadInputType(inputType: Enum.UserInputType): boolean
         if inputType == Enum.UserInputType.Gamepad then
@@ -122,7 +153,7 @@ local function clearButtonTracking(button: GuiButton)
 end
 
 local function updateGlyphVisibility()
-        local shouldShow = gamepadPreferred and quickbarFrame ~= nil
+        local shouldShow = gamepadPreferred and quickbarFrame ~= nil and quickbarFrame.Parent ~= nil and shouldAllowQuickbarInput()
         for button, glyph in pairs(glyphObjects) do
                 local assigned = glyphAssignments[button]
                 glyph.Visible = shouldShow and assigned ~= nil
@@ -310,7 +341,11 @@ end
 
 local function activateSlot(slotIndex: number): boolean
         if slotIndex < 1 or slotIndex > #slotDefinitions then
-                        return false
+                return false
+        end
+
+        if not shouldAllowQuickbarInput() then
+                return false
         end
 
         local button = slotButtonsOrdered[slotIndex]
@@ -347,6 +382,10 @@ local function cycleSlots(delta: number): boolean
                 return false
         end
 
+        if not shouldAllowQuickbarInput() then
+                return false
+        end
+
         local dpadCount = #DPAD_LAYOUT
         local maxStart = math.max(totalSlots - (dpadCount - 1), 1)
         if maxStart <= 1 then
@@ -370,6 +409,10 @@ local function cycleSlots(delta: number): boolean
 end
 
 local function useFirstAvailableToken(): boolean
+        if not shouldAllowQuickbarInput() then
+                return false
+        end
+
         for slotIndex, definition in ipairs(slotDefinitions) do
                 if definition.kind == "token" then
                         local button = slotButtonsOrdered[slotIndex]
@@ -425,7 +468,32 @@ connections = {
                         setGamepadPreferred(isGamepadInputType(UserInputService:GetLastInputType()))
                 end
         end),
+        GuiService:GetPropertyChangedSignal("SelectedObject"):Connect(function()
+                updateGlyphVisibility()
+        end),
 }
+
+do
+        local okOpened, signalOpened = pcall(function()
+                return GuiService.MenuOpened
+        end)
+        if okOpened and signalOpened then
+                table.insert(connections, (signalOpened :: any):Connect(function()
+                        menuOpen = true
+                        updateGlyphVisibility()
+                end))
+        end
+
+        local okClosed, signalClosed = pcall(function()
+                return GuiService.MenuClosed
+        end)
+        if okClosed and signalClosed then
+                table.insert(connections, (signalClosed :: any):Connect(function()
+                        menuOpen = false
+                        updateGlyphVisibility()
+                end))
+        end
+end
 
 setGamepadPreferred(gamepadPreferred or UserInputService.GamepadEnabled)
 
@@ -435,6 +503,10 @@ for offset, directionInfo in ipairs(DPAD_LAYOUT) do
         local actionName = ACTION_PREFIX .. "DPad" .. directionInfo.name
         bindAction(actionName, function(_actionName: string, state: Enum.UserInputState)
                 if state ~= Enum.UserInputState.Begin then
+                        return Enum.ContextActionResult.Pass
+                end
+
+                if not shouldAllowQuickbarInput() then
                         return Enum.ContextActionResult.Pass
                 end
 
@@ -450,6 +522,9 @@ bindAction(ACTION_PREFIX .. "CyclePrev", function(_actionName: string, state: En
         if state ~= Enum.UserInputState.Begin then
                 return Enum.ContextActionResult.Pass
         end
+        if not shouldAllowQuickbarInput() then
+                return Enum.ContextActionResult.Pass
+        end
         if cycleSlots(-1) then
                 return Enum.ContextActionResult.Sink
         end
@@ -460,6 +535,9 @@ bindAction(ACTION_PREFIX .. "CycleNext", function(_actionName: string, state: En
         if state ~= Enum.UserInputState.Begin then
                 return Enum.ContextActionResult.Pass
         end
+        if not shouldAllowQuickbarInput() then
+                return Enum.ContextActionResult.Pass
+        end
         if cycleSlots(1) then
                 return Enum.ContextActionResult.Sink
         end
@@ -468,6 +546,9 @@ end, Enum.KeyCode.ButtonR1)
 
 bindAction(ACTION_PREFIX .. "TokenButton", function(_actionName: string, state: Enum.UserInputState)
         if state ~= Enum.UserInputState.Begin then
+                return Enum.ContextActionResult.Pass
+        end
+        if not shouldAllowQuickbarInput() then
                 return Enum.ContextActionResult.Pass
         end
         if useFirstAvailableToken() then
