@@ -5,34 +5,50 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local FruitConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("FruitConfig"))
-local ProjectileServer = require(script.Parent:WaitForChild("ProjectileServer"))
 local ArenaAdapter = require(script.Parent:WaitForChild("Libraries"):WaitForChild("ArenaAdapter"))
 local ContentRegistry = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Content"):WaitForChild("ContentRegistry"))
 
-local ProjectileServer
+local ProjectileServer: any = nil
 do
-    local combatFolder = ServerScriptService:FindFirstChild("Combat")
-    local projectileServerModule = combatFolder and combatFolder:FindFirstChild("ProjectileServer")
-    if projectileServerModule then
-        local ok, result = pcall(require, projectileServerModule)
+    local primaryModule = script.Parent:FindFirstChild("ProjectileServer")
+    if primaryModule and primaryModule:IsA("ModuleScript") then
+        local ok, result = pcall(require, primaryModule)
         if ok then
             ProjectileServer = result
         else
-            warn(string.format("[FruitSpawnerServer] Failed to require ProjectileServer: %s", result))
+            warn(string.format("[FruitSpawnerServer] Failed to require ProjectileServer: %s", tostring(result)))
         end
-    else
-        warn("[FruitSpawnerServer] ProjectileServer module is missing")
+    end
+
+    if not ProjectileServer then
+        local combatFolder = ServerScriptService:FindFirstChild("Combat")
+        local projectileServerModule = combatFolder and combatFolder:FindFirstChild("ProjectileServer")
+        if projectileServerModule and projectileServerModule:IsA("ModuleScript") then
+            local ok, result = pcall(require, projectileServerModule)
+            if ok then
+                ProjectileServer = result
+            else
+                warn(string.format("[FruitSpawnerServer] Failed to require ProjectileServer: %s", tostring(result)))
+            end
+        else
+            warn("[FruitSpawnerServer] ProjectileServer module is missing")
+        end
     end
 end
 
-local ProjectileMotionServer
-local projectileModule = script.Parent:FindFirstChild("ProjectileMotionServer")
-if projectileModule then
-    local ok, result = pcall(require, projectileModule)
-    if ok then
-        ProjectileMotionServer = result
-    else
-        warn(string.format("[FruitSpawnerServer] Failed to require ProjectileMotionServer: %s", result))
+local ProjectileMotionServer: any = nil
+do
+    local projectileModule = script.Parent:FindFirstChild("ProjectileMotionServer")
+    if projectileModule and projectileModule:IsA("ModuleScript") then
+        local ok, result = pcall(require, projectileModule)
+        if ok then
+            ProjectileMotionServer = result
+        else
+            warn(string.format("[FruitSpawnerServer] Failed to require ProjectileMotionServer: %s", tostring(result)))
+        end
+    end
+end
+
 local random = Random.new()
 
 local FRUIT_ASSET_PREFIX = "Fruit."
@@ -137,6 +153,29 @@ local function setAttributeIfPresent(instance, name, value)
     end
 end
 
+local function bindProjectile(instance, pathProfile)
+    if not instance or not ProjectileMotionServer then
+        return
+    end
+
+    local binder = ProjectileMotionServer :: any
+    local bindFunction
+    if typeof(binder.Bind) == "function" then
+        bindFunction = binder.Bind
+    elseif typeof(binder.BindProjectile) == "function" then
+        bindFunction = binder.BindProjectile
+    end
+
+    if not bindFunction then
+        return
+    end
+
+    local ok, err = pcall(bindFunction, binder, instance, pathProfile)
+    if not ok then
+        warn(string.format("[FruitSpawnerServer] Failed to bind projectile motion for %s: %s", describeInstance(instance), tostring(err)))
+    end
+end
+
 local function configureProjectile(instance, stats, pathProfile)
     if not instance then
         return
@@ -166,10 +205,6 @@ local function configureProjectile(instance, stats, pathProfile)
     end
 end
 
-local function resolveLane(arenaState, laneId)
-    local lanes = arenaState and arenaState.lanes
-    if not lanes then
-        return nil
 local function applyOwnershipAttributes(target, arenaId, laneIdentifier, laneIndex)
     setAttribute(target, "ArenaId", arenaId)
     setAttribute(target, "Lane", laneIdentifier)
@@ -246,29 +281,6 @@ local function getLaneCFrame(lane)
     end
 
     return CFrame.new()
-end
-
-local function buildMotionParams(arenaId, laneIdentifier, laneIndex, stats, laneFrame)
-    local profile
-    if stats and typeof(stats.Path) == "string" then
-        profile = stats.Path
-    else
-        profile = "straight"
-    end
-
-    local params = {
-        ArenaId = arenaId,
-        Lane = laneIdentifier,
-        LaneIndex = laneIndex,
-        FruitId = stats and stats.Id or nil,
-        Profile = profile,
-        Speed = stats and stats.Speed or nil,
-    }
-
-    params.Direction = laneFrame.LookVector
-    params.Up = laneFrame.UpVector
-
-    return params
 end
 
 local function createFruitPrimitive(name, size, originCFrame)
@@ -402,12 +414,26 @@ local function configureFruitInstance(instance, size, originCFrame)
     return targetPart
 end
 
-local function buildPathProfile(arenaId, laneId, stats)
+local function buildPathProfile(arenaId, laneIdentifier, laneIndex, stats, laneFrame)
+    local profileName = "straight"
+    if stats and typeof(stats.Path) == "string" and stats.Path ~= "" then
+        profileName = stats.Path
+    end
+
+    local direction = laneFrame and laneFrame.LookVector or Vector3.new(0, 0, -1)
+    local up = laneFrame and laneFrame.UpVector or Vector3.new(0, 1, 0)
+    local position = laneFrame and laneFrame.Position or Vector3.new()
+
     return {
         ArenaId = arenaId,
-        LaneId = laneId,
-        Path = stats.Path,
-        FruitId = stats.Id,
+        LaneId = laneIdentifier,
+        LaneIndex = laneIndex,
+        FruitId = stats and stats.Id or nil,
+        Profile = profileName,
+        Direction = direction,
+        Up = up,
+        Position = position,
+        Speed = stats and stats.Speed or nil,
     }
 end
 
@@ -427,7 +453,7 @@ local function distributeValue(total, count)
     return distribution
 end
 
-local function spawnSingleFruit(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, motionParams, fruitId)
+local function spawnSingleFruit(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, pathProfile, fruitId)
     local fruitName = stats and stats.Id or fruitId or "Fruit"
     if not stats then
         local fallback = createFruitPrimitive(fruitName, DEFAULT_FRUIT_SIZE, laneFrame)
@@ -437,7 +463,7 @@ local function spawnSingleFruit(arenaId, laneIdentifier, laneIndex, stats, conta
         applyOwnershipAttributes(fallback, arenaId, laneIdentifier, laneIndex)
         tagInstance(fallback, arenaId, laneIdentifier, laneIndex)
 
-        ProjectileServer.Track(fallback, motionParams)
+        configureProjectile(fallback, nil, pathProfile)
 
         return fallback
     end
@@ -489,12 +515,16 @@ local function spawnSingleFruit(arenaId, laneIdentifier, laneIndex, stats, conta
         applyOwnershipAttributes(root, arenaId, laneIdentifier, laneIndex)
     end
 
-    ProjectileServer.Track(fruitInstance, motionParams)
+    configureProjectile(fruitInstance, stats, pathProfile)
+
+    if root and root ~= fruitInstance then
+        configureProjectile(root, stats, pathProfile)
+    end
 
     return fruitInstance
 end
 
-local function spawnGrapeBundle(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, motionParams)
+local function spawnGrapeBundle(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, pathProfile)
     local minCount = stats and stats.BundleCount or 3
     local maxCount = stats and stats.BundleCountMax or minCount
     if maxCount < minCount then
@@ -534,14 +564,13 @@ local function spawnGrapeBundle(arenaId, laneIdentifier, laneIndex, stats, conta
         setAttribute(grape, "BundleIndex", index)
         tagInstance(grape, arenaId, laneIdentifier, laneIndex)
 
-        ProjectileServer.Track(grape, motionParams)
+        configureProjectile(grape, stats, pathProfile)
 
         if not firstGrape then
             firstGrape = grape
         end
     end
 
-        configureProjectile(grape, stats, pathProfile)
     if firstGrape then
         bundleModel.PrimaryPart = firstGrape
     end
@@ -550,18 +579,26 @@ local function spawnGrapeBundle(arenaId, laneIdentifier, laneIndex, stats, conta
     applyOwnershipAttributes(bundleModel, arenaId, laneIdentifier, laneIndex)
     tagInstance(bundleModel, arenaId, laneIdentifier, laneIndex)
 
+    configureProjectile(bundleModel, stats, pathProfile)
+
     return bundleModel
 end
 
-local function spawnFruitNow(arenaId, laneIdentifier, fruitId)
-    local stats = FruitConfig.Get(fruitId)
-    if not stats then
-        warn(string.format("[FruitSpawnerServer] Unknown fruit id '%s'", tostring(fruitId)))
-local function spawnFruitInternal(arenaId, laneId, fruitId)
-    local arenaState = ArenaServer.GetArenaState(arenaId)
-    if not arenaState then
-        warn(string.format("[FruitSpawnerServer] Unknown arena '%s'", tostring(arenaId)))
+local function spawnFruitInternal(arenaId, laneIdentifier, fruitId)
+    if arenaId == nil or laneIdentifier == nil then
         return nil
+    end
+
+    local stats = nil
+    local okStats, resultStats = pcall(function()
+        return FruitConfig.Get(fruitId)
+    end)
+    if okStats then
+        stats = resultStats
+    end
+
+    if stats == nil then
+        warn(string.format("[FruitSpawnerServer] Unknown fruit id '%s'", tostring(fruitId)))
     end
 
     local lane = ArenaAdapter.ResolveLane(arenaId, laneIdentifier)
@@ -579,13 +616,13 @@ local function spawnFruitInternal(arenaId, laneId, fruitId)
 
     local container = ensureLaneContainer(lane)
     local laneFrame = getLaneCFrame(lane)
-    local motionParams = buildMotionParams(arenaId, laneIdentifier, laneIndex, stats, laneFrame)
+    local pathProfile = buildPathProfile(arenaId, laneIdentifier, laneIndex, stats, laneFrame)
 
-    if stats.Id == "GrapeBundle" then
-        return spawnGrapeBundle(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, motionParams)
+    if stats and stats.Id == "GrapeBundle" then
+        return spawnGrapeBundle(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, pathProfile)
     end
 
-    return spawnSingleFruit(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, motionParams, fruitId)
+    return spawnSingleFruit(arenaId, laneIdentifier, laneIndex, stats, container, laneFrame, pathProfile, fruitId)
 end
 
 local function processQueue(arenaId, state)
@@ -598,7 +635,7 @@ local function processQueue(arenaId, state)
 
     while state.running and #state.queue > 0 do
         local request = table.remove(state.queue, 1)
-        local ok, result = pcall(spawnFruitNow, arenaId, request.lane, request.fruitId)
+        local ok, result = pcall(spawnFruitInternal, arenaId, request.lane, request.fruitId)
         if not ok then
             warn(string.format("[FruitSpawnerServer] Spawn failed for arena '%s': %s", tostring(arenaId), tostring(result)))
         else
@@ -611,10 +648,68 @@ local function processQueue(arenaId, state)
     return lastSpawn
 end
 
-function FruitSpawnerServer.Queue(arenaId, laneIdentifier, fruitId)
+local function resolveFruitId(payload)
+    if typeof(payload) == "table" then
+        local container = payload :: any
+        local fruitValue = container.FruitId or container.fruitId or container.Fruit or container.fruit
+        if typeof(fruitValue) == "string" and fruitValue ~= "" then
+            return fruitValue
+        end
+        return nil
+    end
+
+    if typeof(payload) == "string" and payload ~= "" then
+        return payload
+    end
+
+    return nil
+end
+
+local function resolveDelay(payload)
+    if typeof(payload) ~= "table" then
+        return 0
+    end
+
+    local cast = payload :: any
+    local value = cast.Delay or cast.delay
+    if typeof(value) ~= "number" then
+        return 0
+    end
+
+    if value < 0 then
+        value = 0
+    end
+
+    return value
+end
+
+local function safeSpawn(arenaId, laneIdentifier, fruitId)
+    local ok, result = pcall(spawnFruitInternal, arenaId, laneIdentifier, fruitId)
+    if ok then
+        return result
+    end
+
+    warn(string.format("[FruitSpawnerServer] Failed to spawn fruit: %s", tostring(result)))
+    return nil
+end
+
+function FruitSpawnerServer.Queue(arenaId, laneIdentifier, payload)
     assert(arenaId ~= nil, "arenaId is required")
     assert(laneIdentifier ~= nil, "laneIdentifier is required")
-    assert(fruitId ~= nil, "fruitId is required")
+
+    local fruitId = resolveFruitId(payload)
+    if not fruitId then
+        warn(string.format("[FruitSpawnerServer] Queue requires a fruit id for arena '%s' lane '%s'", tostring(arenaId), tostring(laneIdentifier)))
+        return nil
+    end
+
+    local delay = resolveDelay(payload)
+    if delay > 0 then
+        task.delay(delay, function()
+            safeSpawn(arenaId, laneIdentifier, fruitId)
+        end)
+        return true
+    end
 
     local state = ensureArenaQueue(arenaId)
     table.insert(state.queue, {
@@ -658,58 +753,22 @@ function FruitSpawnerServer.Stop(arenaId)
     discardArenaQueue(arenaId)
 end
 
-function FruitSpawnerServer.SpawnFruit(arenaId, laneIdentifier, fruitId)
-    FruitSpawnerServer.Start(arenaId)
-    return FruitSpawnerServer.Queue(arenaId, laneIdentifier, fruitId)
-end
-
-local function safeSpawn(arenaId, laneId, fruitId)
-    local ok, result = pcall(spawnFruitInternal, arenaId, laneId, fruitId)
-    if ok then
-        return result
-    end
-
-    warn(string.format("[FruitSpawnerServer] Failed to spawn fruit: %s", result))
-    return nil
-end
-
-function FruitSpawnerServer.SpawnFruit(arenaId, laneId, fruitId)
-    return safeSpawn(arenaId, laneId, fruitId)
-end
-
-local function resolveFruitId(payload)
-    if typeof(payload) ~= "table" then
-        return payload
-    end
-
-    return payload.FruitId or payload.fruitId or payload.Fruit or payload.fruit
-end
-
-local function resolveDelay(payload)
-    if typeof(payload) ~= "table" then
-        return 0
-    end
-
-    return payload.Delay or payload.delay or 0
-end
-
-function FruitSpawnerServer.Queue(arenaId, laneId, payload)
+function FruitSpawnerServer.SpawnFruit(arenaId, laneIdentifier, payload)
     local fruitId = resolveFruitId(payload)
     if not fruitId then
-        warn(string.format("[FruitSpawnerServer] Queue requires a fruit id for arena '%s' lane '%s'", tostring(arenaId), tostring(laneId)))
+        warn(string.format("[FruitSpawnerServer] SpawnFruit requires a fruit id for arena '%s' lane '%s'", tostring(arenaId), tostring(laneIdentifier)))
         return nil
     end
 
     local delay = resolveDelay(payload)
-    if delay and delay > 0 then
+    if delay > 0 then
         task.delay(delay, function()
-            safeSpawn(arenaId, laneId, fruitId)
+            safeSpawn(arenaId, laneIdentifier, fruitId)
         end)
         return true
     end
 
-    safeSpawn(arenaId, laneId, fruitId)
-    return true
+    return safeSpawn(arenaId, laneIdentifier, fruitId)
 end
 
 return FruitSpawnerServer

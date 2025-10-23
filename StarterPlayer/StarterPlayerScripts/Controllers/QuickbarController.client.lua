@@ -372,6 +372,7 @@ local function setSlotVisual(slotOrderIndex: number, entry: QuickbarMeleeEntry |
                 return
         end
 
+        local palette = activePalette
         local hotkeyLabel = slotHotkeyLabels[slotOrderIndex] or tostring(slotOrderIndex)
         local headerText = string.format("[%s]", hotkeyLabel)
         local slotTitle = Localizer.t("ui.quickbar.actionSlot", { label = hotkeyLabel }, currentLocale)
@@ -379,26 +380,12 @@ local function setSlotVisual(slotOrderIndex: number, entry: QuickbarMeleeEntry |
         if entry == nil then
                 local placeholderKey = if kind == "token" then "ui.quickbar.emptyToken" else "ui.quickbar.emptyMelee"
                 button.Text = string.format("%s\n%s", headerText, Localizer.t(placeholderKey, nil, currentLocale))
-                button.BackgroundColor3 = COLOR_EMPTY
-                button.TextTransparency = 0.35
-                button.AutoButtonColor = false
-                button.Active = false
-                updateContextActionTitle(slotOrderIndex, slotTitle)
-                return
-        end
-
-        local palette = activePalette
-
-        if entry == nil then
-                button.Text = if kind == "token"
-                        then string.format("%s\n%s", headerText, "No Token")
-                        else string.format("%s\n%s", headerText, "No Melee")
                 button.BackgroundColor3 = palette.slotEmpty
                 button.TextColor3 = palette.slotDisabledText
                 button.TextTransparency = 0.35
                 button.AutoButtonColor = false
                 button.Active = false
-                updateContextActionTitle(slotOrderIndex, string.format("Slot %s", hotkeyLabel))
+                updateContextActionTitle(slotOrderIndex, slotTitle)
                 return
         end
 
@@ -418,12 +405,20 @@ local function setSlotVisual(slotOrderIndex: number, entry: QuickbarMeleeEntry |
                 end
 
                 button.Text = string.format("%s\n%s\n%s", headerText, displayName, countText)
-                button.BackgroundColor3 = COLOR_FILLED
-                button.AutoButtonColor = countValue > 0
-                button.Active = countValue > 0
+
                 if countValue <= 0 then
+                        button.BackgroundColor3 = palette.slotUnavailable
+                        button.TextColor3 = palette.slotDisabledText
                         button.TextTransparency = 0.35
+                        button.AutoButtonColor = false
+                        button.Active = false
+                else
+                        button.BackgroundColor3 = palette.slotFilled
+                        button.TextColor3 = palette.slotText
+                        button.AutoButtonColor = true
+                        button.Active = true
                 end
+
                 local detailedTitle = Localizer.t("ui.quickbar.actionWithDetail", { slot = slotTitle, detail = displayName }, currentLocale)
                 updateContextActionTitle(slotOrderIndex, detailedTitle)
         else
@@ -433,9 +428,10 @@ local function setSlotVisual(slotOrderIndex: number, entry: QuickbarMeleeEntry |
                 local statusText = Localizer.t(statusKey, nil, currentLocale)
 
                 button.Text = string.format("%s\n%s\n%s", headerText, displayName, statusText)
-                button.BackgroundColor3 = meleeEntry.Active and COLOR_ACTIVE_MELEE or COLOR_FILLED
+                button.BackgroundColor3 = meleeEntry.Active and palette.slotActive or palette.slotFilled
                 button.AutoButtonColor = true
                 button.Active = true
+
                 local detailedTitle = Localizer.t("ui.quickbar.actionWithDetail", { slot = slotTitle, detail = statusText }, currentLocale)
                 updateContextActionTitle(slotOrderIndex, detailedTitle)
         end
@@ -448,33 +444,6 @@ local function refreshLocale()
                         then currentTokens[definition.index]
                         else currentMelee[definition.index]
                 setSlotVisual(orderIndex, entry, definition.kind)
-        end
-                local displayName = getItemDisplayName(tokenEntry.Id)
-                local countText = if limitValue and limitValue > 0 then string.format("%d/%d", countValue, limitValue) else string.format("x%d", countValue)
-
-                button.Text = string.format("%s\n%s\n%s", headerText, displayName, countText)
-                if countValue <= 0 then
-                        button.BackgroundColor3 = palette.slotUnavailable
-                        button.TextColor3 = palette.slotDisabledText
-                        button.TextTransparency = 0.35
-                        button.AutoButtonColor = false
-                        button.Active = false
-                else
-                        button.BackgroundColor3 = palette.slotFilled
-                        button.AutoButtonColor = true
-                        button.Active = true
-                end
-                updateContextActionTitle(slotOrderIndex, string.format("%s (%s)", hotkeyLabel, displayName))
-        else
-                local meleeEntry = entry :: QuickbarMeleeEntry
-                local displayName = getItemDisplayName(meleeEntry.Id)
-                local statusText = if meleeEntry.Active then "Equipped" else "Ready"
-
-                button.Text = string.format("%s\n%s\n%s", headerText, displayName, statusText)
-                button.BackgroundColor3 = meleeEntry.Active and palette.slotActive or palette.slotFilled
-                button.AutoButtonColor = true
-                button.Active = true
-                updateContextActionTitle(slotOrderIndex, string.format("%s (%s)", hotkeyLabel, statusText))
         end
 end
 
