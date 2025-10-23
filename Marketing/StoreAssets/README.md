@@ -1,5 +1,13 @@
 # FruitSmash Store & Marketing Assets
 
+## Keywords
+- Roblox experience store assets
+- marketing collateral management
+- asset manifest tracking
+- store icon screenshots trailer blurbs
+
+## Overview
+
 This folder tracks metadata for the experience store presence and marketing collateral. Binary assets (icon, screenshots, trailer) are stored on the shared marketing drive and mirrored in Roblox uploads; reference the manifest and per-asset notes when preparing releases.
 
 ## Contents
