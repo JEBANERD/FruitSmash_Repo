@@ -18,6 +18,7 @@ This repository is structured for Rojo-driven Roblox development. Follow the ste
    ```
 5. In Roblox Studio, open the Rojo plugin and connect to the server shown in the terminal. The mapping defined in `default.project.json` will stream source files into the live DataModel.【F:default.project.json†L1-L40】
 6. Press **Play** in Studio. Fire the `GameStart` remote from an in-game trigger or the developer console to spawn an arena and exercise the server bootstrap.【F:ServerScriptService/GameServer/Init.server.lua†L103-L123】
+7. In **Game Settings ➜ Security ➜ Asset Permissions**, grant the experience access to each sound used by the audio bus so pooled effects can preload successfully (see `Shared/Systems/AudioBus.lua` for the asset IDs).【F:ReplicatedStorage/Shared/Systems/AudioBus.lua†L36-L123】
 
 ## Building a place file
 When you need a `.rbxl` for distribution or regression testing, run:

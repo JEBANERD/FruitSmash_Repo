@@ -163,11 +163,17 @@ local function trackControllerConnection(connection: RBXScriptConnection)
 end
 
 local function isGamepadInputType(inputType: Enum.UserInputType): boolean
-  if inputType == Enum.UserInputType.Gamepad then
+  if typeof(inputType) ~= "EnumItem" then
+    return false
+  end
+  local value = inputType.Value
+  local first = Enum.UserInputType.Gamepad1.Value
+  local last = Enum.UserInputType.Gamepad8.Value
+  if value >= first and value <= last then
     return true
   end
   local name = tostring(inputType)
-  return string.find(name, "Gamepad") ~= nil
+  return string.find(name, "Gamepad", 1, true) ~= nil
 end
 
 local function cleanupFocusable(object: GuiObject)

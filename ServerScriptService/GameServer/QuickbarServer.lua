@@ -140,20 +140,8 @@ export type QuickbarState = {
 local QuickbarServer = {}
 
 local profileServer: any? = nil
-
-local function safeRequire(moduleScript: Instance?): any?
-        if not moduleScript or not moduleScript:IsA("ModuleScript") then
-                return nil
-        end
-
-        local ok, result = pcall(require, moduleScript)
-        if not ok then
-                warn(string.format("[QuickbarServer] Failed to require %s: %s", moduleScript:GetFullName(), tostring(result)))
-                return nil
-        end
-
-        return result
-end
+local profileRequireWarned = false
+local profileMissingWarned = false
 
 local function findFirstChildPath(root: Instance, parts: {string}): Instance?
         local current: Instance? = root
@@ -170,13 +158,37 @@ local profileCandidates = {
         {"Data", "ProfileServer"},
 }
 
-for _, parts in ipairs(profileCandidates) do
-        local inst = findFirstChildPath(ServerScriptService, parts)
-        local candidate = safeRequire(inst)
-        if candidate then
-                profileServer = candidate
-                break
+local function ensureProfileServer(): any?
+        if profileServer ~= nil then
+                return profileServer
         end
+
+        local foundModule: Instance? = nil
+        for _, parts in ipairs(profileCandidates) do
+                local candidate = findFirstChildPath(ServerScriptService, parts)
+                if candidate and candidate:IsA("ModuleScript") then
+                        foundModule = candidate
+                        local ok, result = pcall(require, candidate)
+                        if ok then
+                                profileServer = result
+                                return profileServer
+                        else
+                                if not profileRequireWarned then
+                                        warn(string.format("[QuickbarServer] Failed to require ProfileServer (%s): %s", candidate:GetFullName(), tostring(result)))
+                                        profileRequireWarned = true
+                                end
+                        end
+                end
+        end
+
+        if not profileMissingWarned then
+                if foundModule == nil then
+                        warn("[QuickbarServer] ProfileServer module missing; quickbar will fall back to defaults.")
+                end
+                profileMissingWarned = true
+        end
+
+        return nil
 end
 
 local inventoryResolver: ((Player) -> (any?, any?))? = nil
@@ -226,16 +238,17 @@ local function cloneDefaults()
 end
 
 local function callProfileServer(methodName: string, player: Player)
-        if not profileServer then
+        local server = ensureProfileServer()
+        if not server then
                 return nil
         end
 
-        local method = (profileServer :: any)[methodName]
+        local method = (server :: any)[methodName]
         if type(method) ~= "function" then
                 return nil
         end
 
-        local ok, r1, r2, r3 = pcall(method, profileServer, player)
+        local ok, r1, r2, r3 = pcall(method, server, player)
         if ok then
                 return r1, r2, r3
         end

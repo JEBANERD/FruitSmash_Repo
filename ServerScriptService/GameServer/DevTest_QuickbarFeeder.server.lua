@@ -80,14 +80,22 @@ Players.PlayerAdded:Connect(function(plr)
 end)
 
 -- Also resend when your local test starts (so it repopulates after teleport/pivot)
-if Remotes.GameStart then
-	Remotes.GameStart.OnClientEvent:Connect(function(_) end) -- keep alive (client event)
-	-- If you fire GameStart from server anywhere, mirror quickbar to everyone
-	Remotes.GameStart.OnServerEvent:Connect(function(player, _)
-		for _, p in ipairs(Players:GetPlayers()) do
-			sendState(p)
-		end
-	end)
+local gameStartRemote = Remotes.GameStart
+if gameStartRemote and typeof(gameStartRemote) == "Instance" and gameStartRemote:IsA("RemoteEvent") then
+        local function broadcastGameStart(payload: any?)
+                local ok, err = pcall(gameStartRemote.FireAllClients, gameStartRemote, payload)
+                if not ok then
+                        warn(string.format("[DevTest QuickbarFeeder] Failed to broadcast GameStart: %s", tostring(err)))
+                end
+        end
+
+        -- If you fire GameStart from server anywhere, mirror quickbar to everyone
+        gameStartRemote.OnServerEvent:Connect(function(player, payload)
+                for _, p in ipairs(Players:GetPlayers()) do
+                        sendState(p)
+                end
+                broadcastGameStart(payload)
+        end)
 end
 
 print("[DevTest] Quickbar feeder ready (sending sample state).")

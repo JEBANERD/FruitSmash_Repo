@@ -134,6 +134,7 @@ local FRIENDLY_PHASE = {
 
 local connections: { RBXScriptConnection } = {}
 local cleanupTasks: { () -> () } = {}
+local warnOnceCache: { [string]: boolean } = {}
 
 local hudGui: ScreenGui? = nil
 local hudContainer: Frame? = nil
@@ -275,6 +276,22 @@ local function runCleanupTasks()
         end
     end
     table.clear(cleanupTasks)
+end
+
+local function warnOnce(key: string, message: string)
+    if warnOnceCache[key] then
+        return
+    end
+    warnOnceCache[key] = true
+    warn(message)
+end
+
+local function tryCall(label: string, fn: any, ...): any
+    if typeof(fn) ~= "function" then
+        warnOnce(label, string.format("[HUDController] %s unavailable; skipping call", label))
+        return nil
+    end
+    return fn(...)
 end
 
 local function resolvePaletteId(candidate: any): string
@@ -1095,10 +1112,10 @@ local function createHudGui()
     updateSafePadding()
     initSafeAreaListeners()
 
-    createCounters()
-    createStatusPanel()
-    ensureLaneContainer()
-    applyPalette(localPlayer:GetAttribute("ColorblindPalette"), true)
+    tryCall("createCounters", createCounters)
+    tryCall("createStatusPanel", createStatusPanel)
+    tryCall("ensureLaneContainer", ensureLaneContainer)
+    tryCall("applyPalette", applyPalette, localPlayer:GetAttribute("ColorblindPalette"), true)
 end
 
 createHudGui()
@@ -1212,7 +1229,7 @@ local function applyPalette(paletteId: any, force: boolean?)
 end
 
 local function updateLane(laneId: number, payload: { [string]: any })
-    ensureLaneContainer()
+    tryCall("ensureLaneContainer", ensureLaneContainer)
 
     local laneCountValue = payload.laneCount or payload.LaneCount
     if typeof(laneCountValue) == "number" then
@@ -1532,7 +1549,7 @@ local attributeConnection = localPlayer.AttributeChanged:Connect(function(name)
     elseif name == "ArenaId" then
         updateArenaFilter()
     elseif name == "ColorblindPalette" then
-        applyPalette(localPlayer:GetAttribute("ColorblindPalette"), false)
+        tryCall("applyPalette", applyPalette, localPlayer:GetAttribute("ColorblindPalette"), false)
     end
 end)
 table.insert(connections, attributeConnection)
