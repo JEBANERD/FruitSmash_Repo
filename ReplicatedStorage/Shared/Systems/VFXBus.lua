@@ -19,6 +19,12 @@ local VFXDefinitions = require(vfxModule)
 local rng = Random.new()
 
 local Pools = {}
+local PREWARM_EFFECTS = {
+    FruitPop = 12,
+    CoinBurst = 10,
+    ShieldBubble = 4,
+    CritSparkle = 6,
+}
 local ActiveTokens = setmetatable({}, { __mode = "k" })
 local ActiveTweens = setmetatable({}, { __mode = "k" })
 
@@ -552,12 +558,31 @@ function VFXBus.Warm(effectName, count)
         if instance and instance:IsA("Instance") then
             if definition.Type == "World" then
                 safeSetParent(instance, worldPoolFolder)
+                disableEmitters(instance)
             else
                 safeSetParent(instance, nil)
+                cleanupTweens(instance)
+            end
+            if definition.OnCleanup then
+                definition.OnCleanup(instance)
             end
             table.insert(pool, instance)
         end
     end
+end
+
+function VFXBus.WarmMany(targets)
+    if typeof(targets) ~= "table" then
+        return
+    end
+
+    for effectName, amount in pairs(targets) do
+        VFXBus.Warm(effectName, amount)
+    end
+end
+
+do
+    VFXBus.WarmMany(PREWARM_EFFECTS)
 end
 
 return VFXBus
