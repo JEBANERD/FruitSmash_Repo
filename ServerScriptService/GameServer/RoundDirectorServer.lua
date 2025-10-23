@@ -163,17 +163,22 @@ local ROSTER_BANDS = {
     {
         minLevel = 1,
         roster = { "Apple", "Banana", "Orange", "GrapeBundle", "Pineapple" },
-        weights = { Apple = 4, Banana = 3, Orange = 3, GrapeBundle = 2, Pineapple = 1 },
+        weights = { Apple = 5, Banana = 4, Orange = 4, GrapeBundle = 3, Pineapple = 1 },
+    },
+    {
+        minLevel = 10,
+        roster = { "Apple", "Banana", "Orange", "GrapeBundle", "Pineapple", "Coconut" },
+        weights = { Apple = 4, Banana = 3, Orange = 3, GrapeBundle = 2, Pineapple = 2, Coconut = 1 },
     },
     {
         minLevel = 20,
-        roster = { "Apple", "Banana", "Orange", "GrapeBundle", "Pineapple", "Coconut" },
-        weights = { Apple = 3, Banana = 3, Orange = 2, GrapeBundle = 1, Pineapple = 3, Coconut = 2 },
+        roster = { "Apple", "Banana", "Orange", "GrapeBundle", "Pineapple", "Coconut", "Watermelon" },
+        weights = { Apple = 3, Banana = 2, Orange = 2, GrapeBundle = 1, Pineapple = 3, Coconut = 2, Watermelon = 1 },
     },
     {
         minLevel = 30,
         roster = { "Apple", "Banana", "Orange", "GrapeBundle", "Pineapple", "Coconut", "Watermelon" },
-        weights = { Apple = 2, Banana = 2, Orange = 1, GrapeBundle = 1, Pineapple = 3, Coconut = 3, Watermelon = 2 },
+        weights = { Apple = 2, Banana = 1, Orange = 1, GrapeBundle = 1, Pineapple = 3, Coconut = 3, Watermelon = 2 },
     },
 }
 
