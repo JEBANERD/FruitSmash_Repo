@@ -18,10 +18,33 @@ type EventSpec = {
         extraLimit: number?,
         defaults: Dictionary?,
 }
+type AggregateState = {
+        primaryKey: string,
+        aliases: { [string]: boolean },
+        waveCount: number,
+        totalCoins: number,
+        tokensUsed: number,
+        deaths: number,
+        startedAt: string?,
+        lastArena: string?,
+        lastParty: string?,
+        lastMatch: string?,
+        lastSession: string?,
+        lastLevel: number?,
+        lastOutcome: string?,
+        lastReason: string?,
+        lastTimestamp: string?,
+        completed: boolean?,
+}
 
 local TelemetryServer = {}
 
 local sinks: { (string, Dictionary) -> () } = {}
+local aggregateStates: { [string]: AggregateState } = {}
+local aggregateIndex: { [string]: AggregateState } = {}
+local aggregateCompleted: { [string]: number } = {}
+
+local AGGREGATE_COMPLETION_TTL = 60
 
 local FlagsModule
 do
@@ -68,6 +91,531 @@ local function escapeJsonString(value: string): string
         escaped = string.gsub(escaped, "\r", "\\r")
         escaped = string.gsub(escaped, "\t", "\\t")
         return escaped
+end
+
+local WAVE_COIN_KEYS = { "coins", "coinDelta", "coinsDelta", "coinsAwarded", "coinsEarned", "coinsGained" }
+
+local function pruneAggregateCompletion()
+        local now = os.clock()
+        for key, timestamp in pairs(aggregateCompleted) do
+                if typeof(timestamp) ~= "number" or now - timestamp > AGGREGATE_COMPLETION_TTL then
+                        aggregateCompleted[key] = nil
+                end
+        end
+end
+
+local function makeAggregateKey(kind: string, value: any): string?
+        if value == nil then
+                return nil
+        end
+
+        local valueType = typeof(value)
+        if valueType == "string" then
+                local trimmed = trimString(value)
+                if trimmed == "" then
+                        return nil
+                end
+                return kind .. ":" .. trimmed
+        elseif valueType == "number" then
+                if value ~= value or value == math.huge or value == -math.huge then
+                        return nil
+                end
+                return kind .. ":" .. tostring(value)
+        elseif valueType == "boolean" then
+                return kind .. ":" .. (value and "true" or "false")
+        end
+
+        return kind .. ":" .. tostring(value)
+end
+
+local function sanitizeIdentifierForSummary(value: any): string?
+        if value == nil then
+                return nil
+        end
+
+        local valueType = typeof(value)
+        if valueType == "string" then
+                local trimmed = trimString(value)
+                if trimmed == "" then
+                        return nil
+                end
+                return trimmed
+        elseif valueType == "number" then
+                if value ~= value or value == math.huge or value == -math.huge then
+                        return nil
+                end
+
+                if math.abs(value - math.floor(value)) < 1e-6 then
+                        if value >= 0 then
+                                return tostring(math.floor(value + 0.5))
+                        else
+                                return tostring(-math.floor(-value + 0.5))
+                        end
+                end
+
+                return tostring(value)
+        elseif valueType == "boolean" then
+                return value and "true" or "false"
+        end
+
+        return tostring(value)
+end
+
+local function registerAggregateAlias(state: AggregateState, key: string?)
+        if not key then
+                return
+        end
+
+        aggregateIndex[key] = state
+        state.aliases[key] = true
+end
+
+local function clearAggregateAliases(state: AggregateState)
+        for key in pairs(state.aliases) do
+                if key ~= state.primaryKey then
+                        state.aliases[key] = nil
+                        if aggregateIndex[key] == state then
+                                aggregateIndex[key] = nil
+                        end
+                end
+        end
+
+        aggregateIndex[state.primaryKey] = state
+        state.aliases[state.primaryKey] = true
+end
+
+local function updateAggregateContext(state: AggregateState, payload: Dictionary?)
+        if not payload then
+                return
+        end
+
+        local timestamp = payload.timestamp
+        if typeof(timestamp) == "string" and timestamp ~= "" then
+                state.lastTimestamp = timestamp
+        end
+
+        local levelValue = payload.level
+        local levelNumber = if typeof(levelValue) == "number" then levelValue else tonumber(levelValue)
+        if levelNumber and levelNumber == levelNumber and levelNumber ~= math.huge and levelNumber ~= -math.huge then
+                state.lastLevel = levelNumber
+        end
+
+        local outcomeValue = payload.outcome
+        if typeof(outcomeValue) == "string" and outcomeValue ~= "" then
+                state.lastOutcome = outcomeValue
+        end
+
+        local reasonValue = payload.reason
+        if typeof(reasonValue) == "string" and reasonValue ~= "" then
+                state.lastReason = reasonValue
+        end
+
+        local arenaKey = makeAggregateKey("arena", payload.arenaId)
+        if arenaKey then
+                registerAggregateAlias(state, arenaKey)
+                state.lastArena = sanitizeIdentifierForSummary(payload.arenaId)
+        end
+
+        local partyKey = makeAggregateKey("party", payload.partyId)
+        if partyKey then
+                registerAggregateAlias(state, partyKey)
+                state.lastParty = sanitizeIdentifierForSummary(payload.partyId)
+        end
+
+        local matchKey = makeAggregateKey("match", payload.matchId)
+        if matchKey then
+                registerAggregateAlias(state, matchKey)
+                state.lastMatch = sanitizeIdentifierForSummary(payload.matchId)
+        end
+
+        local sessionKey = makeAggregateKey("session", payload.sessionId)
+        if sessionKey then
+                registerAggregateAlias(state, sessionKey)
+                state.lastSession = sanitizeIdentifierForSummary(payload.sessionId)
+        end
+end
+
+local function resetAggregateState(state: AggregateState, payload: Dictionary?)
+        clearAggregateAliases(state)
+
+        state.waveCount = 0
+        state.totalCoins = 0
+        state.tokensUsed = 0
+        state.deaths = 0
+        state.startedAt = nil
+        state.lastArena = nil
+        state.lastParty = nil
+        state.lastMatch = nil
+        state.lastSession = nil
+        state.lastLevel = nil
+        state.lastOutcome = nil
+        state.lastReason = nil
+        state.lastTimestamp = nil
+        state.completed = false
+
+        if payload then
+                local timestamp = payload.timestamp
+                if typeof(timestamp) == "string" and timestamp ~= "" then
+                        state.startedAt = timestamp
+                        state.lastTimestamp = timestamp
+                end
+        end
+
+        updateAggregateContext(state, payload)
+end
+
+local function findAggregateState(payload: Dictionary?): AggregateState?
+        if not payload then
+                return nil
+        end
+
+        local matchKey = makeAggregateKey("match", payload.matchId)
+        if matchKey then
+                local matchState = aggregateIndex[matchKey]
+                if matchState then
+                        return matchState
+                end
+        end
+
+        local arenaKey = makeAggregateKey("arena", payload.arenaId)
+        if arenaKey then
+                local arenaState = aggregateIndex[arenaKey]
+                if arenaState then
+                        return arenaState
+                end
+        end
+
+        local partyKey = makeAggregateKey("party", payload.partyId)
+        if partyKey then
+                local partyState = aggregateIndex[partyKey]
+                if partyState then
+                        return partyState
+                end
+        end
+
+        local sessionKey = makeAggregateKey("session", payload.sessionId)
+        if sessionKey then
+                return aggregateIndex[sessionKey]
+        end
+
+        return nil
+end
+
+local function resolvePrimaryKey(payload: Dictionary?): string?
+        if not payload then
+                return nil
+        end
+
+        local key = makeAggregateKey("match", payload.matchId)
+        if key then
+                return key
+        end
+
+        key = makeAggregateKey("arena", payload.arenaId)
+        if key then
+                return key
+        end
+
+        key = makeAggregateKey("party", payload.partyId)
+        if key then
+                return key
+        end
+
+        key = makeAggregateKey("session", payload.sessionId)
+        if key then
+                return key
+        end
+
+        return nil
+end
+
+local function clearCompletionForPayload(payload: Dictionary?)
+        if not payload then
+                return
+        end
+
+        local keys = {
+                makeAggregateKey("match", payload.matchId),
+                makeAggregateKey("arena", payload.arenaId),
+                makeAggregateKey("party", payload.partyId),
+                makeAggregateKey("session", payload.sessionId),
+        }
+
+        for _, key in ipairs(keys) do
+                if key then
+                        aggregateCompleted[key] = nil
+                end
+        end
+end
+
+local function createAggregateState(payload: Dictionary?): AggregateState?
+        if not payload then
+                return nil
+        end
+
+        pruneAggregateCompletion()
+
+        local primaryKey = resolvePrimaryKey(payload)
+        if not primaryKey then
+                return nil
+        end
+
+        if aggregateCompleted[primaryKey] ~= nil then
+                return nil
+        end
+
+        local state: AggregateState = {
+                primaryKey = primaryKey,
+                aliases = {},
+                waveCount = 0,
+                totalCoins = 0,
+                tokensUsed = 0,
+                deaths = 0,
+                startedAt = nil,
+                lastArena = nil,
+                lastParty = nil,
+                lastMatch = nil,
+                lastSession = nil,
+                lastLevel = nil,
+                lastOutcome = nil,
+                lastReason = nil,
+                lastTimestamp = nil,
+                completed = false,
+        }
+
+        aggregateStates[primaryKey] = state
+        state.aliases[primaryKey] = true
+        aggregateIndex[primaryKey] = state
+
+        resetAggregateState(state, payload)
+        return state
+end
+
+local function markAggregateCompleted(state: AggregateState)
+        pruneAggregateCompletion()
+
+        local now = os.clock()
+        for key in pairs(state.aliases) do
+                aggregateCompleted[key] = now
+        end
+end
+
+local function removeAggregateState(state: AggregateState)
+        aggregateStates[state.primaryKey] = nil
+
+        for key in pairs(state.aliases) do
+                if aggregateIndex[key] == state then
+                        aggregateIndex[key] = nil
+                end
+        end
+end
+
+local function formatNumber(value: number): string
+        if value ~= value or value == math.huge or value == -math.huge then
+                return "0"
+        end
+
+        if math.abs(value - math.floor(value)) < 1e-6 then
+                if value >= 0 then
+                        return tostring(math.floor(value + 0.5))
+                else
+                        return tostring(-math.floor(-value + 0.5))
+                end
+        end
+
+        local formatted = string.format("%.2f", value)
+        formatted = string.gsub(formatted, "0+$", "")
+        formatted = string.gsub(formatted, "%.$", "")
+        if formatted == "" then
+                return "0"
+        end
+        return formatted
+end
+
+local function formatSummaryEntry(key: string, value: any): string?
+        if value == nil then
+                return nil
+        end
+
+        local valueType = typeof(value)
+        if valueType == "number" then
+                if value ~= value or value == math.huge or value == -math.huge then
+                        return nil
+                end
+                return string.format("\"%s\":%s", key, formatNumber(value))
+        elseif valueType == "boolean" then
+                return string.format("\"%s\":%s", key, value and "true" or "false")
+        end
+
+        local printable = sanitizeIdentifierForSummary(value)
+        if not printable then
+                return nil
+        end
+
+        local escaped = escapeJsonString(printable)
+        return string.format("\"%s\":\"%s\"", key, escaped)
+end
+
+local function extractNumberFromPayload(payload: Dictionary, keys: { string }): number?
+        for _, key in ipairs(keys) do
+                local rawValue = payload[key]
+                if rawValue ~= nil then
+                        local valueType = typeof(rawValue)
+                        if valueType == "number" then
+                                if rawValue == rawValue and rawValue ~= math.huge and rawValue ~= -math.huge then
+                                        return rawValue
+                                end
+                        elseif valueType == "string" then
+                                local numeric = tonumber(rawValue)
+                                if numeric and numeric == numeric and numeric ~= math.huge and numeric ~= -math.huge then
+                                        return numeric
+                                end
+                        end
+                end
+        end
+
+        return nil
+end
+
+local function emitAggregateSummary(state: AggregateState, payload: Dictionary?)
+        local totalCoins = state.totalCoins
+        if totalCoins ~= totalCoins or totalCoins == math.huge or totalCoins == -math.huge then
+                totalCoins = 0
+        end
+
+        local waveCount = state.waveCount
+        if waveCount < 0 then
+                waveCount = 0
+        end
+
+        local avgCoins = 0
+        if waveCount > 0 then
+                avgCoins = totalCoins / waveCount
+        end
+
+        local pieces = {}
+
+        local function addField(key: string, value: any)
+                local entry = formatSummaryEntry(key, value)
+                if entry then
+                        table.insert(pieces, entry)
+                end
+        end
+
+        addField("event", "MatchSummary")
+        addField("timestamp", DateTime.now():ToIsoDateTime())
+        addField("arena", state.lastArena)
+        addField("party", state.lastParty)
+        addField("match", state.lastMatch)
+        addField("session", state.lastSession)
+        addField("level", state.lastLevel)
+        addField("outcome", state.lastOutcome or (payload and payload.outcome))
+        addField("reason", state.lastReason or (payload and payload.reason))
+        addField("waves", waveCount)
+        addField("totalCoins", totalCoins)
+        addField("avgCoinsPerWave", avgCoins)
+        addField("tokensUsed", state.tokensUsed)
+        addField("deaths", state.deaths)
+        addField("startedAt", state.startedAt)
+        addField("endedAt", state.lastTimestamp or (payload and payload.timestamp))
+
+        print(string.format("[TelemetrySummary] {%s}", table.concat(pieces, ",")))
+end
+
+local function processAggregateEvent(payload: Dictionary)
+        local eventValue = payload.event
+        if typeof(eventValue) ~= "string" then
+                return
+        end
+
+        local eventName = eventValue
+
+        if eventName == "MatchStart" then
+                clearCompletionForPayload(payload)
+
+                local state = findAggregateState(payload)
+                if not state then
+                        state = createAggregateState(payload)
+                else
+                        resetAggregateState(state, payload)
+                end
+
+                if state then
+                        updateAggregateContext(state, payload)
+                end
+
+                return
+        elseif eventName == "MatchEnd" then
+                local state = findAggregateState(payload)
+                if not state then
+                        state = createAggregateState(payload)
+                end
+
+                if not state then
+                        return
+                end
+
+                if state.completed then
+                        return
+                end
+
+                updateAggregateContext(state, payload)
+                state.completed = true
+                emitAggregateSummary(state, payload)
+                markAggregateCompleted(state)
+                removeAggregateState(state)
+                return
+        elseif eventName == "Wave" then
+                local state = findAggregateState(payload)
+                if not state then
+                        state = createAggregateState(payload)
+                end
+
+                if not state then
+                        return
+                end
+
+                state.waveCount += 1
+                updateAggregateContext(state, payload)
+
+                local coinsValue = extractNumberFromPayload(payload, WAVE_COIN_KEYS)
+                if coinsValue then
+                        state.totalCoins += coinsValue
+                end
+
+                return
+        elseif eventName == "TokenUse" then
+                local state = findAggregateState(payload)
+                if not state then
+                        state = createAggregateState(payload)
+                end
+
+                if not state then
+                        return
+                end
+
+                state.tokensUsed += 1
+                updateAggregateContext(state, payload)
+                return
+        elseif eventName == "ObstacleHit" then
+                local state = findAggregateState(payload)
+                if not state then
+                        state = createAggregateState(payload)
+                end
+
+                if not state then
+                        return
+                end
+
+                state.deaths += 1
+                updateAggregateContext(state, payload)
+                return
+        else
+                local state = findAggregateState(payload)
+                if state then
+                        updateAggregateContext(state, payload)
+                end
+        end
 end
 
 local function coerceInteger(value: any): number?
@@ -640,6 +1188,7 @@ local function enqueuePrint(payload: Dictionary)
 end
 
 local function dispatch(payload: Dictionary)
+        processAggregateEvent(payload)
         enqueuePrint(payload)
 
         local eventField = payload.event
@@ -669,6 +1218,10 @@ function TelemetryServer.Track(eventName: string, data: any?)
 
         local payload = buildPayload(trimmed, data)
         dispatch(payload)
+end
+
+function TelemetryServer.Flush()
+        flushPrintQueue()
 end
 
 function TelemetryServer.AddSink(callback: (string, Dictionary) -> ())
