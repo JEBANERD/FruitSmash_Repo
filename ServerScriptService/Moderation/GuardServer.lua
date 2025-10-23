@@ -265,6 +265,7 @@ end
 local guardConfig = {
         autoKickThreshold = 0,
         telemetryEventName = "guard_violation",
+        softBanThreshold = 3,
 }
 
 type PlayerAuditState = {
@@ -279,9 +280,42 @@ type PlayerAuditState = {
         coins: { lastTotal: number?, windowStart: number, accumulated: number },
         teleport: { lastPosition: Vector3?, lastTimestamp: number },
         kicked: boolean?,
+        softBanned: boolean?,
+        softBanAt: number?,
+        softBanReason: string?,
+        softBanDetail: any?,
+        softBanLastLog: number?,
 }
 
 local playerAuditStates: { [Player]: PlayerAuditState } = setmetatable({}, { __mode = "k" })
+
+local function softBanPlayer(player: Player, state: PlayerAuditState, violationType: string, detail: any)
+        if not isValidPlayer(player) then
+                return
+        end
+
+        if state.softBanned then
+                return
+        end
+
+        state.softBanned = true
+        state.softBanAt = os.clock()
+        state.softBanReason = violationType
+        state.softBanDetail = detail
+        state.softBanLastLog = state.softBanAt
+
+        warn(string.format("[Guard] Soft-banned %s for %s", formatPlayer(player), violationType))
+
+        trackTelemetry("ExploitFlag", {
+                userId = player.UserId,
+                player = player.Name,
+                violation = violationType,
+                detail = detail,
+                strikes = state.totalViolations,
+                perType = shallowCopy(state.violations),
+                timestamp = state.softBanAt,
+        })
+end
 
 local function disconnectConnections(connections: { RBXScriptConnection }?)
         if not connections then
@@ -332,6 +366,11 @@ local function ensureAuditState(player: Player): PlayerAuditState
                 coins = { lastTotal = nil, windowStart = now, accumulated = 0 },
                 teleport = { lastPosition = nil, lastTimestamp = now },
                 kicked = false,
+                softBanned = false,
+                softBanAt = nil,
+                softBanReason = nil,
+                softBanDetail = nil,
+                softBanLastLog = nil,
         }
         playerAuditStates[player] = state
         return state
@@ -397,6 +436,11 @@ local function recordViolation(player: Player, violationType: string, detail: an
                                 reason = reason,
                         })
                 end
+        end
+
+        local softBanThreshold = guardConfig.softBanThreshold
+        if softBanThreshold and softBanThreshold > 0 and state.totalViolations >= softBanThreshold then
+                softBanPlayer(player, state, violationType, detail)
         end
 end
 
@@ -790,6 +834,15 @@ function Guard.Configure(options: { [string]: any }?)
         if typeof(options.telemetryEventName) == "string" and options.telemetryEventName ~= "" then
                 guardConfig.telemetryEventName = options.telemetryEventName
         end
+
+        if options.softBanThreshold ~= nil then
+                local numeric = tonumber(options.softBanThreshold)
+                if not numeric or numeric <= 0 then
+                        guardConfig.softBanThreshold = 0
+                else
+                        guardConfig.softBanThreshold = math.floor(numeric + 0.5)
+                end
+        end
 end
 
 function Guard.SetAutoKickThreshold(threshold: number?)
@@ -804,6 +857,29 @@ function Guard.SetAutoKickThreshold(threshold: number?)
         else
                 guardConfig.autoKickThreshold = math.floor(numeric + 0.5)
         end
+end
+
+function Guard.SetSoftBanThreshold(threshold: number?)
+        if threshold == nil then
+                guardConfig.softBanThreshold = 0
+                return
+        end
+
+        local numeric = tonumber(threshold)
+        if not numeric or numeric <= 0 then
+                guardConfig.softBanThreshold = 0
+        else
+                guardConfig.softBanThreshold = math.floor(numeric + 0.5)
+        end
+end
+
+function Guard.IsSoftBanned(player: Player): boolean
+        local state = playerAuditStates[player]
+        if not state then
+                return false
+        end
+
+        return state.softBanned == true
 end
 
 function Guard.GetViolationSummary(player: Player)
@@ -848,6 +924,16 @@ function Guard.WrapRemote(remote: Instance?, config: GuardConfig?, handler: ((Pl
                                 return
                         end
 
+                        local state = ensureAuditState(player)
+                        if state.softBanned then
+                                local now = os.clock()
+                                if not state.softBanLastLog or (now - state.softBanLastLog) >= 1 then
+                                        logDenial(remoteName, player, "SoftBanned", state.softBanReason)
+                                        state.softBanLastLog = now
+                                end
+                                return
+                        end
+
                         local rawArgs = table.pack(...)
                         local sanitized = if rawArgs.n > 0 then rawArgs[1] else nil
 
@@ -882,6 +968,16 @@ function Guard.WrapRemote(remote: Instance?, config: GuardConfig?, handler: ((Pl
                 if isThrottled(remote, player, rateLimit) then
                         logDenial(remoteName, player, "RateLimit")
                         return makeRejectResponse(config, "RateLimit")
+                end
+
+                local state = ensureAuditState(player)
+                if state.softBanned then
+                        local now = os.clock()
+                        if not state.softBanLastLog or (now - state.softBanLastLog) >= 1 then
+                                logDenial(remoteName, player, "SoftBanned", state.softBanReason)
+                                state.softBanLastLog = now
+                        end
+                        return makeRejectResponse(config, "SoftBanned")
                 end
 
                 local rawArgs = table.pack(...)
