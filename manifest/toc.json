@@ -1,0 +1,1440 @@
+{
+  "name": "FruitSmash_Repo",
+  "type": "directory",
+  "path": ".",
+  "children": [
+    {
+      "name": "Marketing",
+      "type": "directory",
+      "path": "Marketing",
+      "children": [
+        {
+          "name": "StoreAssets",
+          "type": "directory",
+          "path": "Marketing/StoreAssets",
+          "children": [
+            {
+              "name": "blurbs",
+              "type": "directory",
+              "path": "Marketing/StoreAssets/blurbs",
+              "children": [
+                {
+                  "name": "en-US.json",
+                  "type": "file",
+                  "path": "Marketing/StoreAssets/blurbs/en-US.json",
+                  "line_count": 5,
+                  "size_bytes": 355,
+                  "language": "JSON",
+                  "file_count": 1,
+                  "total_size_bytes": 355
+                },
+                {
+                  "name": "es-ES.json",
+                  "type": "file",
+                  "path": "Marketing/StoreAssets/blurbs/es-ES.json",
+                  "line_count": 5,
+                  "size_bytes": 392,
+                  "language": "JSON",
+                  "file_count": 1,
+                  "total_size_bytes": 392
+                },
+                {
+                  "name": "fr-FR.json",
+                  "type": "file",
+                  "path": "Marketing/StoreAssets/blurbs/fr-FR.json",
+                  "line_count": 5,
+                  "size_bytes": 411,
+                  "language": "JSON",
+                  "file_count": 1,
+                  "total_size_bytes": 411
+                },
+                {
+                  "name": "ja-JP.json",
+                  "type": "file",
+                  "path": "Marketing/StoreAssets/blurbs/ja-JP.json",
+                  "line_count": 5,
+                  "size_bytes": 482,
+                  "language": "JSON",
+                  "file_count": 1,
+                  "total_size_bytes": 482
+                },
+                {
+                  "name": "README.md",
+                  "type": "file",
+                  "path": "Marketing/StoreAssets/blurbs/README.md",
+                  "line_count": 5,
+                  "size_bytes": 369,
+                  "language": "Markdown",
+                  "file_count": 1,
+                  "total_size_bytes": 369
+                }
+              ],
+              "line_count": 25,
+              "file_count": 5,
+              "total_size_bytes": 2009
+            },
+            {
+              "name": "icon",
+              "type": "directory",
+              "path": "Marketing/StoreAssets/icon",
+              "children": [
+                {
+                  "name": "README.md",
+                  "type": "file",
+                  "path": "Marketing/StoreAssets/icon/README.md",
+                  "line_count": 7,
+                  "size_bytes": 415,
+                  "language": "Markdown",
+                  "file_count": 1,
+                  "total_size_bytes": 415
+                }
+              ],
+              "line_count": 7,
+              "file_count": 1,
+              "total_size_bytes": 415
+            },
+            {
+              "name": "screenshots",
+              "type": "directory",
+              "path": "Marketing/StoreAssets/screenshots",
+              "children": [
+                {
+                  "name": "README.md",
+                  "type": "file",
+                  "path": "Marketing/StoreAssets/screenshots/README.md",
+                  "line_count": 12,
+                  "size_bytes": 700,
+                  "language": "Markdown",
+                  "file_count": 1,
+                  "total_size_bytes": 700
+                }
+              ],
+              "line_count": 12,
+              "file_count": 1,
+              "total_size_bytes": 700
+            },
+            {
+              "name": "trailer",
+              "type": "directory",
+              "path": "Marketing/StoreAssets/trailer",
+              "children": [
+                {
+                  "name": "README.md",
+                  "type": "file",
+                  "path": "Marketing/StoreAssets/trailer/README.md",
+                  "line_count": 9,
+                  "size_bytes": 465,
+                  "language": "Markdown",
+                  "file_count": 1,
+                  "total_size_bytes": 465
+                }
+              ],
+              "line_count": 9,
+              "file_count": 1,
+              "total_size_bytes": 465
+            },
+            {
+              "name": "manifest.json",
+              "type": "file",
+              "path": "Marketing/StoreAssets/manifest.json",
+              "line_count": 36,
+              "size_bytes": 1157,
+              "language": "JSON",
+              "file_count": 1,
+              "total_size_bytes": 1157
+            },
+            {
+              "name": "README.md",
+              "type": "file",
+              "path": "Marketing/StoreAssets/README.md",
+              "line_count": 13,
+              "size_bytes": 762,
+              "language": "Markdown",
+              "file_count": 1,
+              "total_size_bytes": 762
+            }
+          ],
+          "line_count": 102,
+          "file_count": 10,
+          "total_size_bytes": 5508
+        }
+      ],
+      "line_count": 102,
+      "file_count": 10,
+      "total_size_bytes": 5508
+    },
+    {
+      "name": "ReplicatedStorage",
+      "type": "directory",
+      "path": "ReplicatedStorage",
+      "children": [
+        {
+          "name": "Remotes",
+          "type": "directory",
+          "path": "ReplicatedStorage/Remotes",
+          "children": [
+            {
+              "name": "RemoteBootstrap.lua",
+              "type": "file",
+              "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+              "line_count": 110,
+              "size_bytes": 4231,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 4231
+            }
+          ],
+          "line_count": 110,
+          "file_count": 1,
+          "total_size_bytes": 4231
+        },
+        {
+          "name": "Shared",
+          "type": "directory",
+          "path": "ReplicatedStorage/Shared",
+          "children": [
+            {
+              "name": "Config",
+              "type": "directory",
+              "path": "ReplicatedStorage/Shared/Config",
+              "children": [
+                {
+                  "name": "BuildInfo.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Config/BuildInfo.lua",
+                  "line_count": 9,
+                  "size_bytes": 162,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 162
+                },
+                {
+                  "name": "Flags.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Config/Flags.lua",
+                  "line_count": 929,
+                  "size_bytes": 24976,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 24976
+                },
+                {
+                  "name": "FruitConfig.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Config/FruitConfig.lua",
+                  "line_count": 111,
+                  "size_bytes": 2350,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 2350
+                },
+                {
+                  "name": "GameConfig.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+                  "line_count": 217,
+                  "size_bytes": 6990,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 6990
+                },
+                {
+                  "name": "ShopConfig.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Config/ShopConfig.lua",
+                  "line_count": 160,
+                  "size_bytes": 3637,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 3637
+                }
+              ],
+              "line_count": 1426,
+              "file_count": 5,
+              "total_size_bytes": 38115
+            },
+            {
+              "name": "Content",
+              "type": "directory",
+              "path": "ReplicatedStorage/Shared/Content",
+              "children": [
+                {
+                  "name": "ContentRegistry.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Content/ContentRegistry.lua",
+                  "line_count": 493,
+                  "size_bytes": 13860,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 13860
+                }
+              ],
+              "line_count": 493,
+              "file_count": 1,
+              "total_size_bytes": 13860
+            },
+            {
+              "name": "Locale",
+              "type": "directory",
+              "path": "ReplicatedStorage/Shared/Locale",
+              "children": [
+                {
+                  "name": "Strings.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Locale/Strings.lua",
+                  "line_count": 256,
+                  "size_bytes": 12994,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 12994
+                }
+              ],
+              "line_count": 256,
+              "file_count": 1,
+              "total_size_bytes": 12994
+            },
+            {
+              "name": "Systems",
+              "type": "directory",
+              "path": "ReplicatedStorage/Shared/Systems",
+              "children": [
+                {
+                  "name": "AudioBus.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Systems/AudioBus.lua",
+                  "line_count": 382,
+                  "size_bytes": 10069,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 10069
+                },
+                {
+                  "name": "Localizer.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+                  "line_count": 168,
+                  "size_bytes": 4431,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 4431
+                },
+                {
+                  "name": "RNG.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Systems/RNG.lua",
+                  "line_count": 48,
+                  "size_bytes": 1048,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 1048
+                },
+                {
+                  "name": "VFXBus.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Systems/VFXBus.lua",
+                  "line_count": 588,
+                  "size_bytes": 16999,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 16999
+                },
+                {
+                  "name": "WeightedTable.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Systems/WeightedTable.lua",
+                  "line_count": 85,
+                  "size_bytes": 2251,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 2251
+                }
+              ],
+              "line_count": 1271,
+              "file_count": 5,
+              "total_size_bytes": 34798
+            },
+            {
+              "name": "Types",
+              "type": "directory",
+              "path": "ReplicatedStorage/Shared/Types",
+              "children": [
+                {
+                  "name": "NetTypes.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Types/NetTypes.lua",
+                  "line_count": 21,
+                  "size_bytes": 407,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 407
+                },
+                {
+                  "name": "SaveSchema.lua",
+                  "type": "file",
+                  "path": "ReplicatedStorage/Shared/Types/SaveSchema.lua",
+                  "line_count": 25,
+                  "size_bytes": 478,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 478
+                }
+              ],
+              "line_count": 46,
+              "file_count": 2,
+              "total_size_bytes": 885
+            }
+          ],
+          "line_count": 3492,
+          "file_count": 14,
+          "total_size_bytes": 100652
+        }
+      ],
+      "line_count": 3602,
+      "file_count": 15,
+      "total_size_bytes": 104883
+    },
+    {
+      "name": "ServerScriptService",
+      "type": "directory",
+      "path": "ServerScriptService",
+      "children": [
+        {
+          "name": "Analytics",
+          "type": "directory",
+          "path": "ServerScriptService/Analytics",
+          "children": [
+            {
+              "name": "TelemetryServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/Analytics/TelemetryServer.lua",
+              "line_count": 1254,
+              "size_bytes": 44814,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 44814
+            },
+            {
+              "name": "VersionAnnounce.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/Analytics/VersionAnnounce.server.lua",
+              "line_count": 100,
+              "size_bytes": 3182,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 3182
+            }
+          ],
+          "line_count": 1354,
+          "file_count": 2,
+          "total_size_bytes": 47996
+        },
+        {
+          "name": "Combat",
+          "type": "directory",
+          "path": "ServerScriptService/Combat",
+          "children": [
+            {
+              "name": "ArenaAdapter.lua",
+              "type": "file",
+              "path": "ServerScriptService/Combat/ArenaAdapter.lua",
+              "line_count": 332,
+              "size_bytes": 7812,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 7812
+            },
+            {
+              "name": "HitValidationServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/Combat/HitValidationServer.lua",
+              "line_count": 597,
+              "size_bytes": 19428,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 19428
+            },
+            {
+              "name": "ProjectileServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/Combat/ProjectileServer.lua",
+              "line_count": 487,
+              "size_bytes": 12891,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 12891
+            }
+          ],
+          "line_count": 1416,
+          "file_count": 3,
+          "total_size_bytes": 40131
+        },
+        {
+          "name": "Data",
+          "type": "directory",
+          "path": "ServerScriptService/Data",
+          "children": [
+            {
+              "name": "LeaderboardServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/Data/LeaderboardServer.lua",
+              "line_count": 549,
+              "size_bytes": 16109,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 16109
+            },
+            {
+              "name": "ProfileServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/Data/ProfileServer.lua",
+              "line_count": 1431,
+              "size_bytes": 44085,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 44085
+            },
+            {
+              "name": "SaveService.lua",
+              "type": "file",
+              "path": "ServerScriptService/Data/SaveService.lua",
+              "line_count": 663,
+              "size_bytes": 18716,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 18716
+            }
+          ],
+          "line_count": 2643,
+          "file_count": 3,
+          "total_size_bytes": 78910
+        },
+        {
+          "name": "Economy",
+          "type": "directory",
+          "path": "ServerScriptService/Economy",
+          "children": [
+            {
+              "name": "DailyRewardsServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/Economy/DailyRewardsServer.lua",
+              "line_count": 587,
+              "size_bytes": 17462,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 17462
+            },
+            {
+              "name": "EconomyServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/Economy/EconomyServer.lua",
+              "line_count": 509,
+              "size_bytes": 17102,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 17102
+            }
+          ],
+          "line_count": 1096,
+          "file_count": 2,
+          "total_size_bytes": 34564
+        },
+        {
+          "name": "GameServer",
+          "type": "directory",
+          "path": "ServerScriptService/GameServer",
+          "children": [
+            {
+              "name": "Combat",
+              "type": "directory",
+              "path": "ServerScriptService/GameServer/Combat",
+              "children": [
+                {
+                  "name": "CombatServer.lua",
+                  "type": "file",
+                  "path": "ServerScriptService/GameServer/Combat/CombatServer.lua",
+                  "line_count": 518,
+                  "size_bytes": 14564,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 14564
+                }
+              ],
+              "line_count": 518,
+              "file_count": 1,
+              "total_size_bytes": 14564
+            },
+            {
+              "name": "Data",
+              "type": "directory",
+              "path": "ServerScriptService/GameServer/Data",
+              "children": [
+                {
+                  "name": "PersistenceServer.lua",
+                  "type": "file",
+                  "path": "ServerScriptService/GameServer/Data/PersistenceServer.lua",
+                  "line_count": 442,
+                  "size_bytes": 12271,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 12271
+                }
+              ],
+              "line_count": 442,
+              "file_count": 1,
+              "total_size_bytes": 12271
+            },
+            {
+              "name": "Economy",
+              "type": "directory",
+              "path": "ServerScriptService/GameServer/Economy",
+              "children": [
+                {
+                  "name": "EconomyServer.lua",
+                  "type": "file",
+                  "path": "ServerScriptService/GameServer/Economy/EconomyServer.lua",
+                  "line_count": 289,
+                  "size_bytes": 8625,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 8625
+                }
+              ],
+              "line_count": 289,
+              "file_count": 1,
+              "total_size_bytes": 8625
+            },
+            {
+              "name": "Libraries",
+              "type": "directory",
+              "path": "ServerScriptService/GameServer/Libraries",
+              "children": [
+                {
+                  "name": "ArenaAdapter.lua",
+                  "type": "file",
+                  "path": "ServerScriptService/GameServer/Libraries/ArenaAdapter.lua",
+                  "line_count": 100,
+                  "size_bytes": 2434,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 2434
+                }
+              ],
+              "line_count": 100,
+              "file_count": 1,
+              "total_size_bytes": 2434
+            },
+            {
+              "name": "Monetization",
+              "type": "directory",
+              "path": "ServerScriptService/GameServer/Monetization",
+              "children": [
+                {
+                  "name": "MonetizationServer.lua",
+                  "type": "file",
+                  "path": "ServerScriptService/GameServer/Monetization/MonetizationServer.lua",
+                  "line_count": 287,
+                  "size_bytes": 8403,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 8403
+                }
+              ],
+              "line_count": 287,
+              "file_count": 1,
+              "total_size_bytes": 8403
+            },
+            {
+              "name": "Obstacles",
+              "type": "directory",
+              "path": "ServerScriptService/GameServer/Obstacles",
+              "children": [
+                {
+                  "name": "Obstacle_MiniTurretServer.lua",
+                  "type": "file",
+                  "path": "ServerScriptService/GameServer/Obstacles/Obstacle_MiniTurretServer.lua",
+                  "line_count": 547,
+                  "size_bytes": 15086,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 15086
+                },
+                {
+                  "name": "SawbladeServer.lua",
+                  "type": "file",
+                  "path": "ServerScriptService/GameServer/Obstacles/SawbladeServer.lua",
+                  "line_count": 994,
+                  "size_bytes": 27153,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 27153
+                }
+              ],
+              "line_count": 1541,
+              "file_count": 2,
+              "total_size_bytes": 42239
+            },
+            {
+              "name": "Shop",
+              "type": "directory",
+              "path": "ServerScriptService/GameServer/Shop",
+              "children": [
+                {
+                  "name": "MeleeGachaServer.lua",
+                  "type": "file",
+                  "path": "ServerScriptService/GameServer/Shop/MeleeGachaServer.lua",
+                  "line_count": 242,
+                  "size_bytes": 6291,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 6291
+                },
+                {
+                  "name": "ShopServer.lua",
+                  "type": "file",
+                  "path": "ServerScriptService/GameServer/Shop/ShopServer.lua",
+                  "line_count": 980,
+                  "size_bytes": 31429,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 31429
+                }
+              ],
+              "line_count": 1222,
+              "file_count": 2,
+              "total_size_bytes": 37720
+            },
+            {
+              "name": "AchievementServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/AchievementServer.lua",
+              "line_count": 391,
+              "size_bytes": 11114,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 11114
+            },
+            {
+              "name": "AnalyticsServer.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/AnalyticsServer.server.lua",
+              "line_count": 113,
+              "size_bytes": 2565,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 2565
+            },
+            {
+              "name": "ArenaAdapter.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/ArenaAdapter.lua",
+              "line_count": 245,
+              "size_bytes": 5343,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 5343
+            },
+            {
+              "name": "ArenaServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/ArenaServer.lua",
+              "line_count": 95,
+              "size_bytes": 2284,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 2284
+            },
+            {
+              "name": "ArenaTemplateSetup.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/ArenaTemplateSetup.server.lua",
+              "line_count": 241,
+              "size_bytes": 7422,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 7422
+            },
+            {
+              "name": "DebugServer.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/DebugServer.server.lua",
+              "line_count": 367,
+              "size_bytes": 11135,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 11135
+            },
+            {
+              "name": "DevTest_QuickbarFeeder.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/DevTest_QuickbarFeeder.server.lua",
+              "line_count": 93,
+              "size_bytes": 3218,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 3218
+            },
+            {
+              "name": "FruitSpawnerServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/FruitSpawnerServer.lua",
+              "line_count": 715,
+              "size_bytes": 21658,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 21658
+            },
+            {
+              "name": "HUDServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/HUDServer.lua",
+              "line_count": 305,
+              "size_bytes": 8592,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 8592
+            },
+            {
+              "name": "Init.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/Init.server.lua",
+              "line_count": 123,
+              "size_bytes": 4890,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 4890
+            },
+            {
+              "name": "MatchmakingServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/MatchmakingServer.lua",
+              "line_count": 147,
+              "size_bytes": 3669,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 3669
+            },
+            {
+              "name": "ProjectileMotionServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/ProjectileMotionServer.lua",
+              "line_count": 371,
+              "size_bytes": 11286,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 11286
+            },
+            {
+              "name": "ProjectileServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/ProjectileServer.lua",
+              "line_count": 55,
+              "size_bytes": 1446,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 1446
+            },
+            {
+              "name": "QuickbarServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/QuickbarServer.lua",
+              "line_count": 673,
+              "size_bytes": 23941,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 23941
+            },
+            {
+              "name": "RoundDirectorServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/RoundDirectorServer.lua",
+              "line_count": 1760,
+              "size_bytes": 54002,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 54002
+            },
+            {
+              "name": "RoundSummaryServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/RoundSummaryServer.lua",
+              "line_count": 345,
+              "size_bytes": 10877,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 10877
+            },
+            {
+              "name": "SettingsServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/SettingsServer.lua",
+              "line_count": 421,
+              "size_bytes": 13942,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 13942
+            },
+            {
+              "name": "TargetHealthServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/TargetHealthServer.lua",
+              "line_count": 454,
+              "size_bytes": 12429,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 12429
+            },
+            {
+              "name": "TargetImmunityServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/TargetImmunityServer.lua",
+              "line_count": 375,
+              "size_bytes": 9406,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 9406
+            },
+            {
+              "name": "TokenEffectsServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/TokenEffectsServer.lua",
+              "line_count": 899,
+              "size_bytes": 33690,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 33690
+            },
+            {
+              "name": "TokenUseServer.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/TokenUseServer.server.lua",
+              "line_count": 215,
+              "size_bytes": 6985,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 6985
+            },
+            {
+              "name": "TurretControllerServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/TurretControllerServer.lua",
+              "line_count": 753,
+              "size_bytes": 21705,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 21705
+            },
+            {
+              "name": "TutorialServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/GameServer/TutorialServer.lua",
+              "line_count": 134,
+              "size_bytes": 4740,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 4740
+            }
+          ],
+          "line_count": 13689,
+          "file_count": 32,
+          "total_size_bytes": 412595
+        },
+        {
+          "name": "Match",
+          "type": "directory",
+          "path": "ServerScriptService/Match",
+          "children": [
+            {
+              "name": "LobbyMatchmaker.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/Match/LobbyMatchmaker.server.lua",
+              "line_count": 1018,
+              "size_bytes": 36513,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 36513
+            },
+            {
+              "name": "MatchArrivalServer.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/Match/MatchArrivalServer.server.lua",
+              "line_count": 681,
+              "size_bytes": 18493,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 18493
+            },
+            {
+              "name": "MatchReturnServer.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/Match/MatchReturnServer.server.lua",
+              "line_count": 230,
+              "size_bytes": 7494,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 7494
+            },
+            {
+              "name": "MatchReturnService.lua",
+              "type": "file",
+              "path": "ServerScriptService/Match/MatchReturnService.lua",
+              "line_count": 390,
+              "size_bytes": 12511,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 12511
+            }
+          ],
+          "line_count": 2319,
+          "file_count": 4,
+          "total_size_bytes": 75011
+        },
+        {
+          "name": "Moderation",
+          "type": "directory",
+          "path": "ServerScriptService/Moderation",
+          "children": [
+            {
+              "name": "GuardServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/Moderation/GuardServer.lua",
+              "line_count": 1035,
+              "size_bytes": 36442,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 36442
+            }
+          ],
+          "line_count": 1035,
+          "file_count": 1,
+          "total_size_bytes": 36442
+        },
+        {
+          "name": "Obstacles",
+          "type": "directory",
+          "path": "ServerScriptService/Obstacles",
+          "children": [
+            {
+              "name": "MiniTurretServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/Obstacles/MiniTurretServer.lua",
+              "line_count": 1065,
+              "size_bytes": 29427,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 29427
+            }
+          ],
+          "line_count": 1065,
+          "file_count": 1,
+          "total_size_bytes": 29427
+        },
+        {
+          "name": "Shop",
+          "type": "directory",
+          "path": "ServerScriptService/Shop",
+          "children": [
+            {
+              "name": "ShopServer.lua",
+              "type": "file",
+              "path": "ServerScriptService/Shop/ShopServer.lua",
+              "line_count": 9,
+              "size_bytes": 416,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 416
+            }
+          ],
+          "line_count": 9,
+          "file_count": 1,
+          "total_size_bytes": 416
+        },
+        {
+          "name": "Tools",
+          "type": "directory",
+          "path": "ServerScriptService/Tools",
+          "children": [
+            {
+              "name": "AdminCommands.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/Tools/AdminCommands.server.lua",
+              "line_count": 1167,
+              "size_bytes": 46893,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 46893
+            },
+            {
+              "name": "BotLoad.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/Tools/BotLoad.server.lua",
+              "line_count": 407,
+              "size_bytes": 16354,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 16354
+            },
+            {
+              "name": "PerfHarness.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/Tools/PerfHarness.server.lua",
+              "line_count": 265,
+              "size_bytes": 9224,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 9224
+            },
+            {
+              "name": "RepoHealthCheck.server.lua",
+              "type": "file",
+              "path": "ServerScriptService/Tools/RepoHealthCheck.server.lua",
+              "line_count": 201,
+              "size_bytes": 9098,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 9098
+            },
+            {
+              "name": "StressConfig.lua",
+              "type": "file",
+              "path": "ServerScriptService/Tools/StressConfig.lua",
+              "line_count": 76,
+              "size_bytes": 2133,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 2133
+            }
+          ],
+          "line_count": 2116,
+          "file_count": 5,
+          "total_size_bytes": 83702
+        }
+      ],
+      "line_count": 26742,
+      "file_count": 54,
+      "total_size_bytes": 839194
+    },
+    {
+      "name": "ServerStorage",
+      "type": "directory",
+      "path": "ServerStorage",
+      "children": [
+        {
+          "name": "ArenaTemplates",
+          "type": "directory",
+          "path": "ServerStorage/ArenaTemplates",
+          "children": [
+            {
+              "name": "BaseArena",
+              "type": "directory",
+              "path": "ServerStorage/ArenaTemplates/BaseArena",
+              "children": [
+                {
+                  "name": "init.lua",
+                  "type": "file",
+                  "path": "ServerStorage/ArenaTemplates/BaseArena/init.lua",
+                  "line_count": 170,
+                  "size_bytes": 5456,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 5456
+                }
+              ],
+              "line_count": 170,
+              "file_count": 1,
+              "total_size_bytes": 5456
+            }
+          ],
+          "line_count": 170,
+          "file_count": 1,
+          "total_size_bytes": 5456
+        }
+      ],
+      "line_count": 170,
+      "file_count": 1,
+      "total_size_bytes": 5456
+    },
+    {
+      "name": "StarterGui",
+      "type": "directory",
+      "path": "StarterGui",
+      "children": [
+        {
+          "name": "Lobby",
+          "type": "directory",
+          "path": "StarterGui/Lobby",
+          "children": [
+            {
+              "name": "GlobalLeaderboard.client.lua",
+              "type": "file",
+              "path": "StarterGui/Lobby/GlobalLeaderboard.client.lua",
+              "line_count": 275,
+              "size_bytes": 7416,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 7416
+            }
+          ],
+          "line_count": 275,
+          "file_count": 1,
+          "total_size_bytes": 7416
+        },
+        {
+          "name": "WorldScreens",
+          "type": "directory",
+          "path": "StarterGui/WorldScreens",
+          "children": [
+            {
+              "name": "Screen_RoundTimer.client.lua",
+              "type": "file",
+              "path": "StarterGui/WorldScreens/Screen_RoundTimer.client.lua",
+              "line_count": 212,
+              "size_bytes": 5158,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 5158
+            },
+            {
+              "name": "Screen_WaveTimer.client.lua",
+              "type": "file",
+              "path": "StarterGui/WorldScreens/Screen_WaveTimer.client.lua",
+              "line_count": 156,
+              "size_bytes": 4206,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 4206
+            }
+          ],
+          "line_count": 368,
+          "file_count": 2,
+          "total_size_bytes": 9364
+        }
+      ],
+      "line_count": 643,
+      "file_count": 3,
+      "total_size_bytes": 16780
+    },
+    {
+      "name": "StarterPlayer",
+      "type": "directory",
+      "path": "StarterPlayer",
+      "children": [
+        {
+          "name": "StarterPlayerScripts",
+          "type": "directory",
+          "path": "StarterPlayer/StarterPlayerScripts",
+          "children": [
+            {
+              "name": "Controllers",
+              "type": "directory",
+              "path": "StarterPlayer/StarterPlayerScripts/Controllers",
+              "children": [
+                {
+                  "name": "AchievementToast.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/AchievementToast.client.lua",
+                  "line_count": 290,
+                  "size_bytes": 8513,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 8513
+                },
+                {
+                  "name": "AudioController.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/AudioController.client.lua",
+                  "line_count": 234,
+                  "size_bytes": 6176,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 6176
+                },
+                {
+                  "name": "CameraFeel.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeel.client.lua",
+                  "line_count": 260,
+                  "size_bytes": 8656,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 8656
+                },
+                {
+                  "name": "CameraFeelBus.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeelBus.lua",
+                  "line_count": 45,
+                  "size_bytes": 1153,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 1153
+                },
+                {
+                  "name": "ControllerSupport.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/ControllerSupport.client.lua",
+                  "line_count": 575,
+                  "size_bytes": 19395,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 19395
+                },
+                {
+                  "name": "HUDController.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/HUDController.client.lua",
+                  "line_count": 1569,
+                  "size_bytes": 49860,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 49860
+                },
+                {
+                  "name": "LeaderboardUI.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/LeaderboardUI.client.lua",
+                  "line_count": 750,
+                  "size_bytes": 26293,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 26293
+                },
+                {
+                  "name": "MeleeController.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/MeleeController.client.lua",
+                  "line_count": 447,
+                  "size_bytes": 12877,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 12877
+                },
+                {
+                  "name": "PlayerController.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/PlayerController.client.lua",
+                  "line_count": 420,
+                  "size_bytes": 13265,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 13265
+                },
+                {
+                  "name": "QueueUI.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/QueueUI.client.lua",
+                  "line_count": 488,
+                  "size_bytes": 14186,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 14186
+                },
+                {
+                  "name": "QuickbarController.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/QuickbarController.client.lua",
+                  "line_count": 710,
+                  "size_bytes": 26975,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 26975
+                },
+                {
+                  "name": "RoundSummary.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/RoundSummary.client.lua",
+                  "line_count": 432,
+                  "size_bytes": 13940,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 13940
+                },
+                {
+                  "name": "SettingsUI.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/SettingsUI.client.lua",
+                  "line_count": 1398,
+                  "size_bytes": 46489,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 46489
+                },
+                {
+                  "name": "TutorialUI.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/TutorialUI.client.lua",
+                  "line_count": 600,
+                  "size_bytes": 19810,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 19810
+                },
+                {
+                  "name": "UIRouter.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Controllers/UIRouter.client.lua",
+                  "line_count": 216,
+                  "size_bytes": 6184,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 6184
+                }
+              ],
+              "line_count": 8434,
+              "file_count": 15,
+              "total_size_bytes": 273772
+            },
+            {
+              "name": "Tools",
+              "type": "directory",
+              "path": "StarterPlayer/StarterPlayerScripts/Tools",
+              "children": [
+                {
+                  "name": "PerfHUD.client.lua",
+                  "type": "file",
+                  "path": "StarterPlayer/StarterPlayerScripts/Tools/PerfHUD.client.lua",
+                  "line_count": 224,
+                  "size_bytes": 7504,
+                  "language": "Luau",
+                  "file_count": 1,
+                  "total_size_bytes": 7504
+                }
+              ],
+              "line_count": 224,
+              "file_count": 1,
+              "total_size_bytes": 7504
+            },
+            {
+              "name": "AdminPanel.client.lua",
+              "type": "file",
+              "path": "StarterPlayer/StarterPlayerScripts/AdminPanel.client.lua",
+              "line_count": 471,
+              "size_bytes": 15899,
+              "language": "Luau",
+              "file_count": 1,
+              "total_size_bytes": 15899
+            }
+          ],
+          "line_count": 9129,
+          "file_count": 17,
+          "total_size_bytes": 297175
+        }
+      ],
+      "line_count": 9129,
+      "file_count": 17,
+      "total_size_bytes": 297175
+    },
+    {
+      "name": "default.project.json",
+      "type": "file",
+      "path": "default.project.json",
+      "line_count": 40,
+      "size_bytes": 1438,
+      "language": "JSON",
+      "file_count": 1,
+      "total_size_bytes": 1438
+    }
+  ],
+  "line_count": 40428,
+  "file_count": 101,
+  "total_size_bytes": 1270434
+}
