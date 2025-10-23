@@ -10,6 +10,8 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local configFolder = sharedFolder:WaitForChild("Config")
 local typesFolder = sharedFolder:WaitForChild("Types")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
 
 local function safeRequire(moduleScript: Instance?): any?
     if not moduleScript or not moduleScript:IsA("ModuleScript") then
@@ -82,6 +84,7 @@ type PlayerSettings = {
         CameraShakeStrength: number,
         ColorblindPalette: string,
         TextScale: number,
+        Locale: string,
 }
 
 type Inventory = {
@@ -271,6 +274,7 @@ local DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
                 "TextScale",
                 1
         ),
+        Locale = Localizer.getDefaultLocale(),
 }
 
 local function copySettingsData(settings: PlayerSettings?): PlayerSettings
@@ -281,6 +285,7 @@ local function copySettingsData(settings: PlayerSettings?): PlayerSettings
                 CameraShakeStrength = source.CameraShakeStrength,
                 ColorblindPalette = source.ColorblindPalette,
                 TextScale = source.TextScale,
+                Locale = source.Locale,
         }
 end
 
@@ -311,6 +316,10 @@ local function sanitizeSettingsData(raw: any): PlayerSettings
 
         if raw.ColorblindPalette ~= nil then
                 sanitized.ColorblindPalette = resolvePaletteId(raw.ColorblindPalette, sanitized.ColorblindPalette)
+        end
+
+        if raw.Locale ~= nil then
+                sanitized.Locale = Localizer.normalizeLocale(raw.Locale)
         end
 
         return sanitized

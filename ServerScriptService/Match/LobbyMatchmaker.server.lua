@@ -10,6 +10,9 @@ local HttpService = game:GetService("HttpService")
 
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Remotes = require(ReplicatedStorage.Remotes.RemoteBootstrap)
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
 
 local matchConfig = GameConfig.Get().Match or {}
 local TELEPORT_ENABLED = matchConfig.UseTeleport ~= false
@@ -340,7 +343,11 @@ local function schedulePartyRetry(party: Party, reason: string)
         if typeof(reason) == "string" and reason ~= "" then
                 reasonText = reason
         end
-        sendNoticeToParty(party, string.format("Matchmaking retry in %d seconds (%s).", math.floor(delaySeconds + 0.5), reasonText), "warning")
+        local seconds = math.max(1, math.floor(delaySeconds + 0.5))
+        sendNoticeToParty(party, "notices.matchmaking.retry", "warning", {
+                seconds = seconds,
+                reason = reasonText,
+        })
         debugPrint("Party %s retrying in %.1f seconds (%s, attempt %d)", party.id, delaySeconds, reasonText, attempt)
 
         local retryToken = party.retryToken
@@ -402,15 +409,24 @@ local function getPlayerSummary(player: Player)
         }
 end
 
-local function sendNoticeToParty(party: Party, message: string, kind: string?)
+local function sendNoticeToParty(party: Party, key: string, kind: string?, args: { [string]: any }?)
         if not noticeRemote then
                 return
         end
+
+        if typeof(key) ~= "string" or key == "" then
+                return
+        end
+
         for _, member in ipairs(party.members) do
                 if member.Parent == Players then
+                        local locale = Localizer.getPlayerLocale(member)
                         noticeRemote:FireClient(member, {
-                                msg = message,
+                                msg = Localizer.t(key, args, locale),
                                 kind = kind or "info",
+                                key = key,
+                                args = args,
+                                locale = locale,
                         })
                 end
         end
@@ -449,13 +465,13 @@ local function removePartyFromQueue(party: Party)
         party.queued = false
 end
 
-local function disbandParty(party: Party, noticeMessage: string?)
+local function disbandParty(party: Party, noticeKey: string?, noticeArgs: { [string]: any }?)
         removePartyFromQueue(party)
         resetPartyRetry(party)
         partiesById[party.id] = nil
 
-        if noticeMessage then
-                sendNoticeToParty(party, noticeMessage, "info")
+        if noticeKey then
+                sendNoticeToParty(party, noticeKey, "info", noticeArgs)
         end
 
         sendPartyUpdate(party, "disbanded")
@@ -558,7 +574,7 @@ local function buildMemberSummaries(party: Party)
         return summaries
 end
 
-local function removePlayerFromParty(party: Party, player: Player, shouldDisbandIfEmpty: boolean, noticeMessage: string?)
+local function removePlayerFromParty(party: Party, player: Player, shouldDisbandIfEmpty: boolean, noticeKey: string?, noticeArgs: { [string]: any }?)
         if not party.memberMap[player] then
                 return
         end
@@ -582,14 +598,14 @@ local function removePlayerFromParty(party: Party, player: Player, shouldDisband
         end
 
         if #party.members == 0 then
-                disbandParty(party, noticeMessage)
+                disbandParty(party, noticeKey, noticeArgs)
                 return
         end
 
         if shouldDisbandIfEmpty then
                 sendPartyUpdate(party, "update")
-                if noticeMessage then
-                        sendNoticeToParty(party, noticeMessage, "info")
+                if noticeKey then
+                        sendNoticeToParty(party, noticeKey, "info", noticeArgs)
                 end
         end
 end
@@ -650,7 +666,7 @@ local function processQueue()
 					if success then
 						resetPartyRetry(party)
 						sendPartyUpdate(party, "local")
-						sendNoticeToParty(party, "Match server unavailable; running local arena in this server.", "info")
+                                                sendNoticeToParty(party, "notices.matchmaking.serverUnavailable", "info")
 						debugPrint("Party %s started local fallback arena (%d members)", party.id, #playersToTeleport)
 						releasePartyForMatch(party)
 						return true
@@ -669,7 +685,7 @@ local function processQueue()
 						else
 							warn("[LobbyMatchmaker] Invalid MatchPlaceId; cannot teleport")
 						end
-						sendNoticeToParty(party, "Matchmaking temporarily unavailable. Please try again later.", "error")
+                                                sendNoticeToParty(party, "notices.matchmaking.unavailable", "error")
 						schedulePartyRetry(party, fallbackReason)
 					end
 				else
@@ -782,7 +798,7 @@ local function handleJoinQueue(player: Player, options: any?)
                                         userId = member.UserId,
                                 }
                         end
-                        disbandParty(currentParty, "A member joined a new party.")
+                        disbandParty(currentParty, "notices.matchmaking.memberJoinedNewParty")
                 end
         end
 
@@ -791,7 +807,7 @@ local function handleJoinQueue(player: Player, options: any?)
         table.insert(partyQueue, party)
 
         sendPartyUpdate(party, "queued")
-        sendNoticeToParty(party, "Joined the matchmaking queue.", "info")
+        sendNoticeToParty(party, "notices.matchmaking.joinedQueue", "info")
         debugPrint("Party %s queued (%d members)", party.id, #party.members)
 
         scheduleQueueProcessing()
@@ -821,7 +837,7 @@ local function handleLeaveQueue(player: Player)
         end
 
         debugPrint("Party %s leaving queue (requested by %s)", party.id, player.Name)
-        disbandParty(party, "Left the matchmaking queue.")
+        disbandParty(party, "notices.matchmaking.leftQueue")
 
         return {
                 ok = true,
@@ -849,7 +865,7 @@ Players.PlayerRemoving:Connect(function(player)
         if party.teleporting then
                 removePlayerFromParty(party, player, false)
         else
-                removePlayerFromParty(party, player, true, "A member left the party.")
+                removePlayerFromParty(party, player, true, "notices.matchmaking.memberLeftParty")
         end
 end)
 

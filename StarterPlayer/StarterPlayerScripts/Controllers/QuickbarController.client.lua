@@ -10,9 +10,11 @@ local playerGui = localPlayer:WaitForChild("PlayerGui")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local configFolder = sharedFolder:WaitForChild("Config")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
 
 local GameConfigModule = require(configFolder:WaitForChild("GameConfig"))
 local ShopConfigModule = require(configFolder:WaitForChild("ShopConfig"))
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
 
 local gameConfig = if typeof(GameConfigModule.Get) == "function" then GameConfigModule.Get() else GameConfigModule
 local uiConfig = gameConfig.UI or {}
@@ -106,6 +108,7 @@ local slotActionNames: { [number]: string } = {}
 
 local currentMelee: { [number]: QuickbarMeleeEntry? } = {}
 local currentTokens: { [number]: QuickbarTokenEntry? } = {}
+local currentLocale = Localizer.getLocalPlayerLocale()
 
 local quickbarGuiName = "QuickbarHUD"
 local existingGui = playerGui:FindFirstChild(quickbarGuiName)
@@ -155,19 +158,23 @@ listLayout.Parent = quickbarFrame
 
 local connections: { RBXScriptConnection } = {}
 
-local function getItemDisplayName(itemId: string): string
-	local itemInfo = if typeof(shopItems) == "table" then shopItems[itemId] else nil
-	if typeof(itemInfo) == "table" then
-		local nameValue = itemInfo.Name
-		if typeof(nameValue) == "string" and nameValue ~= "" then
-			return nameValue
-		end
-		local idValue = itemInfo.Id
-		if typeof(idValue) == "string" and idValue ~= "" then
-			return idValue
-		end
-	end
-	return itemId
+local function getItemDisplayName(itemId: string, locale: string): string
+        local itemInfo = if typeof(shopItems) == "table" then shopItems[itemId] else nil
+        if typeof(itemInfo) == "table" then
+                local idValue = if typeof(itemInfo.Id) == "string" and itemInfo.Id ~= "" then itemInfo.Id else itemId
+                local localized = Localizer.t(string.format("shop.items.%s.name", idValue), nil, locale)
+                if localized ~= string.format("shop.items.%s.name", idValue) then
+                        return localized
+                end
+                local nameValue = itemInfo.Name
+                if typeof(nameValue) == "string" and nameValue ~= "" then
+                        return nameValue
+                end
+                if typeof(idValue) == "string" and idValue ~= "" then
+                        return idValue
+                end
+        end
+        return itemId
 end
 
 local function updateContextActionTitle(slotOrderIndex: number, title: string)
@@ -178,54 +185,72 @@ local function updateContextActionTitle(slotOrderIndex: number, title: string)
 end
 
 local function setSlotVisual(slotOrderIndex: number, entry: QuickbarMeleeEntry | QuickbarTokenEntry | nil, kind: SlotKind)
-	local button = slotButtons[slotOrderIndex]
-	if not button then
-		return
-	end
+        local button = slotButtons[slotOrderIndex]
+        if not button then
+                return
+        end
 
-	local hotkeyLabel = slotHotkeyLabels[slotOrderIndex] or tostring(slotOrderIndex)
-	local headerText = string.format("[%s]", hotkeyLabel)
+        local hotkeyLabel = slotHotkeyLabels[slotOrderIndex] or tostring(slotOrderIndex)
+        local headerText = string.format("[%s]", hotkeyLabel)
+        local slotTitle = Localizer.t("ui.quickbar.actionSlot", { label = hotkeyLabel }, currentLocale)
 
-	if entry == nil then
-		button.Text = if kind == "token"
-			then string.format("%s\n%s", headerText, "No Token")
-			else string.format("%s\n%s", headerText, "No Melee")
-		button.BackgroundColor3 = COLOR_EMPTY
-		button.TextTransparency = 0.35
-		button.AutoButtonColor = false
-		button.Active = false
-		updateContextActionTitle(slotOrderIndex, string.format("Slot %s", hotkeyLabel))
-		return
-	end
+        if entry == nil then
+                local placeholderKey = if kind == "token" then "ui.quickbar.emptyToken" else "ui.quickbar.emptyMelee"
+                button.Text = string.format("%s\n%s", headerText, Localizer.t(placeholderKey, nil, currentLocale))
+                button.BackgroundColor3 = COLOR_EMPTY
+                button.TextTransparency = 0.35
+                button.AutoButtonColor = false
+                button.Active = false
+                updateContextActionTitle(slotOrderIndex, slotTitle)
+                return
+        end
 
-	button.TextTransparency = 0
+        button.TextTransparency = 0
 
-	if kind == "token" then
-		local tokenEntry = entry :: QuickbarTokenEntry
-		local countValue = if typeof(tokenEntry.Count) == "number" then tokenEntry.Count else 0
-		local limitValue = if typeof(tokenEntry.StackLimit) == "number" then tokenEntry.StackLimit else nil
-		local displayName = getItemDisplayName(tokenEntry.Id)
-		local countText = if limitValue and limitValue > 0 then string.format("%d/%d", countValue, limitValue) else string.format("x%d", countValue)
+        if kind == "token" then
+                local tokenEntry = entry :: QuickbarTokenEntry
+                local countValue = if typeof(tokenEntry.Count) == "number" then tokenEntry.Count else 0
+                local limitValue = if typeof(tokenEntry.StackLimit) == "number" then tokenEntry.StackLimit else nil
+                local displayName = getItemDisplayName(tokenEntry.Id, currentLocale)
+                local countText
+                if limitValue and limitValue > 0 then
+                        countText = Localizer.t("ui.quickbar.stackCount", { count = countValue, limit = limitValue }, currentLocale)
+                else
+                        countText = Localizer.t("ui.quickbar.count", { count = countValue }, currentLocale)
+                end
 
-		button.Text = string.format("%s\n%s\n%s", headerText, displayName, countText)
-		button.BackgroundColor3 = COLOR_FILLED
-		button.AutoButtonColor = countValue > 0
-		button.Active = countValue > 0
-		if countValue <= 0 then
-			button.TextTransparency = 0.35
-		end
-		updateContextActionTitle(slotOrderIndex, string.format("%s (%s)", hotkeyLabel, displayName))
-	else
-		local meleeEntry = entry :: QuickbarMeleeEntry
-		local displayName = getItemDisplayName(meleeEntry.Id)
-		local statusText = if meleeEntry.Active then "Equipped" else "Ready"
+                button.Text = string.format("%s\n%s\n%s", headerText, displayName, countText)
+                button.BackgroundColor3 = COLOR_FILLED
+                button.AutoButtonColor = countValue > 0
+                button.Active = countValue > 0
+                if countValue <= 0 then
+                        button.TextTransparency = 0.35
+                end
+                local detailedTitle = Localizer.t("ui.quickbar.actionWithDetail", { slot = slotTitle, detail = displayName }, currentLocale)
+                updateContextActionTitle(slotOrderIndex, detailedTitle)
+        else
+                local meleeEntry = entry :: QuickbarMeleeEntry
+                local displayName = getItemDisplayName(meleeEntry.Id, currentLocale)
+                local statusKey = meleeEntry.Active and "ui.quickbar.statusEquipped" or "ui.quickbar.statusReady"
+                local statusText = Localizer.t(statusKey, nil, currentLocale)
 
-		button.Text = string.format("%s\n%s\n%s", headerText, displayName, statusText)
-		button.BackgroundColor3 = meleeEntry.Active and COLOR_ACTIVE_MELEE or COLOR_FILLED
-		button.AutoButtonColor = true
-		button.Active = true
-		updateContextActionTitle(slotOrderIndex, string.format("%s (%s)", hotkeyLabel, statusText))
-	end
+                button.Text = string.format("%s\n%s\n%s", headerText, displayName, statusText)
+                button.BackgroundColor3 = meleeEntry.Active and COLOR_ACTIVE_MELEE or COLOR_FILLED
+                button.AutoButtonColor = true
+                button.Active = true
+                local detailedTitle = Localizer.t("ui.quickbar.actionWithDetail", { slot = slotTitle, detail = statusText }, currentLocale)
+                updateContextActionTitle(slotOrderIndex, detailedTitle)
+        end
+end
+
+local function refreshLocale()
+        currentLocale = Localizer.getLocalPlayerLocale()
+        for orderIndex, definition in ipairs(slotDefinitions) do
+                local entry = if definition.kind == "token"
+                        then currentTokens[definition.index]
+                        else currentMelee[definition.index]
+                setSlotVisual(orderIndex, entry, definition.kind)
+        end
 end
 
 local missingTokenRemoteWarned = false
@@ -321,14 +346,16 @@ local function createSlotButton(slotOrderIndex: number, definition: SlotDefiniti
 end
 
 for orderIndex, definition in ipairs(slotDefinitions) do
-	createSlotButton(orderIndex, definition)
+        createSlotButton(orderIndex, definition)
 end
 
+refreshLocale()
+
 local function applyQuickbarState(rawState: QuickbarState?)
-	if typeof(rawState) ~= "table" then
-		for orderIndex, definition in ipairs(slotDefinitions) do
-			setSlotVisual(orderIndex, nil, definition.kind)
-		end
+        if typeof(rawState) ~= "table" then
+                for orderIndex, definition in ipairs(slotDefinitions) do
+                        setSlotVisual(orderIndex, nil, definition.kind)
+                end
 		return
 	end
 
@@ -388,14 +415,21 @@ end
 applyQuickbarState(nil)
 
 local quickbarConnection = quickbarUpdateRemote.OnClientEvent:Connect(function(state: QuickbarState)
-	applyQuickbarState(state)
+        applyQuickbarState(state)
 end)
 table.insert(connections, quickbarConnection)
 
+if localPlayer then
+        local localeConnection = localPlayer:GetAttributeChangedSignal("Locale"):Connect(function()
+                refreshLocale()
+        end)
+        table.insert(connections, localeConnection)
+end
+
 script.Destroying:Connect(function()
-	for _, actionName in pairs(slotActionNames) do
-		ContextActionService:UnbindAction(actionName)
-	end
+        for _, actionName in pairs(slotActionNames) do
+                ContextActionService:UnbindAction(actionName)
+        end
 	for _, connection in ipairs(connections) do
 		connection:Disconnect()
 	end

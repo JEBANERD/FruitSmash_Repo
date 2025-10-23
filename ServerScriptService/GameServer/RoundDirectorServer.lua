@@ -27,13 +27,17 @@ do
 end
 
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap"))
-local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
+local configFolder = sharedFolder:WaitForChild("Config")
+local GameConfigModule = require(configFolder:WaitForChild("GameConfig"))
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 
 local FlagsModule
 do
     local ok, module = pcall(function()
-        return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Flags"))
+        return require(configFolder:WaitForChild("Flags"))
     end)
     if ok and typeof(module) == "table" then
         FlagsModule = module
@@ -428,44 +432,48 @@ end
 
 local function describeDefeatReason(reason)
     if not reason then
-        return nil
+        return nil, nil, nil
     end
 
     local reasonType = reason.type or reason.reason or reason.Kind or reason.kind
     if reasonType == "target" then
         if reason.lane then
-            return string.format("Target destroyed (lane %s)", tostring(reason.lane))
+            local laneValue = tostring(reason.lane)
+            return "notices.round.reasonTargetLane", { lane = laneValue }, string.format("Target destroyed (lane %s)", laneValue)
         end
 
-        return "Target destroyed"
+        return "notices.round.reasonTarget", nil, "Target destroyed"
     elseif reasonType == "timeout" then
         if reason.wave then
-            return string.format("Wave %d timed out", tonumber(reason.wave) or reason.wave)
+            local waveNumber = tonumber(reason.wave) or reason.wave
+            return "notices.round.reasonTimeoutWave", { wave = waveNumber }, string.format("Wave %d timed out", waveNumber)
         end
 
-        return "Time expired"
+        return "notices.round.reasonTimeout", nil, "Time expired"
     elseif reasonType == "wave_failure" or reasonType == "wave" then
         if reason.wave then
-            return string.format("Wave %d failed", tonumber(reason.wave) or reason.wave)
+            local waveNumber = tonumber(reason.wave) or reason.wave
+            return "notices.round.reasonWaveFailedNumber", { wave = waveNumber }, string.format("Wave %d failed", waveNumber)
         end
 
-        return "Wave failed"
+        return "notices.round.reasonWaveFailed", nil, "Wave failed"
     elseif reasonType == "manual" or reasonType == "abort" then
         if reason.message or reason.Message then
-            return tostring(reason.message or reason.Message)
+            local message = tostring(reason.message or reason.Message)
+            return nil, nil, message
         end
-        return "Round ended"
+        return "notices.round.reasonManual", nil, "Round ended"
     end
 
     if typeof(reason) == "string" then
-        return reason
+        return nil, nil, reason
     end
 
     if typeof(reason.Message) == "string" then
-        return reason.Message
+        return nil, nil, reason.Message
     end
 
-    return nil
+    return nil, nil, nil
 end
 
 local function callSawblade(methodName, arenaId, ...)
@@ -557,9 +565,18 @@ local function logPhase(state)
         end
 
         if state.phase == "Defeat" then
-            local reason = describeDefeatReason(state.defeatReason)
-            if reason then
-                payload.reason = reason
+            local reasonKey, reasonArgs, reasonFallback = describeDefeatReason(state.defeatReason)
+            if reasonKey then
+                payload.reasonKey = reasonKey
+                if reasonArgs then
+                    payload.reasonArgs = reasonArgs
+                end
+                local localized = Localizer.t(reasonKey, reasonArgs, Localizer.getDefaultLocale())
+                if typeof(localized) == "string" and localized ~= "" then
+                    payload.reason = localized
+                end
+            elseif reasonFallback then
+                payload.reason = reasonFallback
             end
         end
 
@@ -716,9 +733,9 @@ local function accumulateLevelRewards(state, rewards)
     end
 end
 
-local function sendNoticeToPlayers(players, message, kind, extras)
-    if typeof(message) ~= "string" then
-        message = tostring(message)
+local function sendNoticeToPlayers(players, key, kind, args, extras)
+    if typeof(key) ~= "string" or key == "" then
+        return
     end
 
     if type(players) ~= "table" then
@@ -728,17 +745,26 @@ local function sendNoticeToPlayers(players, message, kind, extras)
     if noticeRemote then
         for _, player in ipairs(players) do
             if typeof(player) == "Instance" and player:IsA("Player") then
-                local payload = { msg = message, kind = kind or "info" }
+                local locale = Localizer.getPlayerLocale(player)
+                local message = Localizer.t(key, args, locale)
+                local payload = {
+                    msg = message,
+                    kind = kind or "info",
+                    key = key,
+                    args = args,
+                    locale = locale,
+                }
                 if typeof(extras) == "table" then
-                    for key, value in pairs(extras) do
-                        payload[key] = value
+                    for extraKey, value in pairs(extras) do
+                        payload[extraKey] = value
                     end
                 end
                 noticeRemote:FireClient(player, payload)
             end
         end
     else
-        print(string.format("[RoundDirectorServer] Notice(%s): %s", tostring(kind or "info"), message))
+        local fallbackMessage = Localizer.t(key, args, Localizer.getDefaultLocale())
+        print(string.format("[RoundDirectorServer] Notice(%s): %s", tostring(kind or "info"), fallbackMessage))
     end
 end
 
@@ -800,7 +826,7 @@ local function finalizeLevelSummary(state, outcome, reason)
 
     local players = gatherArenaPlayers(state)
     local levelNumber = summary.level or state.level or 0
-    local reasonText = describeDefeatReason(reason or state.defeatReason)
+    local reasonKey, reasonArgs, reasonFallback = describeDefeatReason(reason or state.defeatReason)
     local outcomeKind = outcome == "victory" and "success" or outcome == "defeat" and "warning" or "info"
 
     local levelEventPayload
@@ -813,6 +839,13 @@ local function finalizeLevelSummary(state, outcome, reason)
             wavesCleared = sanitizeInteger(summary.wavesCleared or 0),
             players = {},
         }
+    end
+
+    local summaryReasonText
+    if reasonKey then
+        summaryReasonText = Localizer.t(reasonKey, reasonArgs, Localizer.getDefaultLocale())
+    elseif reasonFallback then
+        summaryReasonText = reasonFallback
     end
 
     for _, player in ipairs(players) do
@@ -836,19 +869,6 @@ local function finalizeLevelSummary(state, outcome, reason)
         }
         totalKoDelta += koDelta
 
-        local message
-        if outcome == "victory" then
-            message = string.format("Level %d cleared! Coins +%d, Points +%d, KOs %d", levelNumber, coins, points, koDelta)
-        elseif outcome == "defeat" then
-            if reasonText then
-                message = string.format("Level %d failed — %s. Coins +%d, Points +%d, KOs %d", levelNumber, reasonText, coins, points, koDelta)
-            else
-                message = string.format("Level %d failed. Coins +%d, Points +%d, KOs %d", levelNumber, coins, points, koDelta)
-            end
-        else
-            message = string.format("Level %d summary: Coins +%d, Points +%d, KOs %d", levelNumber, coins, points, koDelta)
-        end
-
         local metadata = {
             arenaId = state.arenaId,
             level = levelNumber,
@@ -857,10 +877,6 @@ local function finalizeLevelSummary(state, outcome, reason)
             kos = koDelta,
             outcome = outcome,
         }
-
-        if reasonText then
-            metadata.reason = reasonText
-        end
 
         if levelEventPayload then
             local userId = typeof(player.UserId) == "number" and player.UserId or player.Name
@@ -873,7 +889,47 @@ local function finalizeLevelSummary(state, outcome, reason)
             }
         end
 
-        sendNoticeToPlayers({ player }, message, outcomeKind, metadata)
+        local locale = Localizer.getPlayerLocale(player)
+        local reasonText
+        if reasonKey then
+            reasonText = Localizer.t(reasonKey, reasonArgs, locale)
+        elseif reasonFallback then
+            reasonText = reasonFallback
+        end
+
+        local messageKey
+        local messageArgs = {
+            level = levelNumber,
+            coins = coins,
+            points = points,
+            kos = koDelta,
+        }
+
+        if outcome == "victory" then
+            messageKey = "notices.round.levelCleared"
+        elseif outcome == "defeat" then
+            if typeof(reasonText) == "string" and reasonText ~= "" then
+                messageKey = "notices.round.levelFailedReason"
+                messageArgs.reason = reasonText
+            else
+                messageKey = "notices.round.levelFailed"
+            end
+        else
+            messageKey = "notices.round.levelSummary"
+        end
+
+        if typeof(reasonText) == "string" and reasonText ~= "" then
+            metadata.reason = reasonText
+        end
+
+        if reasonKey then
+            metadata.reasonKey = reasonKey
+            if reasonArgs then
+                metadata.reasonArgs = reasonArgs
+            end
+        end
+
+        sendNoticeToPlayers({ player }, messageKey, outcomeKind, messageArgs, metadata)
     end
 
     if not summary.roundSummarySent and RoundSummaryServer and typeof(RoundSummaryServer.Publish) == "function" then
@@ -881,7 +937,7 @@ local function finalizeLevelSummary(state, outcome, reason)
             local publishPayload = {
                 level = levelNumber,
                 outcome = outcome,
-                reason = reasonText,
+                reason = summaryReasonText,
                 totals = {
                     coins = sanitizeInteger(summary.totalCoins or 0),
                     points = sanitizeInteger(summary.totalPoints or 0),
@@ -910,8 +966,8 @@ local function finalizeLevelSummary(state, outcome, reason)
         string.format("waves=%d", sanitizeInteger(summary.wavesCleared or 0)),
     }
 
-    if reasonText then
-        table.insert(logPieces, string.format("reason=%s", reasonText))
+    if summaryReasonText then
+        table.insert(logPieces, string.format("reason=%s", summaryReasonText))
     end
 
     print(string.format("[RoundDirectorServer] Level summary :: %s", table.concat(logPieces, " ")))
@@ -1028,13 +1084,24 @@ local function triggerDefeat(state, reason)
     sendPrepTimer(state, 0)
     broadcastWaveChange(state)
 
+    local defeatReasonKey, defeatReasonArgs, defeatReasonFallback = describeDefeatReason(state.defeatReason)
+
     if state.wave and state.wave > 0 then
         local metadata = {
             arenaId = state.arenaId,
             level = state.level,
             wave = state.wave,
-            reason = describeDefeatReason(state.defeatReason),
         }
+
+        if defeatReasonKey then
+            metadata.reasonKey = defeatReasonKey
+            if defeatReasonArgs then
+                metadata.reasonArgs = defeatReasonArgs
+            end
+            metadata.reason = Localizer.t(defeatReasonKey, defeatReasonArgs, Localizer.getDefaultLocale())
+        elseif defeatReasonFallback then
+            metadata.reason = defeatReasonFallback
+        end
 
         fireWaveCompleteEvent(state, false, metadata)
     end
@@ -1054,9 +1121,14 @@ local function triggerDefeat(state, reason)
             payload.partyId = partyId
         end
 
-        local readableReason = describeDefeatReason(state.defeatReason)
-        if readableReason then
-            payload.reason = readableReason
+        if defeatReasonKey then
+            payload.reasonKey = defeatReasonKey
+            if defeatReasonArgs then
+                payload.reasonArgs = defeatReasonArgs
+            end
+            payload.reason = Localizer.t(defeatReasonKey, defeatReasonArgs, Localizer.getDefaultLocale())
+        elseif defeatReasonFallback then
+            payload.reason = defeatReasonFallback
         end
 
         if typeof(state.startedAt) == "number" then
