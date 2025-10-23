@@ -736,6 +736,7 @@ local function removePlayerFromParty(party: Party, player: Player, shouldDisband
                 sendPartyUpdate(party, "update", nil, true)
                 if noticeMessage then
                         sendNoticeToParty(party, noticeMessage, "info")
+                end
                 sendPartyUpdate(party, "update")
                 if noticeKey then
                         sendNoticeToParty(party, noticeKey, "info", noticeArgs)

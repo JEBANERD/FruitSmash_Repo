@@ -358,7 +358,7 @@ local function persistState(player: Player, state: DailyState): boolean
     end
 
     local ok, updatedPayload, saveErr = pcall(saveServiceUpdateAsync, userId, function(payload)
-        local container = normalizePayload(payload, player)
+        local container = normalizePayload(payload, player);
         (container :: any).DailyRewards = {
             streak = state.streak,
             lastClaimUtcDay = state.lastClaimUtcDay,

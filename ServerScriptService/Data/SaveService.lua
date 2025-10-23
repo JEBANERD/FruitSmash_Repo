@@ -350,7 +350,8 @@ function SaveService.SaveAsync(userId: number, data: SavePayload): (boolean, str
     end
 
     state.saving = true
-    local success, err: (boolean, string?) = true, nil
+    local success: boolean = true
+    local err: string? = nil
 
     while state.queued do
         local payload = state.queued :: SavePayload
