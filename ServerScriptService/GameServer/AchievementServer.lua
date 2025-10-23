@@ -9,6 +9,26 @@ local remotesModule = remotesFolder:WaitForChild("RemoteBootstrap")
 local Remotes = require(remotesModule)
 local toastRemote: RemoteEvent? = Remotes and Remotes.RE_AchievementToast or nil
 
+local FlagsModule
+do
+    local ok, module = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Flags"))
+    end)
+    if ok and typeof(module) == "table" then
+        FlagsModule = module
+    end
+end
+
+local function resolveAchievementsFlag(): boolean
+    if FlagsModule and typeof((FlagsModule :: any).IsEnabled) == "function" then
+        local ok, result = pcall((FlagsModule :: any).IsEnabled, "Achievements")
+        if ok and typeof(result) == "boolean" then
+            return result
+        end
+    end
+    return true
+end
+
 local SPEEDRUNNER_THRESHOLD_SECONDS = 120
 local MIN_POINTS_FOR_MVP = 1
 
@@ -48,6 +68,22 @@ type ArenaState = {
 
 local activeArenas: { [string]: ArenaState } = {}
 local awardedAchievements: { [Player]: { [string]: boolean } } = {}
+
+local achievementsEnabled = true
+
+local function applyAchievementsFlag(state: any)
+    local newState = false
+    if typeof(state) == "boolean" then
+        newState = state
+    elseif typeof(state) == "number" then
+        newState = state ~= 0
+    end
+
+    achievementsEnabled = newState
+    if not achievementsEnabled then
+        table.clear(awardedAchievements)
+    end
+end
 
 local AchievementServer = {}
 
@@ -115,6 +151,10 @@ end
 
 local function grantAchievement(player: Player, achievementId: string, overrides: { title: string?, message: string? }?)
     if typeof(player) ~= "Instance" or not player:IsA("Player") then
+        return
+    end
+
+    if not achievementsEnabled then
         return
     end
 
@@ -334,6 +374,14 @@ function AchievementServer.ResetArena(arenaId: any)
     end
 
     activeArenas[key] = nil
+end
+
+applyAchievementsFlag(resolveAchievementsFlag())
+
+if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
+    (FlagsModule :: any).OnChanged("Achievements", function(isEnabled)
+        applyAchievementsFlag(isEnabled)
+    end)
 end
 
 Players.PlayerRemoving:Connect(function(player)

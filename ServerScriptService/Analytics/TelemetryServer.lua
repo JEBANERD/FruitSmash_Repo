@@ -67,7 +67,6 @@ local function resolveTelemetryFlag(): boolean
 end
 
 local enabled = resolveTelemetryFlag()
-local enabled = true
 local printQueue: { Dictionary } = {}
 local flushScheduled = false
 
@@ -1243,6 +1242,8 @@ end
 function TelemetryServer.IsEnabled(): boolean
         return enabled
 end
+
+TelemetryServer.SetEnabled(enabled)
 
 if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
         (FlagsModule :: any).OnChanged("Telemetry", function(isEnabled)
