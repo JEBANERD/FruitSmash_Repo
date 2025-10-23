@@ -283,6 +283,25 @@ local function createFruitPrimitive(name, size, originCFrame)
     part.BottomSurface = Enum.SurfaceType.Smooth
     part.CastShadow = false
     applyPhysicsDefaults(part)
+
+    part:SetAttribute("AttachmentReferenceSize", part.Size)
+
+    local halfSize = part.Size * 0.5
+    local attachments = {
+        { Name = "RootAttachment", Offset = Vector3.new() },
+        { Name = "ImpactAttachment", Offset = Vector3.new(0, 0, -halfSize.Z) },
+        { Name = "TrailAttachment", Offset = Vector3.new(0, 0, halfSize.Z) },
+        { Name = "OverheadAttachment", Offset = Vector3.new(0, halfSize.Y, 0) },
+    }
+
+    for _, info in ipairs(attachments) do
+        local attachment = Instance.new("Attachment")
+        attachment.Name = info.Name
+        attachment.Position = info.Offset
+        attachment:SetAttribute("Offset", info.Offset)
+        attachment.Parent = part
+    end
+
     return part
 end
 
@@ -300,6 +319,34 @@ local function normalizeFruitAssetId(assetId)
     end
 
     return FRUIT_ASSET_PREFIX .. assetId
+end
+
+local function rescaleAttachments(basePart, targetSize)
+    if not basePart or typeof(targetSize) ~= "Vector3" then
+        return
+    end
+
+    local referenceSize = basePart:GetAttribute("AttachmentReferenceSize")
+    if typeof(referenceSize) ~= "Vector3" then
+        return
+    end
+
+    local scaleX = referenceSize.X ~= 0 and (targetSize.X / referenceSize.X) or 1
+    local scaleY = referenceSize.Y ~= 0 and (targetSize.Y / referenceSize.Y) or 1
+    local scaleZ = referenceSize.Z ~= 0 and (targetSize.Z / referenceSize.Z) or 1
+
+    for _, child in ipairs(basePart:GetChildren()) do
+        if child:IsA("Attachment") then
+            local offset = child:GetAttribute("Offset")
+            if typeof(offset) == "Vector3" then
+                child.Position = Vector3.new(
+                    offset.X * scaleX,
+                    offset.Y * scaleY,
+                    offset.Z * scaleZ
+                )
+            end
+        end
+    end
 end
 
 local function configureFruitInstance(instance, size, originCFrame)
@@ -321,6 +368,7 @@ local function configureFruitInstance(instance, size, originCFrame)
 
         if root and size then
             root.Size = size
+            rescaleAttachments(root, size)
         end
 
         if originCFrame then
@@ -344,6 +392,7 @@ local function configureFruitInstance(instance, size, originCFrame)
         applyPhysicsDefaults(targetPart)
         if size then
             targetPart.Size = size
+            rescaleAttachments(targetPart, size)
         end
         if originCFrame then
             targetPart.CFrame = originCFrame

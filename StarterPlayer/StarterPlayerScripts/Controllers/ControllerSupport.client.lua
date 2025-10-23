@@ -27,6 +27,8 @@ if meleeSlotCount + tokenSlotCount <= 0 then
         return
 end
 
+local CameraFeelBus = require(script.Parent:WaitForChild("CameraFeelBus"))
+
 type SlotKind = "melee" | "token"
 type SlotDefinition = {
         kind: SlotKind,
@@ -61,6 +63,8 @@ local function requestUseToken(slotIndex: number): boolean
                 end
                 return false
         end
+
+        CameraFeelBus.TokenBump()
 
         local success, result = pcall(function()
                 return remote:InvokeServer(slotIndex)

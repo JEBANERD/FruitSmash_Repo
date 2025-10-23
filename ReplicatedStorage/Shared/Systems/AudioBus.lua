@@ -49,6 +49,15 @@ local SOUND_PROPERTY_KEYS = {
     "SoundGroup",
 }
 
+local PREWARM_COUNTS = {
+    swing = 8,
+    hit = 8,
+    spawn = 4,
+    shield_on = 4,
+    shop_open = 2,
+    coin_burst = 6,
+}
+
 export type SoundDefinition = {
     SoundId: string?,
     Volume: number?,
@@ -100,10 +109,15 @@ local SOUND_DEFINITIONS: { [string]: SoundDefinition } = {
         Volume = 0.45,
         PlaybackSpeed = 1,
     },
-}
-
-local pools: { [string]: { [number]: any } } = {}
-
+    coin_burst = {
+        SoundId = "rbxassetid://138081500",
+        Volume = 0.7,
+        PlaybackSpeed = 1.05,
+        RollOffMode = Enum.RollOffMode.Inverse,
+        RollOffMinDistance = 6,
+        RollOffMaxDistance = 60,
+        EmitterSize = 3,
+    },
 export type PoolEntry = {
     eventKey: string,
     sound: Sound,
@@ -113,8 +127,14 @@ export type PoolEntry = {
     destroyed: boolean?,
 }
 
+local pools: { [string]: { PoolEntry } } = {}
+
 local function coerceEventKey(eventName: string): string
-    return string.lower(string.gsub(eventName, "^%s*(.-)%s*$", "%1"))
+    local trimmed = string.gsub(eventName, "^%s*(.-)%s*$", "%1")
+    trimmed = string.gsub(trimmed, "([%d%l])([A-Z])", "%1_%2")
+    trimmed = string.gsub(trimmed, "[%s%-]+", "_")
+    trimmed = string.gsub(trimmed, "__+", "_")
+    return string.lower(trimmed)
 end
 
 local function coercePosition(position: any): Vector3?
@@ -183,6 +203,29 @@ local function createEmitterPart(eventKey: string): BasePart
     return part
 end
 
+local function getOrCreatePool(eventKey: string): { PoolEntry }
+    local pool = pools[eventKey]
+    if not pool then
+        pool = {}
+        pools[eventKey] = pool
+    end
+    return pool
+end
+
+local function pushEntryToPool(entry: PoolEntry)
+    if entry.destroyed then
+        return
+    end
+
+    entry.active = false
+    entry.sound.Parent = soundFolder
+    entry.sound.TimePosition = 0
+    entry.emitter.Parent = emitterFolder
+
+    local pool = getOrCreatePool(entry.eventKey)
+    pool[#pool + 1] = entry
+end
+
 local function createPoolEntry(eventKey: string): PoolEntry?
     local sound = Instance.new("Sound")
     sound.Name = string.format("AudioBus_%s", eventKey)
@@ -234,17 +277,7 @@ local function createPoolEntry(eventKey: string): PoolEntry?
         if not entry.active then
             return
         end
-        entry.active = false
-        sound.Parent = soundFolder
-        sound.TimePosition = 0
-        emitter.Parent = emitterFolder
-
-        local pool = pools[eventKey]
-        if not pool then
-            pool = {}
-            pools[eventKey] = pool
-        end
-        pool[#pool + 1] = entry
+        pushEntryToPool(entry)
     end
 
     entry.release = release
@@ -308,6 +341,42 @@ function AudioBus.Play(eventName: string, position: Vector3 | CFrame | BasePart 
     sound:Play()
 
     return sound
+end
+
+function AudioBus.Warm(eventName: string, count: number?)
+    if typeof(eventName) ~= "string" then
+        return
+    end
+
+    local eventKey = coerceEventKey(eventName)
+    if eventKey == "" then
+        return
+    end
+
+    local warmCount = math.max(0, math.floor(count or 1))
+    if warmCount == 0 then
+        return
+    end
+
+    local definition = SOUND_DEFINITIONS[eventKey]
+    if not definition and not (sfxFolder and sfxFolder:FindFirstChild(eventKey)) then
+        warn(string.format("[AudioBus] Unable to warm unknown event '%s'", eventKey))
+        return
+    end
+
+    for _ = 1, warmCount do
+        local entry = createPoolEntry(eventKey)
+        if not entry then
+            break
+        end
+        pushEntryToPool(entry)
+    end
+end
+
+do
+    for eventKey, count in pairs(PREWARM_COUNTS) do
+        AudioBus.Warm(eventKey, count)
+    end
 end
 
 return AudioBus
