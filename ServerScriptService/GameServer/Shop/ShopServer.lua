@@ -13,6 +13,9 @@ local QuickbarServer = require(script.Parent.Parent:WaitForChild("QuickbarServer
 
 -- Remotes (ShopOpen, PurchaseMade, RE_Notice, RF_Purchase)
 local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
 
 -- ---------- Utilities ----------
 
@@ -414,13 +417,47 @@ local function ensureInventory(profile: any): (any?, any?)
         return data, inventory
 end
 
-local function sendNotice(player: Player, message: string, kind: string)
-        if Remotes.RE_Notice then
-                Remotes.RE_Notice:FireClient(player, {
-                        msg = message,
-                        kind = kind,
-                })
+local function sendNotice(player: Player, key: string, kind: string, args: { [string]: any }?)
+        if not Remotes.RE_Notice then
+                return
         end
+
+        local locale = Localizer.getPlayerLocale(player)
+        local message = Localizer.t(key, args, locale)
+        Remotes.RE_Notice:FireClient(player, {
+                msg = message,
+                kind = kind,
+                key = key,
+                args = args,
+                locale = locale,
+        })
+end
+
+local function getItemDisplayNameForLocale(item: any, locale: string, fallbackId: string?): string
+        if typeof(item) == "table" then
+                local idValue = if typeof(item.Id) == "string" and item.Id ~= "" then item.Id else fallbackId
+                if idValue then
+                        local localized = Localizer.t(string.format("shop.items.%s.name", idValue), nil, locale)
+                        if localized ~= string.format("shop.items.%s.name", idValue) then
+                                return localized
+                        end
+                end
+
+                local nameValue = item.Name
+                if typeof(nameValue) == "string" and nameValue ~= "" then
+                        return nameValue
+                end
+
+                if idValue then
+                        return idValue
+                end
+        end
+
+        if typeof(fallbackId) == "string" and fallbackId ~= "" then
+                return fallbackId
+        end
+
+        return "Item"
 end
 
 -- ---------- Inventory application helpers ----------
@@ -548,20 +585,20 @@ local function processPurchase(player: Player, itemId: string)
 
         if typeof(itemId) ~= "string" or itemId == "" then
                 response.err = "InvalidItem"
-                sendNotice(player, "Invalid item selection.", "error")
+                sendNotice(player, "notices.shop.invalidSelection", "error")
                 return response
         end
 
         if not isShopOpenForPlayer(player) then
                 response.err = "ShopClosed"
-                sendNotice(player, "Shop is currently closed.", "warn")
+                sendNotice(player, "notices.shop.closed", "warn")
                 return response
         end
 
         local item = (type(ShopConfig.Get) == "function" and ShopConfig.Get(itemId)) or ShopItems[itemId]
         if not item then
                 response.err = "UnknownItem"
-                sendNotice(player, "Item not available.", "error")
+                sendNotice(player, "notices.shop.itemUnavailable", "error")
                 return response
         end
 
@@ -584,14 +621,14 @@ local function processPurchase(player: Player, itemId: string)
         local profile = getProfile(player)
         if not profile then
                 response.err = "NoProfile"
-                sendNotice(player, "Could not access your save data.", "error")
+                sendNotice(player, "notices.shop.noProfile", "error")
                 return response
         end
 
         local data, inventory = ensureInventory(profile)
         if not data or not inventory then
                 response.err = "InventoryUnavailable"
-                sendNotice(player, "Unable to load inventory.", "error")
+                sendNotice(player, "notices.shop.inventoryUnavailable", "error")
                 return response
         end
 
@@ -617,7 +654,7 @@ local function processPurchase(player: Player, itemId: string)
         if coins < price then
                 response.err = "InsufficientFunds"
                 response.coins = coins
-                sendNotice(player, "Not enough coins for that purchase.", "warn")
+                sendNotice(player, "notices.shop.insufficientFunds", "warn")
                 return response
         end
 
@@ -631,7 +668,7 @@ local function processPurchase(player: Player, itemId: string)
                 applyFn = applyUtilityPurchase
         else
                 response.err = "UnsupportedKind"
-                sendNotice(player, "That item cannot be purchased right now.", "error")
+                sendNotice(player, "notices.shop.unsupported", "error")
                 return response
         end
 
@@ -640,7 +677,7 @@ local function processPurchase(player: Player, itemId: string)
                 response.err = "OutOfStock"
                 response.stockRemaining = newStockRemaining or 0
                 response.stockLimit = initialStockByItem[item.Id]
-                sendNotice(player, "That item is sold out.", "warn")
+                sendNotice(player, "notices.shop.soldOut", "warn")
                 return response
         end
 
@@ -653,11 +690,11 @@ local function processPurchase(player: Player, itemId: string)
         if not ok then
                 releaseReservedStock()
                 if failureReason == "StackLimit" then
-                        sendNotice(player, "You are already holding the maximum amount of that item.", "warn")
+                        sendNotice(player, "notices.shop.stackLimit", "warn")
                 elseif failureReason == "AlreadyOwned" then
-                        sendNotice(player, "You already own that item.", "warn")
+                        sendNotice(player, "notices.shop.alreadyOwned", "warn")
                 else
-                        sendNotice(player, "Purchase failed.", "error")
+                        sendNotice(player, "notices.shop.purchaseFailed", "error")
                 end
                 response.err = failureReason or "PurchaseFailed"
                 return response
@@ -673,7 +710,9 @@ local function processPurchase(player: Player, itemId: string)
         markProfileDirty(player, profile)
         local quickbarState = QuickbarServer.Refresh(player, data, inventory)
 
-        sendNotice(player, string.format("Purchased %s!", item.Name or item.Id), "info")
+        local locale = Localizer.getPlayerLocale(player)
+        local itemDisplayName = getItemDisplayNameForLocale(item, locale, item.Id or itemId)
+        sendNotice(player, "notices.shop.purchaseSuccess", "info", { item = itemDisplayName })
 
         response.ok = true
         response.err = nil

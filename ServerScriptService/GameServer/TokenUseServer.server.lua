@@ -12,6 +12,10 @@ local Remotes = require(ReplicatedStorage.Remotes.RemoteBootstrap)
 local TokenEffectsServer = require(script.Parent:WaitForChild("TokenEffectsServer"))
 local RoundSummaryServer = require(script.Parent:WaitForChild("RoundSummaryServer"))
 
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
+
 local useTokenRemote: RemoteFunction? = Remotes and Remotes.RF_UseToken or nil
 
 local MAX_EFFECT_NAME_LENGTH = 64
@@ -111,10 +115,19 @@ local function handleUseToken(player: Player, request: UseTokenRequest?)
         end
 
         if result.ok and Remotes.RE_Notice then
-                local messageEffect = result.effect or effectName or "token"
+                local messageEffect = tostring(result.effect or effectName or "token")
+                local locale = Localizer.getPlayerLocale(player)
+                local localizedEffect = Localizer.t(string.format("effects.%s.name", messageEffect), nil, locale)
+                if localizedEffect == string.format("effects.%s.name", messageEffect) then
+                        localizedEffect = messageEffect
+                end
+
                 local okNotice, errNotice = pcall(Remotes.RE_Notice.FireClient, Remotes.RE_Notice, player, {
-                        msg = string.format("Token used: %s", tostring(messageEffect)),
+                        msg = Localizer.t("notices.tokens.tokenUsed", { item = localizedEffect }, locale),
                         kind = "info",
+                        key = "notices.tokens.tokenUsed",
+                        args = { item = localizedEffect },
+                        locale = locale,
                 })
                 if not okNotice then
                         warn(string.format("[TokenUseServer] Failed to send notice: %s", tostring(errNotice)))

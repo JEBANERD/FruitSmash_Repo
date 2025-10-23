@@ -26,6 +26,102 @@ local function warnOnce(key, message)
     warn(message)
 end
 
+local function describeInstance(instance)
+    if not instance then
+        return "<nil>"
+    end
+
+    local ok, fullName = pcall(instance.GetFullName, instance)
+    if ok then
+        return fullName
+    end
+
+    if instance.Name then
+        return instance.Name
+    end
+
+    return tostring(instance)
+end
+
+local function safeRequire(moduleScript, warnKey, contextName)
+    if not moduleScript or not moduleScript:IsA("ModuleScript") then
+        return nil
+    end
+
+    local ok, result = pcall(require, moduleScript)
+    if not ok then
+        warnOnce(warnKey, string.format(
+            "[ContentRegistry] Failed to require %s: %s",
+            contextName or describeInstance(moduleScript),
+            tostring(result)
+        ))
+        return nil
+    end
+
+    return result
+end
+
+local function resolveInstanceDefinition(entry)
+    local entryType = typeof(entry)
+
+    if entryType == "Instance" or entryType == "function" then
+        return entry, entryType
+    end
+
+    if entryType ~= "table" then
+        return nil, entryType
+    end
+
+    if typeof(entry.Instance) == "Instance" then
+        if entry.ServerOnly ~= nil or entry.Optional ~= nil then
+            return {
+                Instance = entry.Instance,
+                ServerOnly = entry.ServerOnly,
+                Optional = entry.Optional,
+            }, "table"
+        end
+
+        return entry.Instance, "Instance"
+    end
+
+    if typeof(entry.Factory) == "function" or typeof(entry.Resolve) == "function" then
+        return entry, "table"
+    end
+
+    if typeof(entry.Builder) == "function" then
+        return {
+            Factory = entry.Builder,
+            ServerOnly = entry.ServerOnly,
+            Optional = entry.Optional,
+        }, "table"
+    end
+
+    if typeof(entry.Create) == "function" then
+        return {
+            Factory = entry.Create,
+            ServerOnly = entry.ServerOnly,
+            Optional = entry.Optional,
+        }, "table"
+    end
+
+    if entry.Value ~= nil then
+        local valueType = typeof(entry.Value)
+        if valueType == "Instance" then
+            return entry.Value, "Instance"
+        elseif valueType == "function" then
+            return {
+                Factory = entry.Value,
+                ServerOnly = entry.ServerOnly,
+                Optional = entry.Optional,
+            }, "table"
+        elseif valueType == "table" then
+            return entry.Value, "table"
+        end
+    end
+
+    return nil, entryType
+end
+
 local function normalizeIds(ids)
     if ids == nil then
         return {}
@@ -213,25 +309,63 @@ local function createFruitPrototype(name, color, shape)
         part.Shape = Enum.PartType.Ball
     end
 
+    part:SetAttribute("AttachmentReferenceSize", part.Size)
+
+    local attachments = {
+        { Name = "RootAttachment", Offset = Vector3.new() },
+        { Name = "ImpactAttachment", Offset = Vector3.new(0, 0, -0.5) },
+        { Name = "TrailAttachment", Offset = Vector3.new(0, 0, 0.5) },
+        { Name = "OverheadAttachment", Offset = Vector3.new(0, 0.5, 0) },
+    }
+
+    for _, attachmentInfo in ipairs(attachments) do
+        local attachment = Instance.new("Attachment")
+        attachment.Name = attachmentInfo.Name
+        local offset = attachmentInfo.Offset or Vector3.new()
+        attachment.Position = offset
+        attachment:SetAttribute("Offset", offset)
+        attachment.Parent = part
+    end
+
     return part
 end
 
 local function registerFruitAssets()
-    local fruitDefinitions = {
-        Apple = { Color = Color3.fromRGB(229, 70, 70), Shape = Enum.PartType.Ball },
-        Banana = { Color = Color3.fromRGB(250, 223, 89), Shape = Enum.PartType.Cylinder },
-        Orange = { Color = Color3.fromRGB(255, 170, 43), Shape = Enum.PartType.Ball },
-        Pineapple = { Color = Color3.fromRGB(255, 219, 113), Shape = Enum.PartType.Block },
-        Coconut = { Color = Color3.fromRGB(168, 120, 78), Shape = Enum.PartType.Ball },
-        Watermelon = { Color = Color3.fromRGB(96, 178, 109), Shape = Enum.PartType.Ball },
-    }
+    registerAsset("Fruit.Fallback", createFruitPrototype("FruitFallback", Color3.fromRGB(235, 235, 235), Enum.PartType.Ball))
 
-    for fruitId, definition in pairs(fruitDefinitions) do
-        local prototype = createFruitPrototype(fruitId, definition.Color, definition.Shape)
-        registerAsset("Fruit." .. fruitId, prototype)
+    local assetsFolder = ReplicatedStorage:FindFirstChild("Assets")
+    if not assetsFolder then
+        warnOnce("assets-folder-missing", "[ContentRegistry] ReplicatedStorage.Assets folder is missing")
+        return
     end
 
-    registerAsset("Fruit.Fallback", createFruitPrototype("FruitFallback", Color3.fromRGB(235, 235, 235), Enum.PartType.Ball))
+    local fruitModule = assetsFolder:FindFirstChild("Fruit")
+    if not fruitModule or not fruitModule:IsA("ModuleScript") then
+        warnOnce("fruit-module-missing", "[ContentRegistry] ReplicatedStorage.Assets.Fruit module is missing")
+        return
+    end
+
+    local fruitDefinitions = safeRequire(fruitModule, "fruit-require-failed", "fruit asset definitions")
+    if type(fruitDefinitions) ~= "table" then
+        warnOnce("fruit-definitions-invalid", "[ContentRegistry] Fruit asset module must return a table")
+        return
+    end
+
+    for fruitId, definition in pairs(fruitDefinitions) do
+        local resolver, definitionType = resolveInstanceDefinition(definition)
+        if resolver then
+            registerAsset("Fruit." .. tostring(fruitId), resolver)
+        else
+            warnOnce(
+                "fruit-definition-invalid:" .. tostring(fruitId),
+                string.format(
+                    "[ContentRegistry] Fruit asset '%s' has unsupported definition (type %s)",
+                    tostring(fruitId),
+                    definitionType or typeof(definition)
+                )
+            )
+        end
+    end
 end
 
 local function resolveArenaTemplate(name)
@@ -249,6 +383,61 @@ local function resolveArenaTemplate(name)
     if not template then
         warnOnce("arena-template-missing:" .. name, string.format("[ContentRegistry] Missing arena template '%s'", name))
         return nil
+    end
+
+    if template:IsA("ModuleScript") then
+        local definition = safeRequire(template, "arena-template-require:" .. name, string.format("arena template '%s'", name))
+        if definition == nil then
+            return nil
+        end
+
+        local resolver, definitionType = resolveInstanceDefinition(definition)
+        if not resolver then
+            warnOnce(
+                "arena-template-invalid:" .. name,
+                string.format(
+                    "[ContentRegistry] Arena template '%s' returned unsupported definition (type %s)",
+                    name,
+                    definitionType or typeof(definition)
+                )
+            )
+            return nil
+        end
+
+        if typeof(resolver) == "Instance" then
+            return resolver
+        end
+
+        local ok, result = pcall(evaluateResolver, resolver)
+        if not ok then
+            warnOnce(
+                "arena-template-evaluate:" .. name,
+                string.format("[ContentRegistry] Failed to evaluate arena template '%s': %s", name, tostring(result))
+            )
+            return nil
+        end
+
+        if typeof(result) == "Instance" then
+            return result
+        end
+
+        warnOnce(
+            "arena-template-result-invalid:" .. name,
+            string.format("[ContentRegistry] Arena template '%s' resolved to unsupported value (type %s)", name, typeof(result))
+        )
+        return nil
+    end
+
+    if template:IsA("Folder") then
+        local primaryModel = template:FindFirstChildWhichIsA("Model")
+        if primaryModel then
+            return primaryModel
+        end
+
+        local pv = template:FindFirstChildWhichIsA("PVInstance")
+        if pv then
+            return pv
+        end
     end
 
     return template
@@ -276,17 +465,24 @@ local function registerVFXAssets()
         return
     end
 
-    local ok, definitions = pcall(require, vfxModule)
-    if not ok then
-        warnOnce("vfx-require-failed", string.format("[ContentRegistry] Failed to require VFX definitions: %s", tostring(definitions)))
+    local definitions = safeRequire(vfxModule, "vfx-require-failed", "VFX definitions module")
+    if type(definitions) ~= "table" then
+        warnOnce("vfx-definitions-invalid", "[ContentRegistry] VFX definitions module must return a table")
         return
     end
 
-    for effectName in pairs(definitions) do
+    for effectName, definition in pairs(definitions) do
         local id = "VFX." .. tostring(effectName)
-        registerAsset(id, function()
-            return definitions[effectName]
-        end)
+        if definition == nil then
+            warnOnce(
+                "vfx-definition-missing:" .. tostring(effectName),
+                string.format("[ContentRegistry] VFX definition '%s' is nil", tostring(effectName))
+            )
+        else
+            registerAsset(id, function()
+                return definitions[effectName]
+            end)
+        end
     end
 end
 

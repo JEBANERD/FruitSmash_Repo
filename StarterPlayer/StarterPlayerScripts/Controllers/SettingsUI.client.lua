@@ -18,6 +18,8 @@ local tutorialRemote: RemoteFunction? = remotesModule and remotesModule.RF_Tutor
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local configFolder = sharedFolder:WaitForChild("Config")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
 local GameConfigModule = require(configFolder:WaitForChild("GameConfig"))
 local GameConfig = if typeof((GameConfigModule :: any).Get) == "function" then (GameConfigModule :: any).Get() else GameConfigModule
 
@@ -83,6 +85,16 @@ local function resolvePaletteId(value: any): string
   return paletteOrder[1].Id
 end
 
+local supportedLocales = Localizer.getSupportedLocales()
+if #supportedLocales == 0 then
+  table.insert(supportedLocales, Localizer.getDefaultLocale())
+end
+
+local localeIndexLookup: {[string]: number} = {}
+for index, localeId in ipairs(supportedLocales) do
+  localeIndexLookup[localeId] = index
+end
+
 local function clampValue(key: string, value: any, fallback: number): number
   local numeric = if typeof(value) == "number" then value else tonumber(value)
   if typeof(numeric) ~= "number" then
@@ -112,6 +124,9 @@ local DEFAULT_SETTINGS = {
   CameraShakeStrength = clampValue("CameraShakeStrength", typeof(defaultsConfig) == "table" and (defaultsConfig :: any).CameraShakeStrength or 0.7, 0.7),
   ColorblindPalette = resolvePaletteId(typeof(defaultsConfig) == "table" and (defaultsConfig :: any).ColorblindPalette or nil),
   TextScale = clampValue("TextScale", typeof(defaultsConfig) == "table" and (defaultsConfig :: any).TextScale or 1, 1),
+  Locale = if typeof(defaultsConfig) == "table" and typeof((defaultsConfig :: any).Locale) == "string"
+    then Localizer.normalizeLocale((defaultsConfig :: any).Locale)
+    else Localizer.getDefaultLocale(),
 }
 
 local currentSettings = {
@@ -120,6 +135,7 @@ local currentSettings = {
   CameraShakeStrength = DEFAULT_SETTINGS.CameraShakeStrength,
   ColorblindPalette = DEFAULT_SETTINGS.ColorblindPalette,
   TextScale = DEFAULT_SETTINGS.TextScale,
+  Locale = DEFAULT_SETTINGS.Locale,
 }
 
 local COLOR_CORRECTION_NAME = "FruitSmash_Colorblind"
@@ -343,8 +359,44 @@ local aimAssistSliderSet: ((number) -> ())? = nil
 local cameraShakeSliderSet: ((number) -> ())? = nil
 local textScaleSliderSet: ((number) -> ())? = nil
 local paletteValueLabel: TextLabel? = nil
+local localeLabel: TextLabel? = nil
+local localeDescriptionLabel: TextLabel? = nil
+local localeValueLabel: TextLabel? = nil
+local localePreviousButton: TextButton? = nil
+local localeNextButton: TextButton? = nil
 
 local pendingSave = false
+
+local function updateLocaleUI()
+  local localeId = currentSettings.Locale
+  if typeof(localeId) ~= "string" or localeId == "" then
+    localeId = Localizer.getDefaultLocale()
+  end
+  local displayName = Localizer.getLocaleDisplayName(localeId, localeId)
+  if localeLabel then
+    localeLabel.Text = Localizer.t("settings.localeLabel", nil, localeId)
+  end
+  if localeDescriptionLabel then
+    localeDescriptionLabel.Text = Localizer.t("settings.localeDescription", nil, localeId)
+  end
+  if localeValueLabel then
+    localeValueLabel.Text = Localizer.t("settings.localeValue", { name = displayName }, localeId)
+  end
+  if localePreviousButton then
+    localePreviousButton.Text = Localizer.t("settings.localePrevious", nil, localeId)
+    local multiple = #supportedLocales > 1
+    localePreviousButton.Active = multiple
+    localePreviousButton.AutoButtonColor = multiple
+    localePreviousButton.TextTransparency = multiple and 0 or 0.4
+  end
+  if localeNextButton then
+    localeNextButton.Text = Localizer.t("settings.localeNext", nil, localeId)
+    local multiple = #supportedLocales > 1
+    localeNextButton.Active = multiple
+    localeNextButton.AutoButtonColor = multiple
+    localeNextButton.TextTransparency = multiple and 0 or 0.4
+  end
+end
 
 local function scheduleSave()
   if pendingSave or not saveRemote then
@@ -362,6 +414,7 @@ local function scheduleSave()
       CameraShakeStrength = currentSettings.CameraShakeStrength,
       ColorblindPalette = currentSettings.ColorblindPalette,
       TextScale = currentSettings.TextScale,
+      Locale = currentSettings.Locale,
     }
     local ok, result = pcall(function()
       return saveRemote:InvokeServer(payload)
@@ -372,6 +425,10 @@ local function scheduleSave()
       currentSettings.CameraShakeStrength = clampValue("CameraShakeStrength", result.CameraShakeStrength, currentSettings.CameraShakeStrength)
       currentSettings.ColorblindPalette = resolvePaletteId(result.ColorblindPalette)
       currentSettings.TextScale = clampValue("TextScale", result.TextScale, currentSettings.TextScale)
+      if result.Locale ~= nil then
+        currentSettings.Locale = Localizer.normalizeLocale(result.Locale)
+        updateLocaleUI()
+      end
     end
   end)
 end
@@ -439,6 +496,21 @@ local function applySetting(key: string, value: any, skipSave: boolean?)
       updatePaletteUI()
     end
     return
+  elseif key == "Locale" then
+    local newValue = Localizer.normalizeLocale(value)
+    if currentSettings.Locale ~= newValue then
+      currentSettings.Locale = newValue
+      if not localeIndexLookup[newValue] then
+        table.insert(supportedLocales, newValue)
+        localeIndexLookup[newValue] = #supportedLocales
+      end
+      localPlayer:SetAttribute("Locale", newValue)
+      updateLocaleUI()
+      if not skipSave then scheduleSave() end
+    else
+      updateLocaleUI()
+    end
+    return
   elseif key == "TextScale" then
     local newValue = clampValue("TextScale", value, currentSettings.TextScale)
     if currentSettings.TextScale ~= newValue then
@@ -464,6 +536,7 @@ local function applySettings(settingsTable: any, skipSave: boolean?)
   applySetting("CameraShakeStrength", settingsTable.CameraShakeStrength, true)
   applySetting("ColorblindPalette", settingsTable.ColorblindPalette, true)
   applySetting("TextScale", settingsTable.TextScale, true)
+  applySetting("Locale", settingsTable.Locale, true)
   if not skipSave then
     scheduleSave()
   end
@@ -848,6 +921,105 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
   end
 end
 
+local function selectLocaleByOffset(delta: number)
+  if #supportedLocales <= 1 then
+    return
+  end
+  local currentId = currentSettings.Locale
+  local index = localeIndexLookup[currentId]
+  if not index then
+    index = 1
+  end
+  local newIndex = ((index - 1 + delta) % #supportedLocales) + 1
+  local target = supportedLocales[newIndex]
+  if target then
+    applySetting("Locale", target)
+  end
+end
+
+local function createLocaleRow()
+  local row = Instance.new("Frame")
+  row.Name = "LocaleRow"
+  row.BackgroundTransparency = 1
+  row.Size = UDim2.new(1, 0, 0, 72)
+  row.LayoutOrder = #contentFrame:GetChildren() + 1
+  row.Parent = contentFrame
+
+  localeLabel = Instance.new("TextLabel")
+  localeLabel.BackgroundTransparency = 1
+  localeLabel.Size = UDim2.new(1, -120, 0, 22)
+  localeLabel.Font = Enum.Font.Gotham
+  localeLabel.TextSize = 16
+  localeLabel.TextColor3 = Color3.new(1, 1, 1)
+  localeLabel.TextXAlignment = Enum.TextXAlignment.Left
+  localeLabel.Parent = row
+
+  localeDescriptionLabel = Instance.new("TextLabel")
+  localeDescriptionLabel.BackgroundTransparency = 1
+  localeDescriptionLabel.Size = UDim2.new(1, -120, 0, 18)
+  localeDescriptionLabel.Position = UDim2.new(0, 0, 0, 24)
+  localeDescriptionLabel.Font = Enum.Font.Gotham
+  localeDescriptionLabel.TextSize = 13
+  localeDescriptionLabel.TextColor3 = Color3.fromRGB(170, 170, 190)
+  localeDescriptionLabel.TextXAlignment = Enum.TextXAlignment.Left
+  localeDescriptionLabel.TextWrapped = true
+  localeDescriptionLabel.Parent = row
+
+  localeValueLabel = Instance.new("TextLabel")
+  localeValueLabel.BackgroundTransparency = 1
+  localeValueLabel.Size = UDim2.new(0.6, 0, 0, 22)
+  localeValueLabel.Position = UDim2.new(0, 0, 0, 46)
+  localeValueLabel.Font = Enum.Font.GothamSemibold
+  localeValueLabel.TextSize = 16
+  localeValueLabel.TextColor3 = Color3.new(1, 1, 1)
+  localeValueLabel.TextXAlignment = Enum.TextXAlignment.Left
+  localeValueLabel.Parent = row
+
+  localePreviousButton = Instance.new("TextButton")
+  localePreviousButton.Size = UDim2.new(0, 36, 0, 32)
+  localePreviousButton.Position = UDim2.new(0.72, 0, 0, 40)
+  localePreviousButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
+  localePreviousButton.AutoButtonColor = #supportedLocales > 1
+  localePreviousButton.Active = #supportedLocales > 1
+  localePreviousButton.TextColor3 = Color3.new(1, 1, 1)
+  localePreviousButton.Font = Enum.Font.GothamSemibold
+  localePreviousButton.TextSize = 16
+  localePreviousButton.Parent = row
+
+  localeNextButton = Instance.new("TextButton")
+  localeNextButton.Size = UDim2.new(0, 36, 0, 32)
+  localeNextButton.Position = UDim2.new(0.85, 0, 0, 40)
+  localeNextButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
+  localeNextButton.AutoButtonColor = #supportedLocales > 1
+  localeNextButton.Active = #supportedLocales > 1
+  localeNextButton.TextColor3 = Color3.new(1, 1, 1)
+  localeNextButton.Font = Enum.Font.GothamSemibold
+  localeNextButton.TextSize = 16
+  localeNextButton.Parent = row
+
+  local cornerPrev = Instance.new("UICorner")
+  cornerPrev.CornerRadius = UDim.new(0, 8)
+  cornerPrev.Parent = localePreviousButton
+
+  local cornerNext = Instance.new("UICorner")
+  cornerNext.CornerRadius = UDim.new(0, 8)
+  cornerNext.Parent = localeNextButton
+
+  localePreviousButton.MouseButton1Click:Connect(function()
+    if #supportedLocales > 1 then
+      selectLocaleByOffset(-1)
+    end
+  end)
+
+  localeNextButton.MouseButton1Click:Connect(function()
+    if #supportedLocales > 1 then
+      selectLocaleByOffset(1)
+    end
+  end)
+
+  updateLocaleUI()
+end
+
 local function createPaletteRow()
   local row = Instance.new("Frame")
   row.Name = "PaletteRow"
@@ -1124,6 +1296,7 @@ createSliderRow("Camera Shake Strength", "CameraShakeStrength", 0, 1, 0.05, form
 createPaletteRow()
 
 createSectionLabel("UI")
+createLocaleRow()
 createSliderRow("Text Scale", "TextScale", clampValue("TextScale", 0.8, 0.8), clampValue("TextScale", 1.4, 1.4), 0.05, formatTextScale)
 
 createSectionLabel("Onboarding")
@@ -1175,6 +1348,7 @@ applyColorblindPalette(currentSettings.ColorblindPalette)
 refreshAllText()
 updateSprintToggleUI()
 updatePaletteUI()
+updateLocaleUI()
 
 local function requestInitialSettings()
   if not saveRemote then

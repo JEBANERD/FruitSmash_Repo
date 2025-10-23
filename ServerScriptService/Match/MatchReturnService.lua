@@ -21,6 +21,11 @@ if remotesModule and remotesModule:IsA("Folder") then
     end
 end
 
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
+local DEFAULT_LOCALE = Localizer.getDefaultLocale()
+
 local function resolveGameConfig()
     local sharedFolder = ReplicatedStorage:FindFirstChild("Shared")
     if not sharedFolder then
@@ -159,37 +164,44 @@ local function gatherArenaPlayers(arenaId: any): ({ Player }, any)
     return recipients, arenaState
 end
 
-local function formatNotice(summary: any): string
+local function getNoticeTemplate(summary: any): (string, { [string]: any }?)
     if typeof(summary) ~= "table" then
-        return "Returning to lobby."
+        return "notices.general.returningLobby", nil
     end
 
-    local reason = summary.reason
-    if typeof(reason) == "string" then
-        reason = string.lower(reason)
+    local reasonValue = summary.reason
+    if typeof(reasonValue) == "string" then
+        reasonValue = string.lower(reasonValue)
     else
-        reason = ""
+        reasonValue = ""
     end
 
-    local level = summary.level
-    local wave = summary.wave
+    local levelValue = summary.level
+    local waveValue = summary.wave
 
-    if reason == "abort" or reason == "aborted" then
-        if typeof(level) == "number" and level > 0 then
-            return string.format("Match aborted during level %d. Returning to lobby.", level)
+    if reasonValue == "abort" or reasonValue == "aborted" then
+        if typeof(levelValue) == "number" and levelValue > 0 then
+            return "notices.general.matchAbortedLevel", { level = levelValue }
         end
-        return "Match aborted. Returning to lobby."
+        return "notices.general.matchAborted", nil
     end
 
-    if typeof(level) == "number" and level > 0 then
-        local message = string.format("Level %d complete! Returning to lobby.", level)
-        if typeof(wave) == "number" and wave > 0 then
-            message = string.format("%s Final wave: %d.", message, wave)
+    if typeof(levelValue) == "number" and levelValue > 0 then
+        if typeof(waveValue) == "number" and waveValue > 0 then
+            return "notices.general.levelCompleteWave", { level = levelValue, wave = waveValue }
         end
-        return message
+        return "notices.general.levelComplete", { level = levelValue }
     end
 
-    return "Returning to lobby."
+    return "notices.general.returningLobby", nil
+end
+
+local function formatNotice(summary: any, locale: string?): string
+    local key, args = getNoticeTemplate(summary)
+    if typeof(locale) ~= "string" or locale == "" then
+        locale = DEFAULT_LOCALE
+    end
+    return Localizer.t(key, args, locale)
 end
 
 local function buildSummary(arenaId: any, context: any, arenaState: any)
@@ -221,8 +233,18 @@ local function buildSummary(arenaId: any, context: any, arenaState: any)
         summary.wave = arenaState.wave
     end
 
+    local defaultNoticeKey, defaultNoticeArgs = getNoticeTemplate(summary)
+    if summary.noticeKey == nil then
+        summary.noticeKey = defaultNoticeKey
+    end
+    if summary.noticeArgs == nil then
+        summary.noticeArgs = defaultNoticeArgs
+    end
+
     summary.timestamp = summary.timestamp or os.time()
-    summary.message = summary.message or formatNotice(summary)
+    if typeof(summary.message) ~= "string" or summary.message == "" then
+        summary.message = Localizer.t(summary.noticeKey, summary.noticeArgs, DEFAULT_LOCALE)
+    end
 
     return summary
 end
@@ -252,6 +274,11 @@ end
 
 function MatchReturnService.FormatNotice(summary: any): string
     return formatNotice(summary)
+end
+
+function MatchReturnService.GetNoticeTemplate(summary: any): (string, { [string]: any }?)
+    local key, args = getNoticeTemplate(summary)
+    return key, args
 end
 
 function MatchReturnService.ReturnArena(arenaId: any, context: any?): boolean
@@ -285,18 +312,44 @@ function MatchReturnService.ReturnArena(arenaId: any, context: any?): boolean
     end
 
     local summary = buildSummary(arenaId, context, arenaState)
-    local message = summary.message
+    local noticeKey = typeof(summary.noticeKey) == "string" and summary.noticeKey ~= "" and summary.noticeKey or nil
+    local noticeArgs = typeof(summary.noticeArgs) == "table" and summary.noticeArgs or nil
+    local defaultMessage = summary.message
 
     local destination = lobbyPlaceIdValue
     local function notifyPlayers()
-        if Remotes and Remotes.RE_Notice and typeof(message) == "string" then
-            for _, player in ipairs(players) do
-                Remotes.RE_Notice:FireClient(player, {
-                    msg = message,
-                    kind = "info",
-                    summary = summary,
-                })
+        if not Remotes or not Remotes.RE_Notice then
+            return
+        end
+
+        for _, player in ipairs(players) do
+            local locale = Localizer.getPlayerLocale(player)
+            local keyToUse = noticeKey
+            local argsToUse = noticeArgs
+            local messageText
+
+            if keyToUse then
+                messageText = Localizer.t(keyToUse, argsToUse, locale)
             end
+
+            if typeof(messageText) ~= "string" or messageText == "" then
+                if typeof(defaultMessage) == "string" and defaultMessage ~= "" then
+                    messageText = defaultMessage
+                else
+                    keyToUse = "notices.general.returningLobby"
+                    argsToUse = nil
+                    messageText = Localizer.t(keyToUse, argsToUse, locale)
+                end
+            end
+
+            Remotes.RE_Notice:FireClient(player, {
+                msg = messageText,
+                kind = "info",
+                summary = summary,
+                key = keyToUse,
+                args = argsToUse,
+                locale = locale,
+            })
         end
     end
 
@@ -316,7 +369,9 @@ function MatchReturnService.ReturnArena(arenaId: any, context: any?): boolean
         kind = "MatchReturn",
         version = 1,
         summary = summary,
-        noticeMessage = message,
+        noticeMessage = summary.message,
+        noticeKey = summary.noticeKey,
+        noticeArgs = summary.noticeArgs,
     }
 
     local ok, err = pcall(function()

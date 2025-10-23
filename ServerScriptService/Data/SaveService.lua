@@ -493,14 +493,18 @@ local function flushPendingSaves(timeoutSeconds: number?): boolean
             local player = findPlayerByUserId(userId)
             local payload = buildCheckpointPayload(userId, player)
             if payload ~= nil then
-                local saveOk, saveSuccess, saveErr = pcall(SaveService.SaveAsync, userId, payload)
+                local subject: any = player
+                if subject == nil then
+                    subject = userId
+                end
+                local saveOk, saveSuccess, saveErr = pcall(SaveService.CheckpointAsync, subject, payload)
                 if not saveOk then
                     failureCount += 1
-                    warn(string.format("[SaveService] BindToClose save error for %d: %s", userId, tostring(saveSuccess)))
+                    warn(string.format("[SaveService] BindToClose checkpoint error for %d: %s", userId, tostring(saveSuccess)))
                 elseif not saveSuccess then
                     failureCount += 1
                     local message = if saveErr then tostring(saveErr) else "Unknown error"
-                    warn(string.format("[SaveService] BindToClose save failed for %d: %s", userId, message))
+                    warn(string.format("[SaveService] BindToClose checkpoint failed for %d: %s", userId, message))
                 else
                     successCount += 1
                 end

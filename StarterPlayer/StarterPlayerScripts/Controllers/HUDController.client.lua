@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
+local Workspace = game:GetService("Workspace")
 
 local localPlayer = Players.LocalPlayer
 if not localPlayer then
@@ -60,6 +61,65 @@ local LANE_PANEL_PADDING = 12
 local LANE_PANEL_HEIGHT = 140
 local LANE_PANEL_MIN_WIDTH = 220
 local LANE_PANEL_MAX_WIDTH = 540
+
+type LanePalette = {
+    hpHigh: Color3,
+    hpMid: Color3,
+    hpLow: Color3,
+    hpShield: Color3,
+    damageFlash: Color3,
+    deltaGain: Color3,
+    deltaLoss: Color3,
+}
+
+local DEFAULT_PALETTE_ID = "off"
+
+local COLORBLIND_PALETTES: { [string]: LanePalette } = {
+    ["off"] = {
+        hpHigh = Color3.fromRGB(90, 220, 110),
+        hpMid = Color3.fromRGB(255, 200, 100),
+        hpLow = Color3.fromRGB(255, 100, 100),
+        hpShield = Color3.fromRGB(120, 200, 255),
+        damageFlash = Color3.fromRGB(255, 80, 80),
+        deltaGain = Color3.fromRGB(140, 255, 140),
+        deltaLoss = Color3.fromRGB(255, 140, 140),
+    },
+    ["deuteranopia"] = {
+        hpHigh = Color3.fromRGB(50, 185, 255),
+        hpMid = Color3.fromRGB(255, 203, 64),
+        hpLow = Color3.fromRGB(255, 125, 40),
+        hpShield = Color3.fromRGB(120, 200, 255),
+        damageFlash = Color3.fromRGB(255, 170, 60),
+        deltaGain = Color3.fromRGB(90, 200, 255),
+        deltaLoss = Color3.fromRGB(255, 160, 80),
+    },
+    ["protanopia"] = {
+        hpHigh = Color3.fromRGB(60, 190, 255),
+        hpMid = Color3.fromRGB(255, 210, 72),
+        hpLow = Color3.fromRGB(255, 140, 90),
+        hpShield = Color3.fromRGB(120, 200, 255),
+        damageFlash = Color3.fromRGB(255, 160, 96),
+        deltaGain = Color3.fromRGB(84, 195, 255),
+        deltaLoss = Color3.fromRGB(255, 168, 120),
+    },
+    ["tritanopia"] = {
+        hpHigh = Color3.fromRGB(70, 205, 132),
+        hpMid = Color3.fromRGB(235, 205, 88),
+        hpLow = Color3.fromRGB(200, 120, 210),
+        hpShield = Color3.fromRGB(120, 200, 255),
+        damageFlash = Color3.fromRGB(210, 130, 210),
+        deltaGain = Color3.fromRGB(100, 215, 160),
+        deltaLoss = Color3.fromRGB(210, 150, 210),
+    },
+}
+
+local activePaletteId: string = DEFAULT_PALETTE_ID
+local activePalette: LanePalette = COLORBLIND_PALETTES[DEFAULT_PALETTE_ID]
+
+local safeAreaFrame: Frame? = nil
+local safeAreaPadding: UIPadding? = nil
+local cameraViewportConnection: RBXScriptConnection? = nil
+local lastSafeAreaInsets = { left = -1, top = -1, right = -1, bottom = -1 }
 
 local FRIENDLY_PHASE = {
     prep = "Prep",
@@ -217,6 +277,88 @@ local function runCleanupTasks()
     table.clear(cleanupTasks)
 end
 
+local function resolvePaletteId(candidate: any): string
+    if typeof(candidate) ~= "string" then
+        return DEFAULT_PALETTE_ID
+    end
+    local normalized = string.lower(candidate)
+    if COLORBLIND_PALETTES[normalized] then
+        return normalized
+    end
+    return DEFAULT_PALETTE_ID
+end
+
+local function sanitizeInset(value: number?): number
+    if typeof(value) ~= "number" then
+        return 0
+    end
+    return math.max(0, math.floor(value + 0.5))
+end
+
+local function computeSafeAreaInsets(): (number, number, number, number)
+    local left, top, right, bottom = 0, 0, 0, 0
+
+    local ok, safeTopLeft, safeBottomRight = pcall(function()
+        return GuiService:GetSafeZoneOffsets()
+    end)
+    if ok and typeof(safeTopLeft) == "Vector2" and typeof(safeBottomRight) == "Vector2" then
+        left = safeTopLeft.X
+        top = safeTopLeft.Y
+        right = safeBottomRight.X
+        bottom = safeBottomRight.Y
+    else
+        local insetOk, guiTopLeft, guiBottomRight = pcall(function()
+            return GuiService:GetGuiInset()
+        end)
+        if insetOk and typeof(guiTopLeft) == "Vector2" and typeof(guiBottomRight) == "Vector2" then
+            left = guiTopLeft.X
+            top = guiTopLeft.Y
+            right = guiBottomRight.X
+            bottom = guiBottomRight.Y
+        end
+    end
+
+    return sanitizeInset(left), sanitizeInset(top), sanitizeInset(right), sanitizeInset(bottom)
+end
+
+local function updateSafeAreaPadding()
+    if not safeAreaPadding then
+        return
+    end
+
+    local left, top, right, bottom = computeSafeAreaInsets()
+    if lastSafeAreaInsets.left == left and lastSafeAreaInsets.top == top and lastSafeAreaInsets.right == right and lastSafeAreaInsets.bottom == bottom then
+        return
+    end
+
+    safeAreaPadding.PaddingLeft = UDim.new(0, left)
+    safeAreaPadding.PaddingTop = UDim.new(0, top)
+    safeAreaPadding.PaddingRight = UDim.new(0, right)
+    safeAreaPadding.PaddingBottom = UDim.new(0, bottom)
+
+    lastSafeAreaInsets.left = left
+    lastSafeAreaInsets.top = top
+    lastSafeAreaInsets.right = right
+    lastSafeAreaInsets.bottom = bottom
+end
+
+local function updateCameraViewportConnection(camera: Camera?)
+    if cameraViewportConnection then
+        cameraViewportConnection:Disconnect()
+        cameraViewportConnection = nil
+    end
+    if camera then
+        cameraViewportConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateSafeAreaPadding)
+    end
+end
+
+table.insert(cleanupTasks, function()
+    if cameraViewportConnection then
+        cameraViewportConnection:Disconnect()
+        cameraViewportConnection = nil
+    end
+end)
+
 local function onDestroy()
     disconnectAll()
     runCleanupTasks()
@@ -232,6 +374,9 @@ local function onDestroy()
         cameraViewportConnection:Disconnect()
         cameraViewportConnection = nil
     end
+    safeAreaFrame = nil
+    safeAreaPadding = nil
+    lastSafeAreaInsets = { left = -1, top = -1, right = -1, bottom = -1 }
 end
 
 script.Destroying:Connect(onDestroy)
@@ -341,12 +486,12 @@ local function playDelta(counter, delta: number)
     label.TextTransparency = 0
     label.Text = string.format("%+d", delta >= 0 and math.floor(delta + 0.5) or math.ceil(delta - 0.5))
     if delta >= 0 then
-        label.TextColor3 = Color3.fromRGB(140, 255, 140)
+        label.TextColor3 = activePalette.deltaGain
     else
-        label.TextColor3 = Color3.fromRGB(255, 140, 140)
+        label.TextColor3 = activePalette.deltaLoss
     end
 
-    local targetPosition = (counter.deltaBasePosition or label.Position) + UDim2.new(0, 0, 0, -12)
+    local targetPosition = (counter.deltaBasePosition or label.Position) + UDim2.new(0, 0, 0, -14)
     local tween = TweenService:Create(label, TweenInfo.new(DELTA_TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
         Position = targetPosition,
         TextTransparency = 1,
@@ -486,13 +631,16 @@ local function updateShieldLabels()
         end
     end
 
+    local palette = activePalette
     for _, panel in pairs(lanePanels) do
+        panel.flash.BackgroundColor3 = palette.damageFlash
         if active then
             panel.shieldLabel.TextTransparency = 0
             panel.shieldLabel.Text = remainingText or "Shield"
-            panel.fill.BackgroundColor3 = Color3.fromRGB(120, 200, 255)
+            panel.fill.BackgroundColor3 = palette.hpShield
         else
             panel.shieldLabel.TextTransparency = 1
+            panel.fill.BackgroundColor3 = colorForPercent(panel.percent)
         end
     end
 end
@@ -594,7 +742,7 @@ local function setLaneCount(count: number)
             fill.AnchorPoint = Vector2.new(0, 1)
             fill.Position = UDim2.new(0, 0, 1, 0)
             fill.Size = UDim2.new(1, 0, 0, 0)
-            fill.BackgroundColor3 = Color3.fromRGB(90, 220, 110)
+            fill.BackgroundColor3 = colorForPercent(1)
             fill.BorderSizePixel = 0
             fill.Parent = barBackground
 
@@ -605,7 +753,7 @@ local function setLaneCount(count: number)
             local flash = Instance.new("Frame")
             flash.Name = "DamageFlash"
             flash.Size = UDim2.new(1, 0, 1, 0)
-            flash.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+            flash.BackgroundColor3 = activePalette.damageFlash
             flash.BackgroundTransparency = 1
             flash.BorderSizePixel = 0
             flash.ZIndex = 2
@@ -726,8 +874,8 @@ local function createCounters()
 
     local frame = Instance.new("Frame")
     frame.Name = "Counters"
-    frame.Position = UDim2.new(0, 18, 0, 18)
-    frame.Size = UDim2.new(0, 240, 0, 96)
+    frame.Position = UDim2.new(0, 20, 0, 20)
+    frame.Size = UDim2.new(0, 280, 0, 120)
     frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     frame.BackgroundTransparency = 0.2
     frame.BorderSizePixel = 0
@@ -762,7 +910,7 @@ local function createCounters()
         local row = Instance.new("Frame")
         row.Name = name .. "Row"
         row.BackgroundTransparency = 1
-        row.Size = UDim2.new(1, 0, 0, 32)
+        row.Size = UDim2.new(1, 0, 0, 40)
         row.LayoutOrder = layoutOrder
         row.Parent = frame
 
@@ -793,12 +941,12 @@ local function createCounters()
         local deltaLabel = Instance.new("TextLabel")
         deltaLabel.Name = "Delta"
         deltaLabel.AnchorPoint = Vector2.new(1, 1)
-        deltaLabel.Position = UDim2.new(1, 0, 1, -2)
-        deltaLabel.Size = UDim2.new(0.6, 0, 0, 18)
+        deltaLabel.Position = UDim2.new(1, 0, 1, -4)
+        deltaLabel.Size = UDim2.new(0.6, 0, 0, 22)
         deltaLabel.BackgroundTransparency = 1
         deltaLabel.Font = Enum.Font.GothamSemibold
         deltaLabel.TextXAlignment = Enum.TextXAlignment.Right
-        deltaLabel.TextColor3 = Color3.fromRGB(140, 255, 140)
+        deltaLabel.TextColor3 = activePalette.deltaGain
         deltaLabel.TextSize = 14
         deltaLabel.TextTransparency = 1
         deltaLabel.Text = "+0"
@@ -858,7 +1006,7 @@ local function createStatusPanel()
     timerLabel.Name = "TimerLabel"
     timerLabel.AnchorPoint = Vector2.new(0.5, 0)
     timerLabel.Position = UDim2.new(0.5, 0, 0, 12)
-    timerLabel.Size = UDim2.new(1, -24, 0, 34)
+    timerLabel.Size = UDim2.new(1, -24, 0, 38)
     timerLabel.BackgroundTransparency = 1
     timerLabel.Font = Enum.Font.GothamBold
     timerLabel.TextSize = 26
@@ -871,7 +1019,7 @@ local function createStatusPanel()
     waveLabel.Name = "WaveLabel"
     waveLabel.AnchorPoint = Vector2.new(0.5, 0)
     waveLabel.Position = UDim2.new(0.5, 0, 0, 48)
-    waveLabel.Size = UDim2.new(1, -24, 0, 24)
+    waveLabel.Size = UDim2.new(1, -24, 0, 28)
     waveLabel.BackgroundTransparency = 1
     waveLabel.Font = Enum.Font.Gotham
     waveLabel.TextSize = 18
@@ -902,11 +1050,44 @@ local function createHudGui()
         hudGui.Parent = localPlayer:WaitForChild("PlayerGui")
     end
 
+    safeAreaFrame = Instance.new("Frame")
+    safeAreaFrame.Name = "SafeArea"
+    safeAreaFrame.Size = UDim2.new(1, 0, 1, 0)
+    safeAreaFrame.BackgroundTransparency = 1
+    safeAreaFrame.BorderSizePixel = 0
+    safeAreaFrame.Parent = hudGui
+
+    safeAreaPadding = Instance.new("UIPadding")
+    safeAreaPadding.Name = "SafeAreaPadding"
+    safeAreaPadding.Parent = safeAreaFrame
+
     hudContainer = Instance.new("Frame")
     hudContainer.Name = HUD_SECTION_NAME
     hudContainer.Size = UDim2.new(1, 0, 1, 0)
     hudContainer.BackgroundTransparency = 1
-    hudContainer.Parent = hudGui
+    hudContainer.Parent = safeAreaFrame
+
+    updateSafeAreaPadding()
+    updateCameraViewportConnection(Workspace.CurrentCamera)
+
+    table.insert(connections, Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+        updateCameraViewportConnection(Workspace.CurrentCamera)
+        updateSafeAreaPadding()
+    end))
+
+    local okSafeZone, safeZoneSignal = pcall(function()
+        return GuiService:GetPropertyChangedSignal("SafeZoneOffsets")
+    end)
+    if okSafeZone and typeof(safeZoneSignal) == "RBXScriptSignal" then
+        table.insert(connections, (safeZoneSignal :: RBXScriptSignal):Connect(updateSafeAreaPadding))
+    end
+
+    local okInset, insetSignal = pcall(function()
+        return GuiService:GetPropertyChangedSignal("GuiInset")
+    end)
+    if okInset and typeof(insetSignal) == "RBXScriptSignal" then
+        table.insert(connections, (insetSignal :: RBXScriptSignal):Connect(updateSafeAreaPadding))
+    end
 
     safePadding = Instance.new("UIPadding")
     safePadding.Name = "SafeAreaPadding"
@@ -917,6 +1098,7 @@ local function createHudGui()
     createCounters()
     createStatusPanel()
     ensureLaneContainer()
+    applyPalette(localPlayer:GetAttribute("ColorblindPalette"), true)
 end
 
 createHudGui()
@@ -981,16 +1163,52 @@ local function applyShieldStatus(active: boolean, remaining: number?)
 end
 
 local function colorForPercent(pct: number): Color3
+    local palette = activePalette
     if laneState.shieldActive then
-        return Color3.fromRGB(120, 200, 255)
+        return palette.hpShield
     end
     if pct >= 0.6 then
-        return Color3.fromRGB(90, 220, 110)
+        return palette.hpHigh
     elseif pct >= 0.3 then
-        return Color3.fromRGB(255, 200, 100)
+        return palette.hpMid
     else
-        return Color3.fromRGB(255, 100, 100)
+        return palette.hpLow
     end
+end
+
+local function refreshPaletteVisuals()
+    local palette = activePalette
+
+    local coinsDelta = counterState.coins.deltaLabel
+    if coinsDelta then
+        local text = coinsDelta.Text
+        if typeof(text) == "string" and string.sub(text, 1, 1) == "-" then
+            coinsDelta.TextColor3 = palette.deltaLoss
+        else
+            coinsDelta.TextColor3 = palette.deltaGain
+        end
+    end
+
+    local pointsDelta = counterState.points.deltaLabel
+    if pointsDelta then
+        local text = pointsDelta.Text
+        if typeof(text) == "string" and string.sub(text, 1, 1) == "-" then
+            pointsDelta.TextColor3 = palette.deltaLoss
+        else
+            pointsDelta.TextColor3 = palette.deltaGain
+        end
+    end
+
+    updateShieldLabels()
+end
+
+local function applyPalette(paletteId: any, force: boolean?)
+    local normalized = resolvePaletteId(paletteId)
+    if force or activePaletteId ~= normalized then
+        activePaletteId = normalized
+        activePalette = COLORBLIND_PALETTES[normalized] or COLORBLIND_PALETTES[DEFAULT_PALETTE_ID]
+    end
+    refreshPaletteVisuals()
 end
 
 local function updateLane(laneId: number, payload: { [string]: any })
@@ -1070,6 +1288,7 @@ local function updateLane(laneId: number, payload: { [string]: any })
 
     if previousPercent and panel.percent < previousPercent - 0.001 then
         panel.flash.BackgroundTransparency = 0.3
+        panel.flash.BackgroundColor3 = activePalette.damageFlash
         panel.flashTween = TweenService:Create(panel.flash, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 1,
         })
@@ -1312,6 +1531,8 @@ local attributeConnection = localPlayer.AttributeChanged:Connect(function(name)
         end
     elseif name == "ArenaId" then
         updateArenaFilter()
+    elseif name == "ColorblindPalette" then
+        applyPalette(localPlayer:GetAttribute("ColorblindPalette"), false)
     end
 end)
 table.insert(connections, attributeConnection)

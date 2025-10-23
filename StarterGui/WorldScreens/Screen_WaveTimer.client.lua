@@ -4,6 +4,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local WorkspaceService = game:GetService("Workspace")
 
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
+
 local TARGET_GUI_NAME = "WS_WaveTimer"
 
 local surfaceGui = WorkspaceService:FindFirstChild(TARGET_GUI_NAME, true)
@@ -39,12 +43,16 @@ end
 
 local waveRemote = remotesFolder:FindFirstChild("RE_WaveChanged")
 if not waveRemote or not waveRemote:IsA("RemoteEvent") then
-	return
+        return
 end
 
 local connections: { RBXScriptConnection } = {}
 local running = true
 local cleaned = false
+local TOTAL_WAVES = 5
+local currentLocale = Localizer.getLocalPlayerLocale()
+local currentLevel: number? = nil
+local currentWave: number? = nil
 
 local function cleanup()
 	if cleaned then
@@ -65,17 +73,43 @@ script.Destroying:Connect(cleanup)
 
 local localPlayer = Players.LocalPlayer
 if localPlayer then
-	local ancestryConnection = localPlayer.AncestryChanged:Connect(function(_, parent)
-		if parent == nil then
-			cleanup()
-		end
-	end)
-	table.insert(connections, ancestryConnection)
+        local ancestryConnection = localPlayer.AncestryChanged:Connect(function(_, parent)
+                if parent == nil then
+                        cleanup()
+                end
+        end)
+        table.insert(connections, ancestryConnection)
+
+        local localeConnection = localPlayer:GetAttributeChangedSignal("Locale"):Connect(function()
+                refreshLocale()
+        end)
+        table.insert(connections, localeConnection)
 end
 
-local function updateWave(level: number, wave: number)
-	textLabel.Text = string.format("Level %d — Wave %d/5", level, wave)
+local function updateWaveDisplay(level: number?, wave: number?)
+        local levelValue = if typeof(level) == "number" then level else 0
+        local waveValue = if typeof(wave) == "number" then wave else 0
+        textLabel.Text = Localizer.t("ui.timers.wave", {
+                level = levelValue,
+                wave = waveValue,
+                total = TOTAL_WAVES,
+        }, currentLocale)
 end
+
+local function updateWave(level: number?, wave: number?)
+        local sanitizedLevel = if typeof(level) == "number" then math.max(0, math.floor(level)) else nil
+        local sanitizedWave = if typeof(wave) == "number" then math.max(0, math.floor(wave)) else nil
+        currentLevel = sanitizedLevel
+        currentWave = sanitizedWave
+        updateWaveDisplay(sanitizedLevel, sanitizedWave)
+end
+
+local function refreshLocale()
+        currentLocale = Localizer.getLocalPlayerLocale()
+        updateWaveDisplay(currentLevel, currentWave)
+end
+
+refreshLocale()
 
 local waveConnection = waveRemote.OnClientEvent:Connect(function(firstArg, secondArg)
 	if not running then
