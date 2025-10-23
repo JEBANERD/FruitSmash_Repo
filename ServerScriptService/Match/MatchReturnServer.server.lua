@@ -20,6 +20,10 @@ if remotesFolder and remotesFolder:IsA("Folder") then
     end
 end
 
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
+
 local MatchReturnService: any = nil
 local serviceModule = script.Parent:FindFirstChild("MatchReturnService")
 if serviceModule and serviceModule:IsA("ModuleScript") then
@@ -75,38 +79,65 @@ if lobbyPlaceId ~= game.PlaceId then
     return
 end
 
-local function formatNotice(summary: any): string
-    if MatchReturnService and typeof(MatchReturnService.FormatNotice) == "function" then
-        local ok, result = pcall(MatchReturnService.FormatNotice, summary)
-        if ok and typeof(result) == "string" then
-            return result
+local function formatNotice(summary: any, locale: string?): (string, string?, { [string]: any }?)
+    local resolvedLocale = Localizer.getDefaultLocale()
+    if typeof(locale) == "string" and locale ~= "" then
+        resolvedLocale = Localizer.normalizeLocale(locale)
+    end
+
+    local key: string? = nil
+    local args: { [string]: any }? = nil
+
+    if MatchReturnService then
+        if typeof(MatchReturnService.GetNoticeTemplate) == "function" then
+            local okTemplate, templateKey, templateArgs = pcall(MatchReturnService.GetNoticeTemplate, summary)
+            if okTemplate and typeof(templateKey) == "string" and templateKey ~= "" then
+                key = templateKey
+                if typeof(templateArgs) == "table" then
+                    args = templateArgs
+                end
+            end
+        elseif typeof(MatchReturnService.FormatNotice) == "function" then
+            local okFormat, result = pcall(MatchReturnService.FormatNotice, summary)
+            if okFormat and typeof(result) == "string" and result ~= "" then
+                return result, nil, nil
+            end
         end
     end
 
-    if typeof(summary) ~= "table" then
-        return "Welcome back to the lobby!"
+    if key then
+        local message = Localizer.t(key, args, resolvedLocale)
+        return message, key, args
     end
 
-    local reason = summary.reason
-    local level = summary.level
-    if typeof(reason) == "string" then
-        reason = string.lower(reason)
-    else
-        reason = ""
-    end
+    local fallbackKey = "notices.general.welcomeLobby"
+    local fallbackArgs = nil
 
-    if reason == "abort" or reason == "aborted" then
-        if typeof(level) == "number" and level > 0 then
-            return string.format("Match aborted during level %d. Welcome back to the lobby!", level)
+    if typeof(summary) == "table" then
+        local reason = summary.reason
+        local level = summary.level
+        if typeof(reason) == "string" then
+            reason = string.lower(reason)
+        else
+            reason = ""
         end
-        return "Match aborted. Welcome back to the lobby!"
+
+        if reason == "abort" or reason == "aborted" then
+            if typeof(level) == "number" and level > 0 then
+                fallbackKey = "notices.general.welcomeMatchAbortedLevel"
+                fallbackArgs = { level = level }
+            else
+                fallbackKey = "notices.general.welcomeMatchAborted"
+                fallbackArgs = nil
+            end
+        elseif typeof(level) == "number" and level > 0 then
+            fallbackKey = "notices.general.welcomeLevelComplete"
+            fallbackArgs = { level = level }
+        end
     end
 
-    if typeof(level) == "number" and level > 0 then
-        return string.format("Level %d complete! Welcome back to the lobby!", level)
-    end
-
-    return "Welcome back to the lobby!"
+    local fallbackMessage = Localizer.t(fallbackKey, fallbackArgs, resolvedLocale)
+    return fallbackMessage, fallbackKey, fallbackArgs
 end
 
 local function deliverNotice(player: Player)
@@ -129,15 +160,47 @@ local function deliverNotice(player: Player)
         summary = data.matchSummary
     end
 
+    local locale = Localizer.getPlayerLocale(player)
+
+    local key: string? = nil
+    local args: { [string]: any }? = nil
+
+    if typeof(data.noticeKey) == "string" and data.noticeKey ~= "" then
+        key = data.noticeKey
+        if typeof(data.noticeArgs) == "table" then
+            args = data.noticeArgs
+        end
+    elseif typeof(summary) == "table" and typeof(summary.noticeKey) == "string" and summary.noticeKey ~= "" then
+        key = summary.noticeKey
+        if typeof(summary.noticeArgs) == "table" then
+            args = summary.noticeArgs
+        end
+    end
+
     local message: string? = nil
-    if typeof(data.noticeMessage) == "string" then
+    if key then
+        message = Localizer.t(key, args, locale)
+    end
+
+    if (typeof(message) ~= "string" or message == "") and typeof(data.noticeMessage) == "string" and data.noticeMessage ~= "" then
         message = data.noticeMessage
-    elseif typeof(data.message) == "string" then
+    end
+
+    if (typeof(message) ~= "string" or message == "") and typeof(data.message) == "string" and data.message ~= "" then
         message = data.message
     end
 
-    if message == nil then
-        message = formatNotice(summary)
+    if (typeof(message) ~= "string" or message == "") and typeof(summary) == "table" and typeof(summary.message) == "string" and summary.message ~= "" then
+        message = summary.message
+    end
+
+    if typeof(message) ~= "string" or message == "" then
+        local fallbackMessage, fallbackKey, fallbackArgs = formatNotice(summary, locale)
+        message = fallbackMessage
+        if key == nil then
+            key = fallbackKey
+            args = fallbackArgs
+        end
     end
 
     if typeof(message) ~= "string" or message == "" then
@@ -149,6 +212,9 @@ local function deliverNotice(player: Player)
         kind = "info",
         summary = summary,
         teleportData = data,
+        key = key,
+        args = args,
+        locale = locale,
     })
 end
 

@@ -50,6 +50,7 @@ C.Player = {
                         CameraShakeStrength = 0.7,
                         ColorblindPalette = "Off",
                         TextScale = 1,
+                        Locale = "en",
                 },
                 Limits = {
                         AimAssistWindow = { Min = 0, Max = 1 },
