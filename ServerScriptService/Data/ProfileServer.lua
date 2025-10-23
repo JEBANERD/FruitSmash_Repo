@@ -608,7 +608,7 @@ local function runSchemaMigrations(container: SaveContainer, player: Player?, us
             end
         else
             if version >= DEFAULT_SCHEMA_VERSION then
-                warnMissingMigration(version, nextVersion, userId)
+                warnMissingMigration(version, nextVersion, userId);
                 (container :: any).Profile = buildDefaultData()
             end
         end
