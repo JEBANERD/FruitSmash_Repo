@@ -39,14 +39,14 @@ local Flags = {}
 
 type ValueType = "boolean" | "number"
 
-local type FlagEntry = {
-    name: string,
-    canonical: string,
-    valueType: ValueType,
-    baseDefault: FlagValue,
-    default: FlagValue,
-    override: FlagValue?,
-    current: FlagValue,
+type FlagEntry = {
+        name: string,
+        canonical: string,
+        valueType: ValueType,
+        baseDefault: FlagValue,
+        default: FlagValue,
+        override: FlagValue?,
+        current: FlagValue,
 }
 
 local entries: { [string]: FlagEntry } = {}
@@ -208,6 +208,8 @@ local function canonicalize(name: string?): string?
     return string.lower(trimmed)
 end
 
+local numericConstraints: { [string]: { min: number?, max: number? } } = {}
+
 local CANARY_CANONICAL = canonicalize("CanaryPercent")
 if CANARY_CANONICAL then
     numericConstraints[CANARY_CANONICAL] = { min = 0, max = 100 }
@@ -312,8 +314,6 @@ local function evaluateRollout(entry: FlagEntry, baseValue: boolean): boolean
     local bucket = computeRolloutBucket(entry.canonical)
     return bucket < percent
 end
-
-local numericConstraints: { [string]: { min: number?, max: number? } } = {}
 
 local function applyNumericConstraint(canonical: string, numeric: number): number
     local constraint = numericConstraints[canonical]

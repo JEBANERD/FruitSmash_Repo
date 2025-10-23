@@ -118,6 +118,8 @@ local SOUND_DEFINITIONS: { [string]: SoundDefinition } = {
         RollOffMaxDistance = 60,
         EmitterSize = 3,
     },
+}
+
 export type PoolEntry = {
     eventKey: string,
     sound: Sound,
