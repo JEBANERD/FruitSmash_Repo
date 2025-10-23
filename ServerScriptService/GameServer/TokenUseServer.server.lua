@@ -12,6 +12,54 @@ local Remotes = require(ReplicatedStorage.Remotes.RemoteBootstrap)
 local TokenEffectsServer = require(script.Parent:WaitForChild("TokenEffectsServer"))
 local RoundSummaryServer = require(script.Parent:WaitForChild("RoundSummaryServer"))
 
+local FlagsModule
+do
+        local ok, module = pcall(function()
+                return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Flags"))
+        end)
+        if ok and typeof(module) == "table" then
+                FlagsModule = module
+        end
+end
+
+local function resolveTokensFlag(): boolean
+        if FlagsModule and typeof((FlagsModule :: any).IsEnabled) == "function" then
+                local ok, result = pcall((FlagsModule :: any).IsEnabled, "Tokens")
+                if ok and typeof(result) == "boolean" then
+                        return result
+                end
+        end
+        return true
+end
+
+local tokensEnabled = true
+
+local function applyTokensFlag(state: any)
+        local newState = false
+        if typeof(state) == "boolean" then
+                newState = state
+        elseif typeof(state) == "number" then
+                newState = state ~= 0
+        end
+
+        local previous = tokensEnabled
+        tokensEnabled = newState
+
+        if previous and not tokensEnabled then
+                for _, player in ipairs(Players:GetPlayers()) do
+                        TokenEffectsServer.ExpireAll(player)
+                end
+        end
+end
+
+applyTokensFlag(resolveTokensFlag())
+
+if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
+        (FlagsModule :: any).OnChanged("Tokens", function(isEnabled)
+                applyTokensFlag(isEnabled)
+        end)
+end
+
 local useTokenRemote: RemoteFunction? = Remotes and Remotes.RF_UseToken or nil
 
 local MAX_EFFECT_NAME_LENGTH = 64
@@ -102,8 +150,12 @@ local function validateUseTokenPayload(_player: Player, payload: any)
 end
 
 local function handleUseToken(player: Player, request: UseTokenRequest?)
-	local effectName = request and request.effect or nil
-	local slotIndex = request and request.slot or nil
+        local effectName = request and request.effect or nil
+        local slotIndex = request and request.slot or nil
+
+        if not tokensEnabled then
+                return { ok = false, err = "TokensDisabled" }
+        end
 
         local result = TokenEffectsServer.Use(player, effectName, slotIndex)
         if typeof(result) ~= "table" then

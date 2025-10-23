@@ -5,19 +5,7 @@ local RunService = game:GetService("RunService")
 
 local isServer = RunService:IsServer()
 
-local DEFAULT_FLAGS = {
-    Obstacles = true,
-    Telemetry = true,
-    Achievements = true,
-}
-
-local STATIC_PLACE_OVERRIDES: { [number | string]: { [string]: boolean } } = {
-    -- [1234567890] = { Obstacles = false },
-}
-
-local ATTRIBUTE_PREFIX = "Flag_"
-
-export type FlagValue = boolean
+export type FlagValue = boolean | number
 export type FlagSnapshot = { [string]: FlagValue }
 
 export type FlagChangedCallback = (FlagValue, string) -> ()
@@ -33,15 +21,32 @@ export type CheckpointMetadata = {
     }?,
 }
 
+local DEFAULT_FLAGS: { [string]: FlagValue } = {
+    Obstacles = true,
+    Tokens = true,
+    Telemetry = true,
+    Achievements = true,
+    CanaryPercent = 100,
+}
+
+local STATIC_PLACE_OVERRIDES: { [number | string]: { [string]: FlagValue } } = {
+    -- [1234567890] = { Obstacles = false },
+}
+
+local ATTRIBUTE_PREFIX = "Flag_"
+
 local Flags = {}
+
+type ValueType = "boolean" | "number"
 
 local type FlagEntry = {
     name: string,
     canonical: string,
-    baseDefault: boolean,
-    default: boolean,
-    override: boolean?,
-    current: boolean,
+    valueType: ValueType,
+    baseDefault: FlagValue,
+    default: FlagValue,
+    override: FlagValue?,
+    current: FlagValue,
 }
 
 local entries: { [string]: FlagEntry } = {}
@@ -49,6 +54,72 @@ local watchers: { [string]: { FlagChangedCallback } } = {}
 local watchersAll: { [string]: { FlagAnyChangedCallback } } = {}
 
 type FlagOverrideMap = FlagSnapshot
+
+local function trimString(value: string): string
+    return string.gsub(value, "^%s*(.-)%s*$", "%1")
+end
+
+local function coerceToBoolean(value: any): boolean?
+    local valueType = typeof(value)
+    if valueType == "boolean" then
+        return value
+    elseif valueType == "number" then
+        if value ~= value or value == math.huge or value == -math.huge then
+            return nil
+        end
+        return value ~= 0
+    elseif valueType == "string" then
+        local trimmed = trimString(value)
+        if trimmed == "" then
+            return nil
+        end
+
+        local lower = string.lower(trimmed)
+        if lower == "true" or lower == "1" or lower == "yes" or lower == "y" or lower == "on" then
+            return true
+        elseif lower == "false" or lower == "0" or lower == "no" or lower == "n" or lower == "off" then
+            return false
+        end
+    end
+
+    return nil
+end
+
+local function coerceToNumber(value: any): number?
+    local numeric = tonumber(value)
+    if numeric == nil or numeric ~= numeric or numeric == math.huge or numeric == -math.huge then
+        return nil
+    end
+    return numeric
+end
+
+local function sanitizeSnapshotValue(value: any): FlagValue?
+    if value == nil then
+        return nil
+    end
+
+    local valueType = typeof(value)
+    if valueType == "boolean" then
+        return value
+    elseif valueType == "number" then
+        if value ~= value or value == math.huge or value == -math.huge then
+            return nil
+        end
+        return value
+    elseif valueType == "string" then
+        local numeric = tonumber(value)
+        if numeric then
+            return numeric
+        end
+
+        local booleanValue = coerceToBoolean(value)
+        if booleanValue ~= nil then
+            return booleanValue
+        end
+    end
+
+    return nil
+end
 
 local function normalizePlaceKey(key: any): string?
     if key == nil then
@@ -112,7 +183,10 @@ local function mergePlaceOverrides(source: any)
             local bucket = getOrCreateOverrideBucket(normalizedKey)
             for flagName, flagValue in pairs(overrides :: any) do
                 if typeof(flagName) == "string" then
-                    bucket[flagName] = flagValue == true
+                    local sanitized = sanitizeSnapshotValue(flagValue)
+                    if sanitized ~= nil then
+                        bucket[flagName] = sanitized
+                    end
                 end
             end
         end
@@ -134,7 +208,154 @@ local function canonicalize(name: string?): string?
     return string.lower(trimmed)
 end
 
-local function registerFlag(flagName: string, defaultValue: boolean?): FlagEntry?
+local CANARY_CANONICAL = canonicalize("CanaryPercent")
+if CANARY_CANONICAL then
+    numericConstraints[CANARY_CANONICAL] = { min = 0, max = 100 }
+end
+
+local function registerRollout(featureName: string, percentFlag: string)
+    local featureCanonical = canonicalize(featureName)
+    local percentCanonical = canonicalize(percentFlag)
+    if not featureCanonical or not percentCanonical then
+        return
+    end
+
+    rolloutConfig[featureCanonical] = {
+        percentFlag = percentFlag,
+        percentCanonical = percentCanonical,
+    }
+
+    local bucket = rolloutDependencies[percentCanonical]
+    if not bucket then
+        bucket = {}
+        rolloutDependencies[percentCanonical] = bucket
+    end
+
+    table.insert(bucket, featureCanonical)
+end
+
+local rolloutBuckets: { [string]: number } = {}
+local fallbackRandomSeed = math.floor(os.clock() * 1000) % 2147483646
+local fallbackRandom = Random.new(fallbackRandomSeed + 1)
+
+local function sanitizeRolloutPercent(value: any): number
+    local numeric = coerceToNumber(value)
+    if numeric == nil then
+        return 0
+    end
+
+    if numeric >= 0 then
+        numeric = math.floor(numeric + 0.5)
+    else
+        numeric = math.ceil(numeric - 0.5)
+    end
+
+    return math.clamp(numeric, 0, 100)
+end
+
+local function computeRolloutBucket(canonical: string): number
+    local cached = rolloutBuckets[canonical]
+    if cached ~= nil then
+        return cached
+    end
+
+    local jobId = game.JobId
+    if typeof(jobId) == "string" and jobId ~= "" then
+        local source = string.format("%s:%s:%s", tostring(game.PlaceId), jobId, canonical)
+        local hash = 2166136261
+        for index = 1, #source do
+            hash = bit32.band(bit32.bxor(hash, string.byte(source, index)) * 16777619, 0xFFFFFFFF)
+        end
+
+        local bucket = hash % 100
+        rolloutBuckets[canonical] = bucket
+        return bucket
+    end
+
+    local bucket = fallbackRandom:NextInteger(0, 99)
+    rolloutBuckets[canonical] = bucket
+    return bucket
+end
+
+local function evaluateRollout(entry: FlagEntry, baseValue: boolean): boolean
+    if not baseValue then
+        return false
+    end
+
+    local config = rolloutConfig[entry.canonical]
+    if not config then
+        return baseValue
+    end
+
+    local percentEntry = nil
+    if config.percentCanonical then
+        percentEntry = entries[config.percentCanonical]
+    end
+
+    local percentValue: any = 100
+    if percentEntry then
+        if percentEntry.valueType == "number" and typeof(percentEntry.current) == "number" then
+            percentValue = percentEntry.current
+        elseif percentEntry.valueType == "boolean" then
+            percentValue = percentEntry.current == true and 100 or 0
+        end
+    end
+
+    local percent = sanitizeRolloutPercent(percentValue)
+    if percent <= 0 then
+        return false
+    end
+    if percent >= 100 then
+        return true
+    end
+
+    local bucket = computeRolloutBucket(entry.canonical)
+    return bucket < percent
+end
+
+local numericConstraints: { [string]: { min: number?, max: number? } } = {}
+
+local function applyNumericConstraint(canonical: string, numeric: number): number
+    local constraint = numericConstraints[canonical]
+    if constraint then
+        if constraint.min ~= nil and numeric < constraint.min then
+            numeric = constraint.min
+        end
+        if constraint.max ~= nil and numeric > constraint.max then
+            numeric = constraint.max
+        end
+    end
+    return numeric
+end
+
+local rolloutDependencies: { [string]: { string } } = {}
+
+local rolloutConfig: { [string]: { percentFlag: string, percentCanonical: string? } } = {}
+
+local function coerceValueForEntry(entry: FlagEntry, value: any): FlagValue?
+    if value == nil then
+        return nil
+    end
+
+    if entry.valueType == "number" then
+        local numeric = coerceToNumber(value)
+        if numeric == nil then
+            return nil
+        end
+
+        numeric = applyNumericConstraint(entry.canonical, numeric)
+        return numeric
+    end
+
+    local booleanValue = coerceToBoolean(value)
+    if booleanValue == nil then
+        return nil
+    end
+
+    return booleanValue
+end
+
+local function registerFlag(flagName: string, defaultValue: FlagValue?): FlagEntry?
     local canonical = canonicalize(flagName)
     if not canonical then
         return nil
@@ -142,17 +363,37 @@ local function registerFlag(flagName: string, defaultValue: boolean?): FlagEntry
 
     local existing = entries[canonical]
     if existing then
-        if defaultValue ~= nil and existing.baseDefault == nil then
-            existing.baseDefault = defaultValue == true
+        if defaultValue ~= nil then
+            local coerced = coerceValueForEntry(existing, defaultValue)
+            if coerced ~= nil then
+                existing.baseDefault = coerced
+                if existing.default == nil then
+                    existing.default = coerced
+                    existing.current = coerced
+                end
+            end
         end
         return existing
     end
 
-    local baseDefault = if defaultValue == nil then false else (defaultValue and true or false)
+    local valueType: ValueType = "boolean"
+    if defaultValue ~= nil and typeof(defaultValue) == "number" then
+        valueType = "number"
+    end
+
+    local baseDefault: FlagValue
+    if valueType == "number" then
+        local coerced = if defaultValue ~= nil then coerceToNumber(defaultValue) else nil
+        baseDefault = applyNumericConstraint(canonical, coerced or 0)
+    else
+        local coerced = if defaultValue ~= nil then coerceToBoolean(defaultValue) else nil
+        baseDefault = if coerced ~= nil then coerced else false
+    end
 
     local entry: FlagEntry = {
         name = flagName,
         canonical = canonical,
+        valueType = valueType,
         baseDefault = baseDefault,
         default = baseDefault,
         override = nil,
@@ -167,6 +408,11 @@ end
 for name, defaultValue in pairs(DEFAULT_FLAGS) do
     registerFlag(name, defaultValue)
 end
+
+registerRollout("Obstacles", "CanaryPercent")
+registerRollout("Tokens", "CanaryPercent")
+registerRollout("Telemetry", "CanaryPercent")
+registerRollout("Achievements", "CanaryPercent")
 
 local function getAttributeName(entry: FlagEntry): string
     return ATTRIBUTE_PREFIX .. entry.name
@@ -203,17 +449,58 @@ end
 
 local function recompute(entry: FlagEntry, shouldNotify: boolean)
     local previous = entry.current
+
     local candidate = entry.override
     if candidate == nil then
         candidate = entry.default
     end
+    if candidate == nil then
+        candidate = entry.baseDefault
+    end
 
-    entry.current = candidate and true or false
+    if entry.valueType == "number" then
+        local numericCandidate: number?
+        if typeof(candidate) == "number" then
+            numericCandidate = candidate
+        else
+            numericCandidate = coerceToNumber(candidate)
+        end
+
+        if numericCandidate == nil then
+            if typeof(entry.baseDefault) == "number" then
+                numericCandidate = entry.baseDefault
+            else
+                numericCandidate = 0
+            end
+        end
+
+        entry.current = applyNumericConstraint(entry.canonical, numericCandidate)
+    else
+        local booleanCandidate: boolean
+        if typeof(candidate) == "boolean" then
+            booleanCandidate = candidate
+        else
+            local coerced = coerceToBoolean(candidate)
+            booleanCandidate = coerced == true
+        end
+
+        entry.current = evaluateRollout(entry, booleanCandidate)
+    end
 
     updateAttribute(entry)
 
     if shouldNotify and previous ~= entry.current then
         fireWatchers(entry)
+    end
+
+    local dependents = rolloutDependencies[entry.canonical]
+    if dependents then
+        for _, canonicalName in ipairs(dependents) do
+            local dependentEntry = entries[canonicalName]
+            if dependentEntry then
+                recompute(dependentEntry, true)
+            end
+        end
     end
 end
 
@@ -270,9 +557,12 @@ local function applyPlaceOverrides()
     for name, value in pairs(overrides :: any) do
         local entry = ensureEntry(name)
         if entry then
-            entry.default = value and true or false
-            entry.override = nil
-            entry.current = entry.default
+            local typedValue = coerceValueForEntry(entry, value)
+            if typedValue ~= nil then
+                entry.default = typedValue
+                entry.override = nil
+                recompute(entry, false)
+            end
         end
     end
 end
@@ -286,10 +576,12 @@ local function applyDefaultOverrides(map: any)
         if typeof(flagName) == "string" then
             local entry = ensureEntry(flagName)
             if entry then
-                local coerced = flagValue == true
-                entry.default = coerced
-                if entry.override == nil then
-                    entry.current = entry.default
+                local typedValue = coerceValueForEntry(entry, flagValue)
+                if typedValue ~= nil then
+                    entry.default = typedValue
+                    if entry.override == nil then
+                        recompute(entry, false)
+                    end
                 end
             end
         end
@@ -309,7 +601,9 @@ local function snapshotPlaceOverrideTable(): { [string]: FlagSnapshot }
     for key, overrides in pairs(placeOverrides) do
         local clone: FlagSnapshot = {}
         for flagName, value in pairs(overrides) do
-            clone[flagName] = value and true or false
+            if typeof(value) == "boolean" or typeof(value) == "number" then
+                clone[flagName] = value
+            end
         end
         snapshot[key] = clone
     end
@@ -382,18 +676,20 @@ local function hydrateClientState()
     for _, entry in pairs(entries) do
         local attributeName = getAttributeName(entry)
         local value = ReplicatedStorage:GetAttribute(attributeName)
-        if typeof(value) == "boolean" then
-            entry.current = value
+        local sanitized = coerceValueForEntry(entry, value)
+        if sanitized ~= nil then
+            entry.current = sanitized
         end
 
         ReplicatedStorage:GetAttributeChangedSignal(attributeName):Connect(function()
             local updated = ReplicatedStorage:GetAttribute(attributeName)
-            if typeof(updated) ~= "boolean" then
+            local coerced = coerceValueForEntry(entry, updated)
+            if coerced == nil then
                 return
             end
 
             local previous = entry.current
-            entry.current = updated
+            entry.current = coerced
             if previous ~= entry.current then
                 fireWatchers(entry)
             end
@@ -419,7 +715,7 @@ if isServer then
     end
 end
 
-function Flags.Register(flagName: string, defaultValue: boolean?): boolean
+function Flags.Register(flagName: string, defaultValue: FlagValue?): boolean
     if typeof(flagName) ~= "string" or flagName == "" then
         return false
     end
@@ -430,9 +726,9 @@ function Flags.Register(flagName: string, defaultValue: boolean?): boolean
     end
 
     if defaultValue ~= nil then
-        entry.default = defaultValue and true or false
-        if entry.override == nil then
-            entry.current = entry.default
+        local typedValue = coerceValueForEntry(entry, defaultValue)
+        if typedValue ~= nil then
+            entry.default = typedValue
             recompute(entry, true)
         end
     end
@@ -452,12 +748,19 @@ function Flags.Get(flagName: string): FlagValue?
     return entry.current
 end
 
-function Flags.IsEnabled(flagName: string): FlagValue
+function Flags.IsEnabled(flagName: string): boolean
     local entry = ensureEntry(flagName)
     if not entry then
         return false
     end
-    return entry.current
+    if entry.valueType == "number" then
+        if typeof(entry.current) == "number" then
+            return entry.current ~= 0
+        end
+        return false
+    end
+
+    return entry.current == true
 end
 
 function Flags.GetDefault(flagName: string): FlagValue?
@@ -468,7 +771,7 @@ function Flags.GetDefault(flagName: string): FlagValue?
     return entry.default
 end
 
-function Flags.Set(flagName: string, value: boolean?): (FlagValue, boolean)
+function Flags.Set(flagName: string, value: FlagValue?): (FlagValue, boolean)
     local entry = ensureEntry(flagName)
     if not entry then
         return false, false
@@ -479,9 +782,13 @@ function Flags.Set(flagName: string, value: boolean?): (FlagValue, boolean)
         return entry.current, false
     end
 
-    local overrideValue: boolean? = nil
+    local overrideValue: FlagValue? = nil
     if value ~= nil then
-        overrideValue = value and true or false
+        local coerced = coerceValueForEntry(entry, value)
+        if coerced == nil then
+            return entry.current, false
+        end
+        overrideValue = coerced
     end
 
     if entry.override == overrideValue then
@@ -500,11 +807,7 @@ function Flags.SetMany(map: { [string]: any }): FlagSnapshot
     end
 
     for name, value in pairs(map) do
-        if value == nil then
-            Flags.Set(name, nil)
-        else
-            Flags.Set(name, value == true)
-        end
+        Flags.Set(name, value)
     end
 
     return Flags.GetAll()

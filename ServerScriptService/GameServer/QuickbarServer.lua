@@ -23,6 +23,26 @@ local ShopConfig = require(configFolder:WaitForChild("ShopConfig"))
 local GameConfigModule = require(configFolder:WaitForChild("GameConfig"))
 local GameConfig = GameConfigModule.Get()
 
+local FlagsModule
+do
+        local ok, module = pcall(function()
+                return require(configFolder:WaitForChild("Flags"))
+        end)
+        if ok and typeof(module) == "table" then
+                FlagsModule = module
+        end
+end
+
+local function resolveTokensFlag(): boolean
+        if FlagsModule and typeof((FlagsModule :: any).IsEnabled) == "function" then
+                local ok, result = pcall((FlagsModule :: any).IsEnabled, "Tokens")
+                if ok and typeof(result) == "boolean" then
+                        return result
+                end
+        end
+        return true
+end
+
 local quickbarConfig = (GameConfig.UI and GameConfig.UI.Quickbar) or {}
 local MELEE_SLOTS = quickbarConfig.MeleeSlots or 2
 local TOKEN_SLOTS = quickbarConfig.TokenSlots or 3
@@ -161,6 +181,36 @@ end
 
 local inventoryResolver: ((Player) -> (any?, any?))? = nil
 local lastStates: {[Player]: QuickbarState} = {}
+
+local tokensEnabled = true
+
+local function applyTokensFlag(state: any)
+        local newState = false
+        if typeof(state) == "boolean" then
+                newState = state
+        elseif typeof(state) == "number" then
+                newState = state ~= 0
+        end
+
+        local previous = tokensEnabled
+        tokensEnabled = newState
+
+        if not tokensEnabled then
+                for _, quickbarState in pairs(lastStates) do
+                        if typeof(quickbarState) == "table" then
+                                quickbarState.tokens = {}
+                        end
+                end
+        end
+
+        if previous ~= tokensEnabled then
+                if typeof((QuickbarServer :: any).RefreshAll) == "function" then
+                        task.defer(function()
+                                QuickbarServer.RefreshAll()
+                        end)
+                end
+        end
+end
 
 local function cloneDefaults()
         local inventory = {
@@ -351,6 +401,9 @@ end
 
 local function buildTokenEntries(inventory: any): {QuickbarTokenEntry}
         local entries: {QuickbarTokenEntry} = {}
+        if not tokensEnabled then
+                return entries
+        end
         local tokensMap = (typeof(inventory) == "table" and inventory.TokenCounts) or nil
         if typeof(tokensMap) ~= "table" then
                 return entries
@@ -570,6 +623,9 @@ function QuickbarServer.GetTokenSlot(player: Player, slotIndex: number): Quickba
         if typeof(slotIndex) ~= "number" or slotIndex < 1 then
                 return nil
         end
+        if not tokensEnabled then
+                return nil
+        end
         local state = lastStates[player]
         if not state then
                 return nil
@@ -583,6 +639,14 @@ end
 
 function QuickbarServer.IsEnabled(): boolean
         return true
+end
+
+applyTokensFlag(resolveTokensFlag())
+
+if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
+        (FlagsModule :: any).OnChanged("Tokens", function(isEnabled)
+                applyTokensFlag(isEnabled)
+        end)
 end
 
 local function onPlayerAdded(player: Player)
