@@ -1011,7 +1011,7 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 if not TELEPORT_ENABLED then
-        warn("[LobbyMatchmaker] Teleports are disabled via GameConfig.Match.UseTeleport")
+        debugPrint("Teleports are disabled via GameConfig.Match.UseTeleport")
 elseif typeof(MATCH_PLACE_ID) ~= "number" or MATCH_PLACE_ID <= 0 then
         warn("[LobbyMatchmaker] GameConfig.Match.MatchPlaceId is invalid; queue will reject join attempts")
 end

@@ -591,7 +591,13 @@ end
 local function snapshotDefaultFlags(): FlagSnapshot
     local snapshot: FlagSnapshot = {}
     for _, entry in pairs(entries) do
-        snapshot[entry.name] = entry.default
+        local flagName = entry.name
+        local value = entry.default
+        snapshot[flagName] = value
+        local canonical = canonicalize(flagName)
+        if canonical and canonical ~= flagName then
+            snapshot[canonical] = value
+        end
     end
     return snapshot
 end
@@ -603,6 +609,10 @@ local function snapshotPlaceOverrideTable(): { [string]: FlagSnapshot }
         for flagName, value in pairs(overrides) do
             if typeof(value) == "boolean" or typeof(value) == "number" then
                 clone[flagName] = value
+                local canonical = canonicalize(flagName)
+                if canonical and canonical ~= flagName then
+                    clone[canonical] = value
+                end
             end
         end
         snapshot[key] = clone
@@ -629,7 +639,10 @@ local metadata: CheckpointMetadata = {
     Version = string.format("place-%d", game.PlaceVersion),
     Commit = "local-dev",
     GeneratedAt = nil,
-    Flags = nil,
+    Flags = {
+        Defaults = {},
+        PlaceOverrides = {},
+    },
 }
 
 if typeof(buildInfo) == "table" then
@@ -681,19 +694,22 @@ local function hydrateClientState()
             entry.current = sanitized
         end
 
-        ReplicatedStorage:GetAttributeChangedSignal(attributeName):Connect(function()
-            local updated = ReplicatedStorage:GetAttribute(attributeName)
-            local coerced = coerceValueForEntry(entry, updated)
-            if coerced == nil then
-                return
-            end
+        local okSignal, changedSignal = pcall(ReplicatedStorage.GetAttributeChangedSignal, ReplicatedStorage, attributeName)
+        if okSignal and typeof(changedSignal) == "RBXScriptSignal" then
+            (changedSignal :: RBXScriptSignal):Connect(function()
+                local updated = ReplicatedStorage:GetAttribute(attributeName)
+                local coerced = coerceValueForEntry(entry, updated)
+                if coerced == nil then
+                    return
+                end
 
-            local previous = entry.current
-            entry.current = coerced
-            if previous ~= entry.current then
-                fireWatchers(entry)
-            end
-        end)
+                local previous = entry.current
+                entry.current = coerced
+                if previous ~= entry.current then
+                    fireWatchers(entry)
+                end
+            end)
+        end
     end
 end
 

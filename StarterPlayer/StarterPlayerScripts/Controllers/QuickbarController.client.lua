@@ -7,16 +7,89 @@ local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 local Workspace = game:GetService("Workspace")
 
+local TAG = "[QuickbarController]"
+
+local function safeWaitForChild(parent: Instance, childName: string, timeout: number?): Instance?
+        local existing = parent:FindFirstChild(childName)
+        if existing then
+                return existing
+        end
+
+        local ok, result = pcall(parent.WaitForChild, parent, childName, timeout or 5)
+        if ok and result then
+                return result
+        end
+
+        local parentName = tostring(parent)
+        local okName, fullName = pcall(parent.GetFullName, parent)
+        if okName then
+                parentName = fullName
+        end
+
+        local reason = if ok then "timed out" else tostring(result)
+        warn(string.format("%s Missing child '%s' under %s (%s)", TAG, childName, parentName, reason))
+        return nil
+end
+
 local localPlayer = Players.LocalPlayer
-local playerGui = localPlayer:WaitForChild("PlayerGui")
 
-local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
-local configFolder = sharedFolder:WaitForChild("Config")
-local systemsFolder = sharedFolder:WaitForChild("Systems")
+local function resolvePlayerGui(): PlayerGui?
+        local gui = localPlayer:FindFirstChildOfClass("PlayerGui")
+        if gui then
+                return gui
+        end
 
-local GameConfigModule = require(configFolder:WaitForChild("GameConfig"))
-local ShopConfigModule = require(configFolder:WaitForChild("ShopConfig"))
-local Localizer = require(systemsFolder:WaitForChild("Localizer"))
+        local ok, result = pcall(function()
+                return localPlayer:WaitForChild("PlayerGui", 5)
+        end)
+        if ok and result and result:IsA("PlayerGui") then
+                return result
+        end
+
+        warn(string.format("%s PlayerGui missing; quickbar UI will not initialize", TAG))
+        return nil
+end
+
+local playerGui = resolvePlayerGui()
+if not playerGui then
+        return
+end
+
+local sharedFolder = safeWaitForChild(ReplicatedStorage, "Shared")
+if not sharedFolder then
+        return
+end
+
+local configFolder = safeWaitForChild(sharedFolder, "Config")
+if not configFolder then
+        return
+end
+
+local systemsFolder = safeWaitForChild(sharedFolder, "Systems")
+if not systemsFolder then
+        return
+end
+
+local gameConfigModuleInstance = safeWaitForChild(configFolder, "GameConfig")
+if not gameConfigModuleInstance or not gameConfigModuleInstance:IsA("ModuleScript") then
+        warn(string.format("%s GameConfig module missing", TAG))
+        return
+end
+local GameConfigModule = require(gameConfigModuleInstance)
+
+local shopConfigModuleInstance = safeWaitForChild(configFolder, "ShopConfig")
+if not shopConfigModuleInstance or not shopConfigModuleInstance:IsA("ModuleScript") then
+        warn(string.format("%s ShopConfig module missing", TAG))
+        return
+end
+local ShopConfigModule = require(shopConfigModuleInstance)
+
+local localizerModuleInstance = safeWaitForChild(systemsFolder, "Localizer")
+if not localizerModuleInstance or not localizerModuleInstance:IsA("ModuleScript") then
+        warn(string.format("%s Localizer module missing", TAG))
+        return
+end
+local Localizer = require(localizerModuleInstance)
 
 local gameConfig = if typeof(GameConfigModule.Get) == "function" then GameConfigModule.Get() else GameConfigModule
 local uiConfig = gameConfig.UI or {}
@@ -34,7 +107,12 @@ if meleeSlotCount + tokenSlotCount <= 0 then
         return
 end
 
-local CameraFeelBus = require(script.Parent:WaitForChild("CameraFeelBus"))
+local cameraFeelModule = safeWaitForChild(script.Parent, "CameraFeelBus")
+if not cameraFeelModule or not cameraFeelModule:IsA("ModuleScript") then
+        warn(string.format("%s CameraFeelBus module missing", TAG))
+        return
+end
+local CameraFeelBus = require(cameraFeelModule)
 
 type SlotKind = "melee" | "token"
 
@@ -62,9 +140,24 @@ type QuickbarState = {
 
 local shopItems = if typeof(ShopConfigModule.All) == "function" then ShopConfigModule.All() else ShopConfigModule.Items or {}
 
-local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
-local quickbarUpdateRemote = remotesFolder:WaitForChild("RE_QuickbarUpdate") :: RemoteEvent
-local useTokenRemote = remotesFolder:WaitForChild("RF_UseToken") :: RemoteFunction
+local remotesFolder = safeWaitForChild(ReplicatedStorage, "Remotes")
+if not remotesFolder then
+        return
+end
+
+local quickbarUpdateRemoteInstance = safeWaitForChild(remotesFolder, "RE_QuickbarUpdate")
+if not quickbarUpdateRemoteInstance or not quickbarUpdateRemoteInstance:IsA("RemoteEvent") then
+        warn(string.format("%s RE_QuickbarUpdate remote missing", TAG))
+        return
+end
+local quickbarUpdateRemote = quickbarUpdateRemoteInstance :: RemoteEvent
+
+local useTokenRemoteInstance = safeWaitForChild(remotesFolder, "RF_UseToken")
+if not useTokenRemoteInstance or not useTokenRemoteInstance:IsA("RemoteFunction") then
+        warn(string.format("%s RF_UseToken remote missing", TAG))
+        return
+end
+local useTokenRemote = useTokenRemoteInstance :: RemoteFunction
 
 local slotDefinitions: { SlotDefinition } = {}
 local slotIndexByKind = {

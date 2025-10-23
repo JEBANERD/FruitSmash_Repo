@@ -1215,7 +1215,11 @@ function ProfileServer.LoadSerialized(player: Player, serialized: ProfileData?)
             local inventory = source.Inventory
             local target = data.Inventory
             target.MeleeLoadout = sanitizeStringList(inventory.MeleeLoadout)
-            target.ActiveMelee = if type(inventory.ActiveMelee) == "string" and inventory.ActiveMelee ~= "" then inventory.ActiveMelee else nil
+            if type(inventory.ActiveMelee) == "string" and inventory.ActiveMelee ~= "" then
+                target.ActiveMelee = inventory.ActiveMelee
+            else
+                target.ActiveMelee = nil
+            end
             target.TokenCounts = sanitizeTokenCounts(inventory.TokenCounts)
             target.UtilityQueue = sanitizeStringList(inventory.UtilityQueue)
             target.OwnedMelee = sanitizeOwnedMelee(inventory.OwnedMelee)

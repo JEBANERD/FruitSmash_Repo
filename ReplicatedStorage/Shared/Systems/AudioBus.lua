@@ -3,6 +3,7 @@
 -- AudioBus: central helper to play shared SFX events with lightweight pooling.
 -- Supports optional positional playback by reusing pooled Sound emitters.
 
+local ContentProvider = game:GetService("ContentProvider")
 local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -130,6 +131,35 @@ export type PoolEntry = {
 }
 
 local pools: { [string]: { PoolEntry } } = {}
+local soundWarningCache: { [string]: boolean } = {}
+
+local function warnOnce(key: string, message: string)
+    if soundWarningCache[key] then
+        return
+    end
+    soundWarningCache[key] = true
+    warn(message)
+end
+
+local function validateSoundAsset(sound: Sound, eventKey: string): boolean
+    local soundId = sound.SoundId
+    if typeof(soundId) ~= "string" or soundId == "" then
+        warnOnce(string.format("missing:%s", eventKey), string.format("[AudioBus] Sound definition for '%s' missing SoundId", eventKey))
+        return false
+    end
+
+    if not string.match(soundId, "^rbxassetid://%d+$") then
+        warnOnce(string.format("invalid:%s", eventKey), string.format("[AudioBus] Sound definition for '%s' must use rbxassetid:// ids (got '%s')", eventKey, soundId))
+        return false
+    end
+
+    local ok, err = pcall(ContentProvider.PreloadAsync, ContentProvider, { sound })
+    if not ok then
+        warnOnce(string.format("preload:%s", eventKey), string.format("[AudioBus] Failed to preload sound '%s' (%s): %s", eventKey, soundId, tostring(err)))
+    end
+
+    return true
+end
 
 local function coerceEventKey(eventName: string): string
     local trimmed = string.gsub(eventName, "^%s*(.-)%s*$", "%1")
@@ -252,9 +282,8 @@ local function createPoolEntry(eventKey: string): PoolEntry?
         applyDefinition(sound, definition)
     end
 
-    if sound.SoundId == nil or sound.SoundId == "" then
+    if not validateSoundAsset(sound, eventKey) then
         sound:Destroy()
-        warn(string.format("[AudioBus] Sound definition for '%s' missing SoundId", eventKey))
         return nil
     end
 

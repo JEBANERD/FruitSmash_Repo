@@ -5,20 +5,21 @@
 
     "ReplicatedStorage": { "$path": "ReplicatedStorage" },
 
-  "ServerScriptService": {
-  "$className": "ServerScriptService",
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
 
-  "GameServer": { "$className": "Folder", "$path": "ServerScriptService/__GS" },
-  "Match":       { "$className": "Folder", "$path": "ServerScriptService/Match" },
-  "Combat":     { "$className": "Folder", "$path": "ServerScriptService/Combat" },
-  "Data":       { "$className": "Folder", "$path": "ServerScriptService/Data" },
-  "Economy":    { "$className": "Folder", "$path": "ServerScriptService/Economy" },
-  "Monetization": { "$className": "Folder", "$path": "ServerScriptService/Monetization" },
-  "Shop":       { "$className": "Folder", "$path": "ServerScriptService/Shop" },
-  "Obstacles":  { "$className": "Folder", "$path": "ServerScriptService/Obstacles" },
-  "Match":      { "$className": "Folder", "$path": "ServerScriptService/Match" },
-  "Tools":      { "$className": "Folder", "$path": "ServerScriptService/Tools" }
-},
+      "Analytics":    { "$className": "Folder", "$path": "ServerScriptService/Analytics" },
+      "Combat":       { "$className": "Folder", "$path": "ServerScriptService/Combat" },
+      "Data":         { "$className": "Folder", "$path": "ServerScriptService/Data" },
+      "Economy":      { "$className": "Folder", "$path": "ServerScriptService/Economy" },
+      "GameServer":   { "$className": "Folder", "$path": "ServerScriptService/GameServer" },
+      "Match":        { "$className": "Folder", "$path": "ServerScriptService/Match" },
+      "Moderation":   { "$className": "Folder", "$path": "ServerScriptService/Moderation" },
+      "Monetization": { "$className": "Folder", "$path": "ServerScriptService/Monetization" },
+      "Obstacles":    { "$className": "Folder", "$path": "ServerScriptService/Obstacles" },
+      "Shop":         { "$className": "Folder", "$path": "ServerScriptService/Shop" },
+      "Tools":        { "$className": "Folder", "$path": "ServerScriptService/Tools" }
+    },
 
 
 
