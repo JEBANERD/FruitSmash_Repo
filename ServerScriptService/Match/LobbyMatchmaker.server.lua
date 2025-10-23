@@ -47,6 +47,8 @@ type Party = {
         retryCount: number,
         pendingRetry: boolean,
         retryToken: string?,
+        lastStatus: string?,
+        lastStatusKey: string?,
 }
 
 local partiesById: { [string]: Party } = {}
@@ -328,7 +330,32 @@ local function computeRetryDelay(attempt: number): number
         return low + offset
 end
 
-local function schedulePartyRetry(party: Party, reason: string)
+local function sanitizeRetryReason(reason: string?): string
+        if typeof(reason) ~= "string" then
+                return "teleport error"
+        end
+
+        local trimmed = string.gsub(reason, "^%s+", "")
+        trimmed = string.gsub(trimmed, "%s+$", "")
+        if trimmed == "" then
+                return "teleport error"
+        end
+
+        local lower = string.lower(trimmed)
+        if string.find(lower, "teleportservice", 1, true) then
+                return "teleport error"
+        end
+        if string.find(lower, "http", 1, true) then
+                return "teleport error"
+        end
+        if string.find(lower, "error code", 1, true) then
+                return "teleport error"
+        end
+
+        return trimmed
+end
+
+local function schedulePartyRetry(party: Party, reason: string, options: any?)
         local attempt = (party.retryCount or 0) + 1
         local delaySeconds = computeRetryDelay(attempt)
         party.retryCount = attempt
@@ -336,12 +363,55 @@ local function schedulePartyRetry(party: Party, reason: string)
         party.retryToken = HttpService:GenerateGUID(false)
         party.queued = true
 
-        local reasonText = "teleport error"
-        if typeof(reason) == "string" and reason ~= "" then
-                reasonText = reason
+        local flooredDelay = math.max(1, math.floor(delaySeconds + 0.5))
+
+        local friendlyReason = sanitizeRetryReason(reason)
+        if typeof(options) == "table" then
+                local customReason = options.reasonText
+                if typeof(customReason) == "string" and customReason ~= "" then
+                        friendlyReason = customReason
+                end
         end
-        sendNoticeToParty(party, string.format("Matchmaking retry in %d seconds (%s).", math.floor(delaySeconds + 0.5), reasonText), "warning")
-        debugPrint("Party %s retrying in %.1f seconds (%s, attempt %d)", party.id, delaySeconds, reasonText, attempt)
+
+        local retryExtra = {
+                attempt = attempt,
+                retryDelaySeconds = delaySeconds,
+                retryDelayRounded = flooredDelay,
+                reason = friendlyReason,
+        }
+        sendPartyUpdate(party, "retrying", retryExtra)
+
+        local sendNotice = true
+        local noticeKind = "warning"
+        local noticeMessage: string? = nil
+
+        if typeof(options) == "table" then
+                if options.sendNotice == false then
+                        sendNotice = false
+                end
+                local customKind = options.noticeKind
+                if typeof(customKind) == "string" and customKind ~= "" then
+                        noticeKind = customKind
+                end
+                local rawMessage = options.noticeMessage
+                if typeof(rawMessage) == "function" then
+                        local ok, result = pcall(rawMessage, delaySeconds, attempt, friendlyReason)
+                        if ok and typeof(result) == "string" then
+                                noticeMessage = result
+                        end
+                elseif typeof(rawMessage) == "string" then
+                        noticeMessage = rawMessage
+                end
+        end
+
+        if sendNotice then
+                if not noticeMessage or noticeMessage == "" then
+                        noticeMessage = string.format("Matchmaking retry in %d seconds (%s).", flooredDelay, friendlyReason)
+                end
+                sendNoticeToParty(party, noticeMessage, noticeKind)
+        end
+
+        debugPrint("Party %s retrying in %.1f seconds (%s, attempt %d)", party.id, delaySeconds, friendlyReason, attempt)
 
         local retryToken = party.retryToken
 
@@ -393,6 +463,8 @@ local function releasePartyForMatch(party: Party)
         party.host = nil
         party.queued = false
         party.teleporting = true
+        party.lastStatus = nil
+        party.lastStatusKey = nil
 end
 
 local function getPlayerSummary(player: Player)
@@ -416,10 +488,58 @@ local function sendNoticeToParty(party: Party, message: string, kind: string?)
         end
 end
 
-local function sendPartyUpdate(party: Party, status: string)
+local function computeStatusKey(status: string, extra: any?): string
+        local parts = {}
+
+        if typeof(status) == "string" then
+                table.insert(parts, status)
+        else
+                table.insert(parts, tostring(status))
+        end
+
+        if typeof(extra) == "table" then
+                local keys = {}
+                for key in pairs(extra) do
+                        table.insert(keys, key)
+                end
+                table.sort(keys, function(a, b)
+                        return tostring(a) < tostring(b)
+                end)
+
+                for _, key in ipairs(keys) do
+                        local value = extra[key]
+                        local valueText
+                        if typeof(value) == "table" then
+                                local ok, encoded = pcall(HttpService.JSONEncode, HttpService, value)
+                                if ok then
+                                        valueText = encoded
+                                else
+                                        valueText = tostring(value)
+                                end
+                        else
+                                valueText = tostring(value)
+                        end
+                        table.insert(parts, string.format("%s=%s", tostring(key), valueText))
+                end
+        elseif extra ~= nil then
+                table.insert(parts, tostring(extra))
+        end
+
+        return table.concat(parts, "|")
+end
+
+local function sendPartyUpdate(party: Party, status: string, extra: any?, force: boolean?)
         if not partyUpdateRemote then
                 return
         end
+
+        local statusKey = computeStatusKey(status, extra)
+        if not force and party.lastStatusKey == statusKey then
+                return
+        end
+
+        party.lastStatus = status
+        party.lastStatusKey = statusKey
 
         local membersPayload = {}
         for _, member in ipairs(party.members) do
@@ -432,6 +552,10 @@ local function sendPartyUpdate(party: Party, status: string)
                 status = status,
                 members = membersPayload,
         }
+
+        if extra ~= nil then
+                payload.extra = extra
+        end
 
         for _, member in ipairs(party.members) do
                 if member.Parent == Players then
@@ -475,6 +599,8 @@ local function disbandParty(party: Party, noticeMessage: string?)
         table.clear(party.memberMap)
         party.host = nil
         party.teleporting = false
+        party.lastStatus = nil
+        party.lastStatusKey = nil
 end
 
 local function gatherMembers(host: Player, options: any?): { Player }
@@ -536,6 +662,8 @@ local function createParty(host: Player, members: { Player }): Party
                 retryCount = 0,
                 pendingRetry = false,
                 retryToken = nil,
+                lastStatus = nil,
+                lastStatusKey = nil,
         }
 
         partiesById[partyId] = party
@@ -587,7 +715,7 @@ local function removePlayerFromParty(party: Party, player: Player, shouldDisband
         end
 
         if shouldDisbandIfEmpty then
-                sendPartyUpdate(party, "update")
+                sendPartyUpdate(party, "update", nil, true)
                 if noticeMessage then
                         sendNoticeToParty(party, noticeMessage, "info")
                 end
@@ -705,19 +833,26 @@ local function processQueue()
 						end)
 
 						if not teleportOk then
-							warn(string.format("[LobbyMatchmaker] Teleport failed for party %s: %s", party.id, tostring(teleportErr)))
-							party.teleporting = false
-							party.queued = true
-							if LOCAL_FALLBACK_ON_FAILURE and runLocalFallback("teleport failure") then
-								-- handled
-							else
-								schedulePartyRetry(party, tostring(teleportErr))
-							end
-						else
-							debugPrint("Teleport initiated for party %s (code %s)", party.id, accessCode)
-							resetPartyRetry(party)
-						end
-					end
+                                                        warn(string.format("[LobbyMatchmaker] Teleport failed for party %s: %s", party.id, tostring(teleportErr)))
+                                                        party.teleporting = false
+                                                        party.queued = true
+                                                        if LOCAL_FALLBACK_ON_FAILURE and runLocalFallback("teleport failure") then
+                                                                -- handled
+                                                        else
+                                                                schedulePartyRetry(party, tostring(teleportErr), {
+                                                                        noticeKind = "warning",
+                                                                        reasonText = "teleport error",
+                                                                        noticeMessage = function(delaySeconds)
+                                                                                local seconds = math.max(1, math.floor(delaySeconds + 0.5))
+                                                                                return string.format("Teleport failed. Retrying in %d seconds.", seconds)
+                                                                        end,
+                                                                })
+                                                        end
+                                                else
+                                                        debugPrint("Teleport initiated for party %s (code %s)", party.id, accessCode)
+                                                        resetPartyRetry(party)
+                                                end
+                                        end
 				end
 			end
 		end
