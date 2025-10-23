@@ -1,5 +1,12 @@
 --!strict
 
+--[=[
+    @module TutorialServer
+    Maintains the server-side source of truth for tutorial completion. The
+    module brokers between persistent profile storage and the RF_Tutorial
+    RemoteFunction so that clients can query or mutate their completion state.
+]=]
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -29,6 +36,10 @@ local TutorialServer = {}
 local TUTORIAL_ATTR_NAME = "TutorialCompleted"
 
 local profileUnavailableWarned = false
+--[=[
+    Lazily requires the profile server module so warnings only fire once.
+    @return any? -- ProfileServer module table when available.
+]=]
 local function ensureProfileServer(): any?
     if ProfileServer then
         return ProfileServer
@@ -40,6 +51,11 @@ local function ensureProfileServer(): any?
     return nil
 end
 
+--[=[
+    Reads a player's tutorial completion flag with ProfileServer fallback.
+    @param player Player -- The player whose tutorial progress is queried.
+    @return boolean -- True when the tutorial has been marked complete.
+]=]
 local function readCompleted(player: Player): boolean
     local server = ensureProfileServer()
     if server and typeof(server.GetTutorialCompleted) == "function" then
@@ -55,6 +71,13 @@ local function readCompleted(player: Player): boolean
     return attr == true
 end
 
+--[=[
+    Updates the tutorial completion flag and persists to ProfileServer when
+    available; otherwise mirrors the state to a Player attribute for replicas.
+    @param player Player -- The player whose tutorial progress should change.
+    @param completed boolean -- Target completion state.
+    @return boolean -- Final completion flag after persistence or fallback.
+]=]
 local function setCompleted(player: Player, completed: boolean): boolean
     local server = ensureProfileServer()
     if server and typeof(server.SetTutorialCompleted) == "function" then
@@ -72,6 +95,11 @@ local function setCompleted(player: Player, completed: boolean): boolean
 end
 
 if tutorialRemote then
+    --[=[
+        Server entry point for clients calling `RF_Tutorial`. The handler accepts
+        simple verbs such as "status", "complete", or "reset" and returns a
+        canonical response containing the resolved action and completion value.
+    ]=]
     tutorialRemote.OnServerInvoke = function(player: Player, payload: any?)
         if typeof(player) ~= "Instance" or not player:IsA("Player") then
             return { success = false, error = "InvalidPlayer" }

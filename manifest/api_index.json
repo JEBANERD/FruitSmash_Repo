@@ -1,0 +1,979 @@
+{
+  "generated_at": "2025-10-23T00:27:04Z",
+  "areas": [
+    {
+      "name": "Client",
+      "description": "Scripts that run on the client, handling controllers, UI, and player-facing tooling.",
+      "groups": [
+        {
+          "name": "Controllers",
+          "modules": [
+            {
+              "name": "AchievementToast",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/AchievementToast.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/AchievementToast.client.md",
+              "kind": "ClientScript",
+              "lines": 290,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "AudioController",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/AudioController.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/AudioController.client.md",
+              "kind": "ClientScript",
+              "lines": 234,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "CameraFeel",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeel.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/CameraFeel.client.md",
+              "kind": "ClientScript",
+              "lines": 260,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "CameraFeelBus",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeelBus.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/CameraFeelBus.md",
+              "kind": "ModuleScript",
+              "lines": 45,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "ControllerSupport",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/ControllerSupport.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/ControllerSupport.client.md",
+              "kind": "ClientScript",
+              "lines": 575,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "HUDController",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/HUDController.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/HUDController.client.md",
+              "kind": "ClientScript",
+              "lines": 1569,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "LeaderboardUI",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/LeaderboardUI.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/LeaderboardUI.client.md",
+              "kind": "ClientScript",
+              "lines": 750,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "MeleeController",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/MeleeController.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/MeleeController.client.md",
+              "kind": "ClientScript",
+              "lines": 447,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "PlayerController",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/PlayerController.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/PlayerController.client.md",
+              "kind": "ClientScript",
+              "lines": 420,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "QueueUI",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/QueueUI.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/QueueUI.client.md",
+              "kind": "ClientScript",
+              "lines": 488,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "QuickbarController",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/QuickbarController.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/QuickbarController.client.md",
+              "kind": "ClientScript",
+              "lines": 710,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "RoundSummary",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/RoundSummary.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/RoundSummary.client.md",
+              "kind": "ClientScript",
+              "lines": 432,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "SettingsUI",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/SettingsUI.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/SettingsUI.client.md",
+              "kind": "ClientScript",
+              "lines": 1398,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "TutorialUI",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/TutorialUI.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/TutorialUI.client.md",
+              "kind": "ClientScript",
+              "lines": 600,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "UIRouter",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Controllers/UIRouter.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Controllers/UIRouter.client.md",
+              "kind": "ClientScript",
+              "lines": 216,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.420389Z"
+            }
+          ]
+        },
+        {
+          "name": "Core Scripts",
+          "modules": [
+            {
+              "name": "AdminPanel",
+              "source_path": "StarterPlayer/StarterPlayerScripts/AdminPanel.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/AdminPanel.client.md",
+              "kind": "ClientScript",
+              "lines": 471,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            }
+          ]
+        },
+        {
+          "name": "Tools",
+          "modules": [
+            {
+              "name": "PerfHUD",
+              "source_path": "StarterPlayer/StarterPlayerScripts/Tools/PerfHUD.client.lua",
+              "doc_path": "docs/api/modules/StarterPlayer/StarterPlayerScripts/Tools/PerfHUD.client.md",
+              "kind": "ClientScript",
+              "lines": 224,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.420389Z"
+            }
+          ]
+        },
+        {
+          "name": "User Interface",
+          "modules": [
+            {
+              "name": "GlobalLeaderboard",
+              "source_path": "StarterGui/Lobby/GlobalLeaderboard.client.lua",
+              "doc_path": "docs/api/modules/StarterGui/Lobby/GlobalLeaderboard.client.md",
+              "kind": "ClientScript",
+              "lines": 275,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "Screen_RoundTimer",
+              "source_path": "StarterGui/WorldScreens/Screen_RoundTimer.client.lua",
+              "doc_path": "docs/api/modules/StarterGui/WorldScreens/Screen_RoundTimer.client.md",
+              "kind": "ClientScript",
+              "lines": 212,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "Screen_WaveTimer",
+              "source_path": "StarterGui/WorldScreens/Screen_WaveTimer.client.lua",
+              "doc_path": "docs/api/modules/StarterGui/WorldScreens/Screen_WaveTimer.client.md",
+              "kind": "ClientScript",
+              "lines": 156,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Shared",
+      "description": "Modules replicated between server and client that expose configuration, systems, and shared data.",
+      "groups": [
+        {
+          "name": "Configuration",
+          "modules": [
+            {
+              "name": "BuildInfo",
+              "source_path": "ReplicatedStorage/Shared/Config/BuildInfo.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Config/BuildInfo.md",
+              "kind": "ModuleScript",
+              "lines": 9,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "Flags",
+              "source_path": "ReplicatedStorage/Shared/Config/Flags.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Config/Flags.md",
+              "kind": "ModuleScript",
+              "lines": 929,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "FruitConfig",
+              "source_path": "ReplicatedStorage/Shared/Config/FruitConfig.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Config/FruitConfig.md",
+              "kind": "ModuleScript",
+              "lines": 111,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "GameConfig",
+              "source_path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Config/GameConfig.md",
+              "kind": "ModuleScript",
+              "lines": 217,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "ShopConfig",
+              "source_path": "ReplicatedStorage/Shared/Config/ShopConfig.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Config/ShopConfig.md",
+              "kind": "ModuleScript",
+              "lines": 160,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "Content",
+          "modules": [
+            {
+              "name": "ContentRegistry",
+              "source_path": "ReplicatedStorage/Shared/Content/ContentRegistry.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Content/ContentRegistry.md",
+              "kind": "ModuleScript",
+              "lines": 493,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "Localization",
+          "modules": [
+            {
+              "name": "Strings",
+              "source_path": "ReplicatedStorage/Shared/Locale/Strings.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Locale/Strings.md",
+              "kind": "ModuleScript",
+              "lines": 256,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            }
+          ]
+        },
+        {
+          "name": "Networking Remotes",
+          "modules": [
+            {
+              "name": "RemoteBootstrap",
+              "source_path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Remotes/RemoteBootstrap.md",
+              "kind": "ModuleScript",
+              "lines": 110,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "Systems",
+          "modules": [
+            {
+              "name": "AudioBus",
+              "source_path": "ReplicatedStorage/Shared/Systems/AudioBus.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Systems/AudioBus.md",
+              "kind": "ModuleScript",
+              "lines": 382,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "Localizer",
+              "source_path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Systems/Localizer.md",
+              "kind": "ModuleScript",
+              "lines": 168,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "RNG",
+              "source_path": "ReplicatedStorage/Shared/Systems/RNG.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Systems/RNG.md",
+              "kind": "ModuleScript",
+              "lines": 48,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "VFXBus",
+              "source_path": "ReplicatedStorage/Shared/Systems/VFXBus.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Systems/VFXBus.md",
+              "kind": "ModuleScript",
+              "lines": 588,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "WeightedTable",
+              "source_path": "ReplicatedStorage/Shared/Systems/WeightedTable.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Systems/WeightedTable.md",
+              "kind": "ModuleScript",
+              "lines": 85,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "Types",
+          "modules": [
+            {
+              "name": "NetTypes",
+              "source_path": "ReplicatedStorage/Shared/Types/NetTypes.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Types/NetTypes.md",
+              "kind": "ModuleScript",
+              "lines": 21,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "SaveSchema",
+              "source_path": "ReplicatedStorage/Shared/Types/SaveSchema.lua",
+              "doc_path": "docs/api/modules/ReplicatedStorage/Shared/Types/SaveSchema.md",
+              "kind": "ModuleScript",
+              "lines": 25,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Server",
+      "description": "Authoritative gameplay and service logic that executes on the Roblox server.",
+      "groups": [
+        {
+          "name": "Analytics",
+          "modules": [
+            {
+              "name": "TelemetryServer",
+              "source_path": "ServerScriptService/Analytics/TelemetryServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Analytics/TelemetryServer.md",
+              "kind": "ModuleScript",
+              "lines": 1254,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "VersionAnnounce",
+              "source_path": "ServerScriptService/Analytics/VersionAnnounce.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Analytics/VersionAnnounce.server.md",
+              "kind": "ServerScript",
+              "lines": 100,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            }
+          ]
+        },
+        {
+          "name": "Combat Systems",
+          "modules": [
+            {
+              "name": "ArenaAdapter",
+              "source_path": "ServerScriptService/Combat/ArenaAdapter.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Combat/ArenaAdapter.md",
+              "kind": "ModuleScript",
+              "lines": 332,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "HitValidationServer",
+              "source_path": "ServerScriptService/Combat/HitValidationServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Combat/HitValidationServer.md",
+              "kind": "ModuleScript",
+              "lines": 597,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "ProjectileServer",
+              "source_path": "ServerScriptService/Combat/ProjectileServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Combat/ProjectileServer.md",
+              "kind": "ModuleScript",
+              "lines": 487,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "Data Services",
+          "modules": [
+            {
+              "name": "LeaderboardServer",
+              "source_path": "ServerScriptService/Data/LeaderboardServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Data/LeaderboardServer.md",
+              "kind": "ModuleScript",
+              "lines": 549,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "ProfileServer",
+              "source_path": "ServerScriptService/Data/ProfileServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Data/ProfileServer.md",
+              "kind": "ModuleScript",
+              "lines": 1431,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "SaveService",
+              "source_path": "ServerScriptService/Data/SaveService.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Data/SaveService.md",
+              "kind": "ModuleScript",
+              "lines": 663,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            }
+          ]
+        },
+        {
+          "name": "Economy Services",
+          "modules": [
+            {
+              "name": "DailyRewardsServer",
+              "source_path": "ServerScriptService/Economy/DailyRewardsServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Economy/DailyRewardsServer.md",
+              "kind": "ModuleScript",
+              "lines": 587,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "EconomyServer",
+              "source_path": "ServerScriptService/Economy/EconomyServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Economy/EconomyServer.md",
+              "kind": "ModuleScript",
+              "lines": 509,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "GameServer Combat",
+          "modules": [
+            {
+              "name": "CombatServer",
+              "source_path": "ServerScriptService/GameServer/Combat/CombatServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/Combat/CombatServer.md",
+              "kind": "ModuleScript",
+              "lines": 518,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "GameServer Core",
+          "modules": [
+            {
+              "name": "AchievementServer",
+              "source_path": "ServerScriptService/GameServer/AchievementServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/AchievementServer.md",
+              "kind": "ModuleScript",
+              "lines": 391,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "AnalyticsServer",
+              "source_path": "ServerScriptService/GameServer/AnalyticsServer.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/AnalyticsServer.server.md",
+              "kind": "ServerScript",
+              "lines": 113,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "ArenaAdapter",
+              "source_path": "ServerScriptService/GameServer/ArenaAdapter.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/ArenaAdapter.md",
+              "kind": "ModuleScript",
+              "lines": 245,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "ArenaServer",
+              "source_path": "ServerScriptService/GameServer/ArenaServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/ArenaServer.md",
+              "kind": "ModuleScript",
+              "lines": 95,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "ArenaTemplateSetup",
+              "source_path": "ServerScriptService/GameServer/ArenaTemplateSetup.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/ArenaTemplateSetup.server.md",
+              "kind": "ServerScript",
+              "lines": 241,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "DebugServer",
+              "source_path": "ServerScriptService/GameServer/DebugServer.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/DebugServer.server.md",
+              "kind": "ServerScript",
+              "lines": 367,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "DevTest_QuickbarFeeder",
+              "source_path": "ServerScriptService/GameServer/DevTest_QuickbarFeeder.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/DevTest_QuickbarFeeder.server.md",
+              "kind": "ServerScript",
+              "lines": 93,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "FruitSpawnerServer",
+              "source_path": "ServerScriptService/GameServer/FruitSpawnerServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/FruitSpawnerServer.md",
+              "kind": "ModuleScript",
+              "lines": 715,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "HUDServer",
+              "source_path": "ServerScriptService/GameServer/HUDServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/HUDServer.md",
+              "kind": "ModuleScript",
+              "lines": 305,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "Init",
+              "source_path": "ServerScriptService/GameServer/Init.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/Init.server.md",
+              "kind": "ServerScript",
+              "lines": 123,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "MatchmakingServer",
+              "source_path": "ServerScriptService/GameServer/MatchmakingServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/MatchmakingServer.md",
+              "kind": "ModuleScript",
+              "lines": 147,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "ProjectileMotionServer",
+              "source_path": "ServerScriptService/GameServer/ProjectileMotionServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/ProjectileMotionServer.md",
+              "kind": "ModuleScript",
+              "lines": 371,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "ProjectileServer",
+              "source_path": "ServerScriptService/GameServer/ProjectileServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/ProjectileServer.md",
+              "kind": "ModuleScript",
+              "lines": 55,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "QuickbarServer",
+              "source_path": "ServerScriptService/GameServer/QuickbarServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/QuickbarServer.md",
+              "kind": "ModuleScript",
+              "lines": 673,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "RoundDirectorServer",
+              "source_path": "ServerScriptService/GameServer/RoundDirectorServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/RoundDirectorServer.md",
+              "kind": "ModuleScript",
+              "lines": 1760,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "RoundSummaryServer",
+              "source_path": "ServerScriptService/GameServer/RoundSummaryServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/RoundSummaryServer.md",
+              "kind": "ModuleScript",
+              "lines": 345,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "SettingsServer",
+              "source_path": "ServerScriptService/GameServer/SettingsServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/SettingsServer.md",
+              "kind": "ModuleScript",
+              "lines": 421,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "TargetHealthServer",
+              "source_path": "ServerScriptService/GameServer/TargetHealthServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/TargetHealthServer.md",
+              "kind": "ModuleScript",
+              "lines": 454,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "TargetImmunityServer",
+              "source_path": "ServerScriptService/GameServer/TargetImmunityServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/TargetImmunityServer.md",
+              "kind": "ModuleScript",
+              "lines": 375,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "TokenEffectsServer",
+              "source_path": "ServerScriptService/GameServer/TokenEffectsServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/TokenEffectsServer.md",
+              "kind": "ModuleScript",
+              "lines": 899,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "TokenUseServer",
+              "source_path": "ServerScriptService/GameServer/TokenUseServer.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/TokenUseServer.server.md",
+              "kind": "ServerScript",
+              "lines": 215,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "TurretControllerServer",
+              "source_path": "ServerScriptService/GameServer/TurretControllerServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/TurretControllerServer.md",
+              "kind": "ModuleScript",
+              "lines": 753,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "TutorialServer",
+              "source_path": "ServerScriptService/GameServer/TutorialServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/TutorialServer.md",
+              "kind": "ModuleScript",
+              "lines": 134,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            }
+          ]
+        },
+        {
+          "name": "GameServer Data",
+          "modules": [
+            {
+              "name": "PersistenceServer",
+              "source_path": "ServerScriptService/GameServer/Data/PersistenceServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/Data/PersistenceServer.md",
+              "kind": "ModuleScript",
+              "lines": 442,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "GameServer Economy",
+          "modules": [
+            {
+              "name": "EconomyServer",
+              "source_path": "ServerScriptService/GameServer/Economy/EconomyServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/Economy/EconomyServer.md",
+              "kind": "ModuleScript",
+              "lines": 289,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            }
+          ]
+        },
+        {
+          "name": "GameServer Libraries",
+          "modules": [
+            {
+              "name": "ArenaAdapter",
+              "source_path": "ServerScriptService/GameServer/Libraries/ArenaAdapter.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/Libraries/ArenaAdapter.md",
+              "kind": "ModuleScript",
+              "lines": 100,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "GameServer Monetization",
+          "modules": [
+            {
+              "name": "MonetizationServer",
+              "source_path": "ServerScriptService/GameServer/Monetization/MonetizationServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/Monetization/MonetizationServer.md",
+              "kind": "ModuleScript",
+              "lines": 287,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "GameServer Obstacles",
+          "modules": [
+            {
+              "name": "Obstacle_MiniTurretServer",
+              "source_path": "ServerScriptService/GameServer/Obstacles/Obstacle_MiniTurretServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/Obstacles/Obstacle_MiniTurretServer.md",
+              "kind": "ModuleScript",
+              "lines": 547,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            },
+            {
+              "name": "SawbladeServer",
+              "source_path": "ServerScriptService/GameServer/Obstacles/SawbladeServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/Obstacles/SawbladeServer.md",
+              "kind": "ModuleScript",
+              "lines": 994,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.412389Z"
+            }
+          ]
+        },
+        {
+          "name": "GameServer Shop",
+          "modules": [
+            {
+              "name": "MeleeGachaServer",
+              "source_path": "ServerScriptService/GameServer/Shop/MeleeGachaServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/Shop/MeleeGachaServer.md",
+              "kind": "ModuleScript",
+              "lines": 242,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "ShopServer",
+              "source_path": "ServerScriptService/GameServer/Shop/ShopServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/GameServer/Shop/ShopServer.md",
+              "kind": "ModuleScript",
+              "lines": 980,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            }
+          ]
+        },
+        {
+          "name": "Matchmaking",
+          "modules": [
+            {
+              "name": "LobbyMatchmaker",
+              "source_path": "ServerScriptService/Match/LobbyMatchmaker.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Match/LobbyMatchmaker.server.md",
+              "kind": "ServerScript",
+              "lines": 1018,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "MatchArrivalServer",
+              "source_path": "ServerScriptService/Match/MatchArrivalServer.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Match/MatchArrivalServer.server.md",
+              "kind": "ServerScript",
+              "lines": 681,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "MatchReturnServer",
+              "source_path": "ServerScriptService/Match/MatchReturnServer.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Match/MatchReturnServer.server.md",
+              "kind": "ServerScript",
+              "lines": 230,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "MatchReturnService",
+              "source_path": "ServerScriptService/Match/MatchReturnService.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Match/MatchReturnService.md",
+              "kind": "ModuleScript",
+              "lines": 390,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            }
+          ]
+        },
+        {
+          "name": "Moderation",
+          "modules": [
+            {
+              "name": "GuardServer",
+              "source_path": "ServerScriptService/Moderation/GuardServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Moderation/GuardServer.md",
+              "kind": "ModuleScript",
+              "lines": 1035,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            }
+          ]
+        },
+        {
+          "name": "Obstacle Systems",
+          "modules": [
+            {
+              "name": "MiniTurretServer",
+              "source_path": "ServerScriptService/Obstacles/MiniTurretServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Obstacles/MiniTurretServer.md",
+              "kind": "ModuleScript",
+              "lines": 1065,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            }
+          ]
+        },
+        {
+          "name": "Shop Services",
+          "modules": [
+            {
+              "name": "ShopServer",
+              "source_path": "ServerScriptService/Shop/ShopServer.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Shop/ShopServer.md",
+              "kind": "ModuleScript",
+              "lines": 9,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            }
+          ]
+        },
+        {
+          "name": "Tooling",
+          "modules": [
+            {
+              "name": "AdminCommands",
+              "source_path": "ServerScriptService/Tools/AdminCommands.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Tools/AdminCommands.server.md",
+              "kind": "ServerScript",
+              "lines": 1167,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "BotLoad",
+              "source_path": "ServerScriptService/Tools/BotLoad.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Tools/BotLoad.server.md",
+              "kind": "ServerScript",
+              "lines": 407,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            },
+            {
+              "name": "PerfHarness",
+              "source_path": "ServerScriptService/Tools/PerfHarness.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Tools/PerfHarness.server.md",
+              "kind": "ServerScript",
+              "lines": 265,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "RepoHealthCheck",
+              "source_path": "ServerScriptService/Tools/RepoHealthCheck.server.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Tools/RepoHealthCheck.server.md",
+              "kind": "ServerScript",
+              "lines": 201,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            },
+            {
+              "name": "StressConfig",
+              "source_path": "ServerScriptService/Tools/StressConfig.lua",
+              "doc_path": "docs/api/modules/ServerScriptService/Tools/StressConfig.md",
+              "kind": "ModuleScript",
+              "lines": 76,
+              "has_docstring": true,
+              "last_modified": "2025-10-23T00:18:23.637656Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Server Storage",
+      "description": "Server-only modules kept in storage for templating and offline use.",
+      "groups": [
+        {
+          "name": "Arena Templates",
+          "modules": [
+            {
+              "name": "init",
+              "source_path": "ServerStorage/ArenaTemplates/BaseArena/init.lua",
+              "doc_path": "docs/api/modules/ServerStorage/ArenaTemplates/BaseArena/init.md",
+              "kind": "ModuleScript",
+              "lines": 170,
+              "has_docstring": false,
+              "last_modified": "2025-10-23T00:07:56.416389Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
