@@ -43,3 +43,6 @@ These modules provide reusable APIs for other systems and tools.
 - **`ServerScriptService/GameServer/RoundDirectorServer.lua`** – Orchestrates wave cadence, economy payouts, obstacle gating, and telemetry hooks while calling HUD broadcast helpers and summary publishing services.【F:ServerScriptService/GameServer/RoundDirectorServer.lua†L1-L118】【F:ServerScriptService/GameServer/RoundDirectorServer.lua†L776-L808】
 - **`ServerScriptService/GameServer/Shop/ShopServer.lua`** – Coordinates shop state toggles, purchase validation, Quickbar refreshes, and telemetry logging; initializes via `ShopServer.Init()` in the bootstrap.【F:ServerScriptService/GameServer/Shop/ShopServer.lua†L509-L743】【F:ServerScriptService/GameServer/Init.server.lua†L44-L61】
 
+# API
+
+_Content to be migrated._
