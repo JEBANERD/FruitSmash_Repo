@@ -6,6 +6,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Workspace = game:GetService("Workspace")
 
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
+
 local TokenEffectsServer = {}
 
 type EffectState = { [string]: any }
@@ -86,19 +90,29 @@ local EFFECT_DISPLAY_NAMES = {
         AutoRepairMelee = "Auto-repair",
 }
 
-local function getEffectDisplayName(effectName: string): string
+local function getEffectDisplayName(effectName: string, locale: string): string
+        local localized = Localizer.t(string.format("effects.%s.name", effectName), nil, locale)
+        if localized ~= string.format("effects.%s.name", effectName) then
+                return localized
+        end
+
         return EFFECT_DISPLAY_NAMES[effectName] or effectName
 end
 
-local function sendNotice(player: Player, message: string, kind: string)
+local function sendNotice(player: Player, key: string, kind: string, args: { [string]: any }?)
         local remote = NoticeRemote
         if not remote then
                 return
         end
 
+        local locale = Localizer.getPlayerLocale(player)
+        local message = Localizer.t(key, args, locale)
         local ok, err = pcall(remote.FireClient, remote, player, {
                 msg = message,
                 kind = kind,
+                key = key,
+                args = args,
+                locale = locale,
         })
 
         if not ok then
@@ -140,26 +154,28 @@ local effectPolicies: { [string]: EffectPolicy } = {
 }
 
 local function notifyEffectError(player: Player, effectName: string, err: string)
-        local displayName = getEffectDisplayName(effectName)
+        local locale = Localizer.getPlayerLocale(player)
+        local displayName = getEffectDisplayName(effectName, locale)
 
         if err == "Active" then
-                sendNotice(player, string.format("%s already active.", displayName), "info")
+                sendNotice(player, "notices.tokens.active", "info", { item = displayName })
         elseif err == "Cooldown" then
-                sendNotice(player, string.format("%s is cooling down.", displayName), "info")
+                sendNotice(player, "notices.tokens.cooldown", "info", { item = displayName })
         elseif err == "Disabled" then
-                sendNotice(player, string.format("%s is unavailable right now.", displayName), "warn")
+                sendNotice(player, "notices.tokens.disabled", "warn", { item = displayName })
         elseif err == "NoArena" then
-                sendNotice(player, string.format("%s requires an active arena.", displayName), "warn")
+                sendNotice(player, "notices.tokens.noArena", "warn", { item = displayName })
         elseif err == "NoCharges" or err == "OutOfToken" then
-                sendNotice(player, string.format("No charges left for %s.", displayName), "warn")
+                sendNotice(player, "notices.tokens.noCharges", "warn", { item = displayName })
         else
-                sendNotice(player, string.format("Cannot use %s (%s).", displayName, err), "warn")
+                sendNotice(player, "notices.tokens.cannotUse", "warn", { item = displayName, error = tostring(err) })
         end
 end
 
 local function notifyEffectRefresh(player: Player, effectName: string)
-        local displayName = getEffectDisplayName(effectName)
-        sendNotice(player, string.format("%s refreshed.", displayName), "info")
+        local locale = Localizer.getPlayerLocale(player)
+        local displayName = getEffectDisplayName(effectName, locale)
+        sendNotice(player, "notices.tokens.refreshed", "info", { item = displayName })
 end
 
 local tokenEffectById: { [string]: string } = {}

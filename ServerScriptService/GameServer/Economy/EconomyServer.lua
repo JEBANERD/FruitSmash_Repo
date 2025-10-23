@@ -171,15 +171,73 @@ function EconomyServer.AwardFruit(player, fruitId)
     })
 end
 
-local function awardToArena(arenaId, level, bonusConfig, reason)
-    local levelValue = math.max(level or 0, 0)
-    local base = bonusConfig.Base or 0
-    local perLevel = bonusConfig.PerLevel or 0
-    local coins = base + perLevel * levelValue
+local function resolveNumber(fieldNames, ...)
+    local count = select("#", ...)
+    for index = 1, count do
+        local config = select(index, ...)
+        if typeof(config) == "table" then
+            for _, fieldName in ipairs(fieldNames) do
+                local value = config[fieldName]
+                if typeof(value) == "number" then
+                    return value
+                end
+            end
+        end
+    end
 
-    local pointsBase = bonusConfig.PointsBase or bonusConfig.Points or 0
-    local pointsPerLevel = bonusConfig.PointsPerLevel or 0
-    local points = pointsBase + pointsPerLevel * levelValue
+    return 0
+end
+
+local function selectBonusBand(bonusConfig, levelValue)
+    local sanitizedLevel = math.max(levelValue or 0, 0)
+
+    if typeof(bonusConfig) ~= "table" then
+        return bonusConfig, sanitizedLevel
+    end
+
+    local selected = bonusConfig
+    local relativeLevel = sanitizedLevel
+    local bestMinLevel
+
+    local bands = bonusConfig.Bands or bonusConfig.bands
+    if typeof(bands) == "table" then
+        for _, band in ipairs(bands) do
+            if typeof(band) == "table" then
+                local minLevel = tonumber(band.MinLevel or band.minLevel or band.Level or band.level)
+                if minLevel then
+                    if sanitizedLevel >= minLevel and (bestMinLevel == nil or minLevel >= bestMinLevel) then
+                        selected = band
+                        bestMinLevel = minLevel
+                    end
+                end
+            end
+        end
+    end
+
+    if bestMinLevel then
+        local offset = tonumber(selected.LevelOffset or selected.OffsetLevel)
+        if offset then
+            relativeLevel = math.max(sanitizedLevel - offset, 0)
+        else
+            relativeLevel = math.max(sanitizedLevel - bestMinLevel, 0)
+        end
+    end
+
+    return selected, relativeLevel
+end
+
+local function awardToArena(arenaId, level, bonusConfig, reason)
+    bonusConfig = bonusConfig or {}
+    local levelValue = math.max(level or 0, 0)
+    local configToUse, relativeLevel = selectBonusBand(bonusConfig, levelValue)
+
+    local coinsBase = resolveNumber({ "CoinsBase", "Base" }, configToUse, bonusConfig)
+    local coinsPerLevel = resolveNumber({ "CoinsPerLevel", "PerLevel" }, configToUse, bonusConfig)
+    local coins = coinsBase + coinsPerLevel * relativeLevel
+
+    local pointsBase = resolveNumber({ "PointsBase", "Points" }, configToUse, bonusConfig)
+    local pointsPerLevel = resolveNumber({ "PointsPerLevel" }, configToUse, bonusConfig)
+    local points = pointsBase + pointsPerLevel * relativeLevel
 
     if coins == 0 and points == 0 then
         return {}

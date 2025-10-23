@@ -14,6 +14,8 @@ local pushRemote: RemoteEvent? = remotesModule and remotesModule.RE_SettingsPush
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local configFolder = sharedFolder:WaitForChild("Config")
+local systemsFolder = sharedFolder:WaitForChild("Systems")
+local Localizer = require(systemsFolder:WaitForChild("Localizer"))
 local GameConfigModule = require(configFolder:WaitForChild("GameConfig"))
 local GameConfig = if typeof((GameConfigModule :: any).Get) == "function" then (GameConfigModule :: any).Get() else GameConfigModule
 
@@ -29,6 +31,7 @@ type Settings = {
     CameraShakeStrength: number,
     ColorblindPalette: string,
     TextScale: number,
+    Locale: string,
 }
 
 type ApplyOptions = {
@@ -163,6 +166,7 @@ local DEFAULT_SETTINGS: Settings = {
         "TextScale",
         1
     ),
+    Locale = Localizer.getDefaultLocale(),
 }
 
 local function sanitizeSettings(raw: any): Settings
@@ -201,6 +205,10 @@ local function sanitizeSettings(raw: any): Settings
 
     if raw.ColorblindPalette ~= nil then
         sanitized.ColorblindPalette = resolvePaletteId(raw.ColorblindPalette)
+    end
+
+    if raw.Locale ~= nil then
+        sanitized.Locale = Localizer.normalizeLocale(raw.Locale)
     end
 
     return sanitized
@@ -280,6 +288,7 @@ local function applyAttributes(player: Player, settings: Settings)
     player:SetAttribute("CameraShakeStrength", settings.CameraShakeStrength)
     player:SetAttribute("ColorblindPalette", settings.ColorblindPalette)
     player:SetAttribute("TextScale", settings.TextScale)
+    player:SetAttribute("Locale", settings.Locale)
 end
 
 local function copySettings(settings: Settings?): Settings
@@ -289,6 +298,7 @@ local function copySettings(settings: Settings?): Settings
         CameraShakeStrength = settings and settings.CameraShakeStrength or DEFAULT_SETTINGS.CameraShakeStrength,
         ColorblindPalette = settings and settings.ColorblindPalette or DEFAULT_SETTINGS.ColorblindPalette,
         TextScale = settings and settings.TextScale or DEFAULT_SETTINGS.TextScale,
+        Locale = settings and settings.Locale or DEFAULT_SETTINGS.Locale,
     }
     return copy
 end
