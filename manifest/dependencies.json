@@ -1,0 +1,1285 @@
+{
+  "generated_at": "2025-10-23T00:32:31Z",
+  "modules": [
+    {
+      "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+      "layer": "shared",
+      "description": "Initializes the shared RemoteEvent/RemoteFunction set in ReplicatedStorage so client and server modules can bind to a consistent interface.",
+      "requires": [],
+      "provides": {
+        "remote_events": [
+          "GameStart",
+          "RE_PrepTimer",
+          "RE_WaveChanged",
+          "PartyUpdate",
+          "RE_RoundSummary",
+          "RE_MeleeHitAttempt",
+          "RE_TargetHP",
+          "RE_CoinPointDelta",
+          "RE_QuickbarUpdate",
+          "ShopOpen",
+          "PurchaseMade",
+          "PlayerKO",
+          "RE_Notice",
+          "RE_AchievementToast",
+          "WaveComplete",
+          "RE_SettingsPushed",
+          "RE_SessionLeaderboard"
+        ],
+        "remote_functions": [
+          "RF_Purchase",
+          "RF_JoinQueue",
+          "RF_LeaveQueue",
+          "RF_UseToken",
+          "RF_SaveSettings",
+          "RF_Tutorial",
+          "RF_GetGlobalLeaderboard"
+        ]
+      }
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Config/BuildInfo.lua",
+      "layer": "shared",
+      "description": "Build metadata (version, commit, timestamp) consumed by feature flag and telemetry systems.",
+      "requires": []
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Config/Flags.lua",
+      "layer": "shared",
+      "description": "Feature flag registry that merges defaults, build metadata overrides, and place-specific overrides for runtime toggles.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/BuildInfo.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Config/FruitConfig.lua",
+      "layer": "shared",
+      "description": "Fruit roster definitions including speed, damage, durability wear, coins, points, and spawn pathing tags.",
+      "requires": []
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+      "layer": "shared",
+      "description": "Authoritative gameplay tuning constants spanning turrets, lanes, players, power-ups, obstacles, economy, and UI.",
+      "requires": []
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Config/ShopConfig.lua",
+      "layer": "shared",
+      "description": "Shop item catalog covering melee weapons, consumables, utilities, cosmetics, and meta tokens.",
+      "requires": []
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Content/ContentRegistry.lua",
+      "layer": "shared",
+      "description": "Content loading/registration service that safely requires asset modules and caches resolved instances.",
+      "requires": [],
+      "dynamic_requires": [
+        {
+          "pattern": "ReplicatedStorage/Assets/**",
+          "type": "dynamic"
+        },
+        {
+          "pattern": "ServerStorage/ArenaTemplates/**",
+          "type": "dynamic"
+        }
+      ]
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Systems/AudioBus.lua",
+      "layer": "shared",
+      "description": "Sound pooling and playback helper that reuses emitters and pulls definitions from shared SFX assets.",
+      "requires": [],
+      "uses_assets": [
+        "ReplicatedStorage/Shared/Assets/SFX"
+      ]
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+      "layer": "shared",
+      "description": "Shared localization helper that resolves strings by locale and renders template arguments.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Locale/Strings.lua",
+          "type": "direct"
+        }
+      ]
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Systems/RNG.lua",
+      "layer": "shared",
+      "description": "Lazy-seeded random number helper for deterministic utility calls.",
+      "requires": []
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Systems/VFXBus.lua",
+      "layer": "shared",
+      "description": "Visual effects pooling bus that instantiates world/UI effects from the VFX asset definitions.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Assets/VFX/init.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_assets": [
+        "ReplicatedStorage/Assets/VFX"
+      ]
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Systems/WeightedTable.lua",
+      "layer": "shared",
+      "description": "Utility for weighted random selection with optional custom RNG sources.",
+      "requires": []
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Types/NetTypes.lua",
+      "layer": "shared",
+      "description": "Loose type descriptors for RemoteEvent payload contracts.",
+      "requires": []
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Types/SaveSchema.lua",
+      "layer": "shared",
+      "description": "Default profile schema values for persistence and session profile servers.",
+      "requires": []
+    },
+    {
+      "path": "ServerScriptService/Analytics/TelemetryServer.lua",
+      "layer": "server",
+      "description": "Aggregates gameplay telemetry events, conditionally enabled through the Flags module.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/Flags.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/Combat/ArenaAdapter.lua",
+      "layer": "server",
+      "description": "Caches ArenaServer state for combat systems, exposing lane/target lookups and arena lifecycle hooks.",
+      "requires": [
+        {
+          "path": "ServerScriptService/GameServer/ArenaServer.lua",
+          "type": "direct"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/Combat/HitValidationServer.lua",
+      "layer": "server",
+      "description": "Authoritative melee validation that checks swing cooldowns, arena membership, and awards economy deltas.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/FruitConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/Economy/EconomyServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/GameServer/Economy/EconomyServer.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "RE_MeleeHitAttempt",
+        "RE_CoinPointDelta"
+      ]
+    },
+    {
+      "path": "ServerScriptService/Combat/ProjectileServer.lua",
+      "layer": "server",
+      "description": "Tracks active fruit projectiles, resolving lane hits and updating the HUD as targets take damage.",
+      "requires": [
+        {
+          "path": "ServerScriptService/Combat/ArenaAdapter.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/HUDServer.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/GameServer/TargetImmunityServer.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/Data/LeaderboardServer.lua",
+      "layer": "server",
+      "description": "Maintains session and global leaderboards, exposing RemoteEvent/Function endpoints for clients.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RE_SessionLeaderboard",
+        "RF_GetGlobalLeaderboard"
+      ]
+    },
+    {
+      "path": "ServerScriptService/Data/SaveService.lua",
+      "layer": "server",
+      "description": "DataStore wrapper providing retry logic, studio fallback storage, and build metadata tagging.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/Flags.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/Economy/EconomyServer.lua",
+      "layer": "server",
+      "description": "Authoritative coin/point tracking and reward calculation, optionally submitting scores to LeaderboardServer.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/FruitConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/Data/LeaderboardServer.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "RE_CoinPointDelta"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/AchievementServer.lua",
+      "layer": "server",
+      "description": "Evaluates round outcomes to grant achievements and push toast notifications with feature flag gating.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/Flags.lua",
+          "type": "protected"
+        }
+      ],
+      "uses_remotes": [
+        "RE_AchievementToast"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/AnalyticsServer.server.lua",
+      "layer": "server",
+      "description": "Aggregates per-arena analytics counters (fruit destroyed, waves, continues) using GameConfig debug knobs.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/ArenaServer.lua",
+      "layer": "server",
+      "description": "Spawns and tracks arena instances using ContentRegistry templates and Workspace folders.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Content/ContentRegistry.lua",
+          "type": "direct"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/Combat/CombatServer.lua",
+      "layer": "server",
+      "description": "Validates melee hit attempts server-side, applies damage, and coordinates rewards via config and economy modules.",
+      "requires": [
+        {
+          "path": "ServerScriptService/Moderation/GuardServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/FruitConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/Economy/EconomyServer.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "RE_MeleeHitAttempt",
+        "RE_CoinPointDelta",
+        "RE_TargetHP"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/Data/PersistenceServer.lua",
+      "layer": "server",
+      "description": "Robust persistence gateway that loads the SaveSchema defaults and optional ProfileService provider.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Types/SaveSchema.lua",
+          "type": "protected"
+        }
+      ],
+      "external_requires": [
+        {
+          "name": "ProfileService",
+          "type": "roblox_module",
+          "lookup_paths": [
+            "ServerScriptService/GameServer/Libraries/ProfileService",
+            "ServerScriptService/ProfileService",
+            "ReplicatedStorage/Packages/ProfileService",
+            "ReplicatedStorage/ProfileService",
+            "ServerStorage/ProfileService"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/Data/ProfileServer.lua",
+      "layer": "server",
+      "description": "Session profile manager that coordinates SaveService persistence, schema defaults, and localized messages.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/Data/SaveService.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Types/SaveSchema.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/ShopConfig.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/Economy/EconomyServer.lua",
+      "layer": "server",
+      "description": "GameServer-scoped economy adapter that awards fruit, wave, and level rewards per arena party.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/FruitConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/GameServer/ArenaServer.lua",
+          "type": "protected"
+        }
+      ],
+      "uses_remotes": [
+        "RE_CoinPointDelta"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/FruitSpawnerServer.lua",
+      "layer": "server",
+      "description": "Queues and spawns fruit projectiles per arena, wiring projectile tracking and asset loading.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/FruitConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/ProjectileServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/Libraries/ArenaAdapter.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Content/ContentRegistry.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/Combat/ProjectileServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/GameServer/ProjectileMotionServer.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/HUDServer.lua",
+      "layer": "server",
+      "description": "Server HUD broadcaster that sanitizes timers, lane HP, and coin deltas before firing RemoteEvents.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RE_PrepTimer",
+        "RE_WaveChanged",
+        "RE_TargetHP",
+        "RE_CoinPointDelta"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/Init.server.lua",
+      "layer": "server",
+      "description": "Bootstraps server systems: loads remotes, settings, tutorial, shop, and combat validators, then waits for GameStart requests.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "protected"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/GameServer/SettingsServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/GameServer/TutorialServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/GameServer/Shop/ShopServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/Combat/HitValidationServer.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "GameStart"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/Libraries/ArenaAdapter.lua",
+      "layer": "server",
+      "description": "Helper that lazily requires ArenaServer and exposes arena lookup utilities for other systems.",
+      "requires": [],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/GameServer/ArenaServer.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/MatchmakingServer.lua",
+      "layer": "server",
+      "description": "Maintains lightweight party structures in the arena server and spawns arenas when groups are ready.",
+      "requires": [
+        {
+          "path": "ServerScriptService/GameServer/ArenaServer.lua",
+          "type": "direct"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/ProjectileMotionServer.lua",
+      "layer": "server",
+      "description": "Applies projectile motion profiles for spawned fruit projectiles by updating transforms each heartbeat.",
+      "requires": []
+    },
+    {
+      "path": "ServerScriptService/GameServer/ProjectileServer.lua",
+      "layer": "server",
+      "description": "Wrapper around ProjectileMotionServer for tracking/untracking projectile instances.",
+      "requires": [
+        {
+          "path": "ServerScriptService/GameServer/ProjectileMotionServer.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/QuickbarServer.lua",
+      "layer": "server",
+      "description": "Builds authoritative quickbar state from player inventory/profile data and fires updates to clients.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/ShopConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/Flags.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ServerScriptService/Data/ProfileServer.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "RE_QuickbarUpdate"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/RoundDirectorServer.lua",
+      "layer": "server",
+      "description": "Coordinates the arena lifecycle (prep, waves, shop, level complete) and orchestrates subsystems per round.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/HUDServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/ArenaServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/TargetHealthServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/RoundSummaryServer.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/Flags.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ServerScriptService/GameServer/AchievementServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/Match/MatchReturnService.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/Economy/EconomyServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/GameServer/TurretControllerServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/GameServer/Obstacles/SawbladeServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/Analytics/TelemetryServer.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "WaveComplete",
+        "LevelComplete",
+        "RE_Notice"
+      ],
+      "notes": "Remotes.LevelComplete is optional; the RemoteBootstrap set does not create it by default."
+    },
+    {
+      "path": "ServerScriptService/GameServer/RoundSummaryServer.lua",
+      "layer": "server",
+      "description": "Collects per-level stats, tracks token usage, and publishes summary payloads back to clients and lobbies.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/Match/MatchReturnService.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "RE_RoundSummary"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/SettingsServer.lua",
+      "layer": "server",
+      "description": "Server authority for player settings that persists changes and broadcasts updates via remotes.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RF_SaveSettings",
+        "RE_SettingsPushed"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/Shop/ShopServer.lua",
+      "layer": "server",
+      "description": "Handles shop purchases, stock limits, and telemetry while coordinating with Guard, Quickbar, and profile systems.",
+      "requires": [
+        {
+          "path": "ServerScriptService/Moderation/GuardServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/QuickbarServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/ShopConfig.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/Analytics/TelemetryServer.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ServerScriptService/Data/ProfileServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/GameServer/Data/PersistenceServer.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "ShopOpen",
+        "PurchaseMade",
+        "RF_Purchase",
+        "RE_Notice"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/TargetHealthServer.lua",
+      "layer": "server",
+      "description": "Maintains per-lane target HP, applies shield states, and streams updates through HUDServer.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/HUDServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/ArenaServer.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/GameServer/AchievementServer.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ServerScriptService/GameServer/TargetImmunityServer.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/TargetImmunityServer.lua",
+      "layer": "server",
+      "description": "Applies shield tags to arena targets using GameConfig rules and the combat ArenaAdapter lookup APIs.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/Combat/ArenaAdapter.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/TokenEffectsServer.lua",
+      "layer": "server",
+      "description": "Executes token abilities, tracks cooldowns, and sends localized notices/telemetry for token usage.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/ShopConfig.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/Analytics/TelemetryServer.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ServerScriptService/GameServer/TargetHealthServer.lua",
+          "type": "protected"
+        }
+      ],
+      "uses_remotes": [
+        "RE_Notice"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/TokenUseServer.server.lua",
+      "layer": "server",
+      "description": "Moderates RF_UseToken requests, honors the Tokens flag, and relays to TokenEffects/RoundSummary systems.",
+      "requires": [
+        {
+          "path": "ServerScriptService/Moderation/GuardServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/TokenEffectsServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/RoundSummaryServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/Flags.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RF_UseToken"
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/TurretControllerServer.lua",
+      "layer": "server",
+      "description": "Controls autonomous turrets by sampling GameConfig/FruitConfig tuning and spawning fruit via FruitSpawner.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/FruitConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/FruitSpawnerServer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ServerScriptService/GameServer/ArenaAdapter.lua",
+          "type": "direct"
+        }
+      ]
+    },
+    {
+      "path": "ServerScriptService/GameServer/TutorialServer.lua",
+      "layer": "server",
+      "description": "Tracks tutorial completion state, syncing with ProfileServer when available and exposing RF_Tutorial.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/Data/ProfileServer.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "RF_Tutorial"
+      ]
+    },
+    {
+      "path": "ServerScriptService/Match/LobbyMatchmaker.server.lua",
+      "layer": "server",
+      "description": "Forms parties in the lobby, handles queueing/teleports, and can fall back to local arenas for testing.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ServerScriptService/GameServer/ArenaServer.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ServerScriptService/GameServer/RoundDirectorServer.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "RF_JoinQueue",
+        "RF_LeaveQueue",
+        "PartyUpdate",
+        "RE_Notice"
+      ]
+    },
+    {
+      "path": "ServerScriptService/Match/MatchReturnServer.server.lua",
+      "layer": "server",
+      "description": "Lobby-side listener that inspects teleport data and dispatches localized notices via MatchReturnService.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ServerScriptService/Match/MatchReturnService.lua",
+          "type": "dynamic"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "protected"
+        }
+      ],
+      "uses_remotes": [
+        "RE_Notice"
+      ]
+    },
+    {
+      "path": "ServerScriptService/Match/MatchReturnService.lua",
+      "layer": "server",
+      "description": "Generates match return summaries and localized notices for players exiting arenas or teleports.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        }
+      ],
+      "dynamic_requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ServerScriptService/GameServer/ArenaServer.lua",
+          "type": "dynamic"
+        }
+      ],
+      "uses_remotes": [
+        "RE_Notice"
+      ]
+    },
+    {
+      "path": "ServerScriptService/Moderation/GuardServer.lua",
+      "layer": "server",
+      "description": "Rate limiting and validator wrapper for RemoteEvent/RemoteFunction handlers, optionally using GameConfig for limits.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "protected"
+        }
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/AdminPanel.client.lua",
+      "layer": "client",
+      "description": "QA debug panel that invokes RF_QAAdminCommand to inspect and manipulate live server state.",
+      "requires": [],
+      "uses_remotes": [
+        "RF_QAAdminCommand"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/AchievementToast.client.lua",
+      "layer": "client",
+      "description": "Shows localized achievement toast notifications triggered by the achievement RemoteEvent.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RE_AchievementToast"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/AudioController.client.lua",
+      "layer": "client",
+      "description": "Listens for gameplay RemoteEvents and routes them through AudioBus to play appropriate sound cues.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Systems/AudioBus.lua",
+          "type": "protected"
+        },
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "protected"
+        }
+      ],
+      "uses_remotes": [
+        "RE_WaveChanged",
+        "ShopOpen",
+        "RE_TargetHP"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeel.client.lua",
+      "layer": "client",
+      "description": "Applies camera shake and FOV impulses based on CameraFeelBus events to enhance moment-to-moment feedback.",
+      "requires": [
+        {
+          "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeelBus.lua",
+          "type": "direct"
+        }
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeelBus.lua",
+      "layer": "client",
+      "description": "Bindable event bus for camera feedback (shake, sprint cues, token animations) used by multiple controllers.",
+      "requires": []
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/ControllerSupport.client.lua",
+      "layer": "client",
+      "description": "Adds controller bindings for quickbar slots based on GameConfig quickbar settings and triggers token RemoteFunction calls.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeelBus.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RF_UseToken"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/HUDController.client.lua",
+      "layer": "client",
+      "description": "Builds the main HUD, subscribing to match/economy RemoteEvents and animating counters, timers, and lane health.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "protected"
+        }
+      ],
+      "uses_remotes": [
+        "RE_CoinPointDelta",
+        "RE_PrepTimer",
+        "RE_WaveChanged",
+        "RE_TargetHP"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/LeaderboardUI.client.lua",
+      "layer": "client",
+      "description": "Leaderboard overlay that streams session updates and polls the server for global standings.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RE_SessionLeaderboard",
+        "RF_GetGlobalLeaderboard"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/MeleeController.client.lua",
+      "layer": "client",
+      "description": "Validates local melee swings, fires hit attempts to the server, and plays local effects via AudioBus and CameraFeelBus.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Systems/AudioBus.lua",
+          "type": "protected"
+        },
+        {
+          "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeelBus.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RE_MeleeHitAttempt"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/PlayerController.client.lua",
+      "layer": "client",
+      "description": "Manages sprinting, stamina, and speed boosts for the local player using GameConfig tunables and CameraFeelBus feedback.",
+      "requires": [
+        {
+          "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeelBus.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        }
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/QueueUI.client.lua",
+      "layer": "client",
+      "description": "Displays matchmaking status, party membership, and countdown timers pushed from the lobby queue.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "protected"
+        }
+      ],
+      "uses_remotes": [
+        "PartyUpdate"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/QuickbarController.client.lua",
+      "layer": "client",
+      "description": "Client HUD controller for the quickbar, sourcing config, localization, and responding to quickbar RemoteEvents/Functions.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/ShopConfig.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeelBus.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RE_QuickbarUpdate",
+        "RF_UseToken"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/RoundSummary.client.lua",
+      "layer": "client",
+      "description": "Builds the post-round summary modal using payloads broadcast from the server.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RE_RoundSummary"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/SettingsUI.client.lua",
+      "layer": "client",
+      "description": "Implements the in-game settings menu, syncing values through RemoteBootstrap endpoints and GameConfig defaults.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RF_SaveSettings",
+        "RE_SettingsPushed",
+        "RF_Tutorial"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/TutorialUI.client.lua",
+      "layer": "client",
+      "description": "Guides new players through movement, sprinting, and token usage by invoking tutorial RemoteFunctions.",
+      "requires": [
+        {
+          "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+          "type": "direct"
+        },
+        {
+          "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+          "type": "direct"
+        }
+      ],
+      "uses_remotes": [
+        "RF_Tutorial"
+      ]
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/UIRouter.client.lua",
+      "layer": "client",
+      "description": "Lightweight state router that flips UI modes based on gameplay RemoteEvents (prep, wave, intermission).",
+      "requires": [],
+      "uses_remotes": [
+        "RE_PrepTimer",
+        "RE_WaveChanged",
+        "RE_Notice"
+      ]
+    }
+  ],
+  "external_dependencies": [
+    {
+      "name": "ProfileService",
+      "type": "roblox_module",
+      "used_by": [
+        "ServerScriptService/GameServer/Data/PersistenceServer.lua"
+      ],
+      "notes": "Optional persistence provider loaded from several candidate locations at runtime."
+    }
+  ],
+  "cycles": []
+}
