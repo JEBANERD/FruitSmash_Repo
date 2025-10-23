@@ -1,0 +1,1021 @@
+{
+  "repo_name": "FruitSmash_Repo",
+  "generated_at": "2025-10-23T00:19:03.967297Z",
+  "total_files": 101,
+  "files": [
+    {
+      "path": "default.project.json",
+      "name": "default.project",
+      "ext": ".json",
+      "language": "JSON",
+      "size_bytes": 1438,
+      "lines": 40,
+      "last_modified": "2025-10-23T00:07:56.420389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerStorage/ArenaTemplates/BaseArena/init.lua",
+      "name": "init",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 5456,
+      "lines": 170,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/AdminPanel.client.lua",
+      "name": "AdminPanel",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 15899,
+      "lines": 471,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Tools/PerfHUD.client.lua",
+      "name": "PerfHUD",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 7504,
+      "lines": 224,
+      "last_modified": "2025-10-23T00:07:56.420389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/TutorialUI.client.lua",
+      "name": "TutorialUI",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 19810,
+      "lines": 600,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/AudioController.client.lua",
+      "name": "AudioController",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 6176,
+      "lines": 234,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/HUDController.client.lua",
+      "name": "HUDController",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 49860,
+      "lines": 1569,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/PlayerController.client.lua",
+      "name": "PlayerController",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 13265,
+      "lines": 420,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/UIRouter.client.lua",
+      "name": "UIRouter",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 6184,
+      "lines": 216,
+      "last_modified": "2025-10-23T00:07:56.420389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/SettingsUI.client.lua",
+      "name": "SettingsUI",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 46489,
+      "lines": 1398,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/MeleeController.client.lua",
+      "name": "MeleeController",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 12877,
+      "lines": 447,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/AchievementToast.client.lua",
+      "name": "AchievementToast",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 8513,
+      "lines": 290,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/RoundSummary.client.lua",
+      "name": "RoundSummary",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 13940,
+      "lines": 432,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/LeaderboardUI.client.lua",
+      "name": "LeaderboardUI",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 26293,
+      "lines": 750,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeelBus.lua",
+      "name": "CameraFeelBus",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 1153,
+      "lines": 45,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/QuickbarController.client.lua",
+      "name": "QuickbarController",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 26975,
+      "lines": 710,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/QueueUI.client.lua",
+      "name": "QueueUI",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 14186,
+      "lines": 488,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/CameraFeel.client.lua",
+      "name": "CameraFeel",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 8656,
+      "lines": 260,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterPlayer/StarterPlayerScripts/Controllers/ControllerSupport.client.lua",
+      "name": "ControllerSupport",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 19395,
+      "lines": 575,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ReplicatedStorage/Remotes/RemoteBootstrap.lua",
+      "name": "RemoteBootstrap",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 4231,
+      "lines": 110,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Content/ContentRegistry.lua",
+      "name": "ContentRegistry",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 13860,
+      "lines": 493,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Systems/RNG.lua",
+      "name": "RNG",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 1048,
+      "lines": 48,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Systems/WeightedTable.lua",
+      "name": "WeightedTable",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 2251,
+      "lines": 85,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Systems/Localizer.lua",
+      "name": "Localizer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 4431,
+      "lines": 168,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Systems/VFXBus.lua",
+      "name": "VFXBus",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 16999,
+      "lines": 588,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Systems/AudioBus.lua",
+      "name": "AudioBus",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 10069,
+      "lines": 382,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Types/NetTypes.lua",
+      "name": "NetTypes",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 407,
+      "lines": 21,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Types/SaveSchema.lua",
+      "name": "SaveSchema",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 478,
+      "lines": 25,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Locale/Strings.lua",
+      "name": "Strings",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 12994,
+      "lines": 256,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Config/Flags.lua",
+      "name": "Flags",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 24976,
+      "lines": 929,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Config/ShopConfig.lua",
+      "name": "ShopConfig",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 3637,
+      "lines": 160,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Config/BuildInfo.lua",
+      "name": "BuildInfo",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 162,
+      "lines": 9,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Config/GameConfig.lua",
+      "name": "GameConfig",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 6990,
+      "lines": 217,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ReplicatedStorage/Shared/Config/FruitConfig.lua",
+      "name": "FruitConfig",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 2350,
+      "lines": 111,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterGui/WorldScreens/Screen_WaveTimer.client.lua",
+      "name": "Screen_WaveTimer",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 4206,
+      "lines": 156,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterGui/WorldScreens/Screen_RoundTimer.client.lua",
+      "name": "Screen_RoundTimer",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 5158,
+      "lines": 212,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "StarterGui/Lobby/GlobalLeaderboard.client.lua",
+      "name": "GlobalLeaderboard",
+      "ext": ".client.lua",
+      "language": "Luau",
+      "size_bytes": 7416,
+      "lines": 275,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "Marketing/StoreAssets/manifest.json",
+      "name": "manifest",
+      "ext": ".json",
+      "language": "JSON",
+      "size_bytes": 1157,
+      "lines": 36,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": false
+    },
+    {
+      "path": "Marketing/StoreAssets/README.md",
+      "name": "README",
+      "ext": ".md",
+      "language": "Markdown",
+      "size_bytes": 762,
+      "lines": 13,
+      "last_modified": "2025-10-23T00:18:23.633656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "Marketing/StoreAssets/screenshots/README.md",
+      "name": "README",
+      "ext": ".md",
+      "language": "Markdown",
+      "size_bytes": 700,
+      "lines": 12,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "Marketing/StoreAssets/icon/README.md",
+      "name": "README",
+      "ext": ".md",
+      "language": "Markdown",
+      "size_bytes": 415,
+      "lines": 7,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "Marketing/StoreAssets/trailer/README.md",
+      "name": "README",
+      "ext": ".md",
+      "language": "Markdown",
+      "size_bytes": 465,
+      "lines": 9,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "Marketing/StoreAssets/blurbs/ja-JP.json",
+      "name": "ja-JP",
+      "ext": ".json",
+      "language": "JSON",
+      "size_bytes": 482,
+      "lines": 5,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": false
+    },
+    {
+      "path": "Marketing/StoreAssets/blurbs/fr-FR.json",
+      "name": "fr-FR",
+      "ext": ".json",
+      "language": "JSON",
+      "size_bytes": 411,
+      "lines": 5,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": false
+    },
+    {
+      "path": "Marketing/StoreAssets/blurbs/es-ES.json",
+      "name": "es-ES",
+      "ext": ".json",
+      "language": "JSON",
+      "size_bytes": 392,
+      "lines": 5,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": false
+    },
+    {
+      "path": "Marketing/StoreAssets/blurbs/en-US.json",
+      "name": "en-US",
+      "ext": ".json",
+      "language": "JSON",
+      "size_bytes": 355,
+      "lines": 5,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": false
+    },
+    {
+      "path": "Marketing/StoreAssets/blurbs/README.md",
+      "name": "README",
+      "ext": ".md",
+      "language": "Markdown",
+      "size_bytes": 369,
+      "lines": 5,
+      "last_modified": "2025-10-23T00:18:23.633656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/ProjectileServer.lua",
+      "name": "ProjectileServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 1446,
+      "lines": 55,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/AchievementServer.lua",
+      "name": "AchievementServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 11114,
+      "lines": 391,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/TurretControllerServer.lua",
+      "name": "TurretControllerServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 21705,
+      "lines": 753,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/ArenaServer.lua",
+      "name": "ArenaServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 2284,
+      "lines": 95,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/TokenEffectsServer.lua",
+      "name": "TokenEffectsServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 33690,
+      "lines": 899,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/FruitSpawnerServer.lua",
+      "name": "FruitSpawnerServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 21658,
+      "lines": 715,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/ProjectileMotionServer.lua",
+      "name": "ProjectileMotionServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 11286,
+      "lines": 371,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/RoundDirectorServer.lua",
+      "name": "RoundDirectorServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 54002,
+      "lines": 1760,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/TargetImmunityServer.lua",
+      "name": "TargetImmunityServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 9406,
+      "lines": 375,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/AnalyticsServer.server.lua",
+      "name": "AnalyticsServer",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 2565,
+      "lines": 113,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/TargetHealthServer.lua",
+      "name": "TargetHealthServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 12429,
+      "lines": 454,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/ArenaAdapter.lua",
+      "name": "ArenaAdapter",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 5343,
+      "lines": 245,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/Init.server.lua",
+      "name": "Init",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 4890,
+      "lines": 123,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/TokenUseServer.server.lua",
+      "name": "TokenUseServer",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 6985,
+      "lines": 215,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/SettingsServer.lua",
+      "name": "SettingsServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 13942,
+      "lines": 421,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/RoundSummaryServer.lua",
+      "name": "RoundSummaryServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 10877,
+      "lines": 345,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/MatchmakingServer.lua",
+      "name": "MatchmakingServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 3669,
+      "lines": 147,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/DebugServer.server.lua",
+      "name": "DebugServer",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 11135,
+      "lines": 367,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/ArenaTemplateSetup.server.lua",
+      "name": "ArenaTemplateSetup",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 7422,
+      "lines": 241,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/HUDServer.lua",
+      "name": "HUDServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 8592,
+      "lines": 305,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/DevTest_QuickbarFeeder.server.lua",
+      "name": "DevTest_QuickbarFeeder",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 3218,
+      "lines": 93,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/QuickbarServer.lua",
+      "name": "QuickbarServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 23941,
+      "lines": 673,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/TutorialServer.lua",
+      "name": "TutorialServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 4740,
+      "lines": 134,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/Monetization/MonetizationServer.lua",
+      "name": "MonetizationServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 8403,
+      "lines": 287,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/Shop/ShopServer.lua",
+      "name": "ShopServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 31429,
+      "lines": 980,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/Shop/MeleeGachaServer.lua",
+      "name": "MeleeGachaServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 6291,
+      "lines": 242,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/Libraries/ArenaAdapter.lua",
+      "name": "ArenaAdapter",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 2434,
+      "lines": 100,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/Data/PersistenceServer.lua",
+      "name": "PersistenceServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 12271,
+      "lines": 442,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/Combat/CombatServer.lua",
+      "name": "CombatServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 14564,
+      "lines": 518,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/GameServer/Obstacles/SawbladeServer.lua",
+      "name": "SawbladeServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 27153,
+      "lines": 994,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/Obstacles/Obstacle_MiniTurretServer.lua",
+      "name": "Obstacle_MiniTurretServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 15086,
+      "lines": 547,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/GameServer/Economy/EconomyServer.lua",
+      "name": "EconomyServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 8625,
+      "lines": 289,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/Analytics/TelemetryServer.lua",
+      "name": "TelemetryServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 44814,
+      "lines": 1254,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Analytics/VersionAnnounce.server.lua",
+      "name": "VersionAnnounce",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 3182,
+      "lines": 100,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Shop/ShopServer.lua",
+      "name": "ShopServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 416,
+      "lines": 9,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Moderation/GuardServer.lua",
+      "name": "GuardServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 36442,
+      "lines": 1035,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Tools/BotLoad.server.lua",
+      "name": "BotLoad",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 16354,
+      "lines": 407,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Tools/RepoHealthCheck.server.lua",
+      "name": "RepoHealthCheck",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 9098,
+      "lines": 201,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Tools/StressConfig.lua",
+      "name": "StressConfig",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 2133,
+      "lines": 76,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Tools/AdminCommands.server.lua",
+      "name": "AdminCommands",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 46893,
+      "lines": 1167,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Tools/PerfHarness.server.lua",
+      "name": "PerfHarness",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 9224,
+      "lines": 265,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Match/MatchReturnService.lua",
+      "name": "MatchReturnService",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 12511,
+      "lines": 390,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Match/MatchReturnServer.server.lua",
+      "name": "MatchReturnServer",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 7494,
+      "lines": 230,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Match/MatchArrivalServer.server.lua",
+      "name": "MatchArrivalServer",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 18493,
+      "lines": 681,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Match/LobbyMatchmaker.server.lua",
+      "name": "LobbyMatchmaker",
+      "ext": ".server.lua",
+      "language": "Luau",
+      "size_bytes": 36513,
+      "lines": 1018,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Data/LeaderboardServer.lua",
+      "name": "LeaderboardServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 16109,
+      "lines": 549,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true,
+      "remotes_used": [
+        "RemoteFunction:OnServerInvoke",
+        "RemoteFunction:RemoteFunction"
+      ]
+    },
+    {
+      "path": "ServerScriptService/Data/SaveService.lua",
+      "name": "SaveService",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 18716,
+      "lines": 663,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Data/ProfileServer.lua",
+      "name": "ProfileServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 44085,
+      "lines": 1431,
+      "last_modified": "2025-10-23T00:18:23.637656Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Combat/ProjectileServer.lua",
+      "name": "ProjectileServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 12891,
+      "lines": 487,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/Combat/HitValidationServer.lua",
+      "name": "HitValidationServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 19428,
+      "lines": 597,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/Combat/ArenaAdapter.lua",
+      "name": "ArenaAdapter",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 7812,
+      "lines": 332,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/Obstacles/MiniTurretServer.lua",
+      "name": "MiniTurretServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 29427,
+      "lines": 1065,
+      "last_modified": "2025-10-23T00:07:56.416389Z",
+      "has_docstring": false
+    },
+    {
+      "path": "ServerScriptService/Economy/EconomyServer.lua",
+      "name": "EconomyServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 17102,
+      "lines": 509,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    },
+    {
+      "path": "ServerScriptService/Economy/DailyRewardsServer.lua",
+      "name": "DailyRewardsServer",
+      "ext": ".lua",
+      "language": "Luau",
+      "size_bytes": 17462,
+      "lines": 587,
+      "last_modified": "2025-10-23T00:07:56.412389Z",
+      "has_docstring": true
+    }
+  ]
+}
