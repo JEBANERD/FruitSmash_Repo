@@ -141,6 +141,8 @@ local timerLabel: TextLabel? = nil
 local waveLabel: TextLabel? = nil
 local lanesPanel: Frame? = nil
 local lanesContainer: Frame? = nil
+local safePadding: UIPadding? = nil
+local cameraViewportConnection: RBXScriptConnection? = nil
 
 local lanePanels: { [number]: {
     frame: Frame,
@@ -193,6 +195,68 @@ local laneState = {
 }
 
 local currentArenaFilter: string? = nil
+
+local function getSafeInsets(): (Vector2, Vector2)
+    local insetTopLeft, insetBottomRight = GuiService:GetGuiInset()
+    local ok, safeInset = pcall(function()
+        return GuiService:GetSafeAreaInset()
+    end)
+    if ok and typeof(safeInset) == "Rect" then
+        local minVector = (safeInset :: Rect).Min
+        local maxVector = (safeInset :: Rect).Max
+        if typeof(minVector) == "Vector2" then
+            insetTopLeft = Vector2.new(math.max(insetTopLeft.X, minVector.X), math.max(insetTopLeft.Y, minVector.Y))
+        end
+        if typeof(maxVector) == "Vector2" then
+            insetBottomRight = Vector2.new(math.max(insetBottomRight.X, maxVector.X), math.max(insetBottomRight.Y, maxVector.Y))
+        end
+    end
+    return insetTopLeft, insetBottomRight
+end
+
+local function updateSafePadding()
+    if not safePadding then
+        return
+    end
+    local insetTopLeft, insetBottomRight = getSafeInsets()
+    safePadding.PaddingTop = UDim.new(0, math.floor(insetTopLeft.Y + 0.5))
+    safePadding.PaddingLeft = UDim.new(0, math.floor(insetTopLeft.X + 0.5))
+    safePadding.PaddingBottom = UDim.new(0, math.floor(insetBottomRight.Y + 0.5))
+    safePadding.PaddingRight = UDim.new(0, math.floor(insetBottomRight.X + 0.5))
+end
+
+local function connectCameraViewportListener(camera: Camera?)
+    if cameraViewportConnection then
+        cameraViewportConnection:Disconnect()
+        cameraViewportConnection = nil
+    end
+    if not camera then
+        return
+    end
+    cameraViewportConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+        updateSafePadding()
+    end)
+end
+
+local function initSafeAreaListeners()
+    local properties = { "SafeAreaInsetTop", "SafeAreaInsetBottom", "SafeAreaInsetLeft", "SafeAreaInsetRight" }
+    for _, property in ipairs(properties) do
+        local ok, signal = pcall(function()
+            return GuiService:GetPropertyChangedSignal(property)
+        end)
+        if ok and signal then
+            table.insert(connections, (signal :: any):Connect(function()
+                updateSafePadding()
+            end))
+        end
+    end
+
+    connectCameraViewportListener(workspace.CurrentCamera)
+    table.insert(connections, workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+        connectCameraViewportListener(workspace.CurrentCamera)
+        updateSafePadding()
+    end))
+end
 
 local function disconnectAll()
     for _, connection in ipairs(connections) do
@@ -305,6 +369,11 @@ local function onDestroy()
     waveLabel = nil
     lanesPanel = nil
     lanesContainer = nil
+    safePadding = nil
+    if cameraViewportConnection then
+        cameraViewportConnection:Disconnect()
+        cameraViewportConnection = nil
+    end
     safeAreaFrame = nil
     safeAreaPadding = nil
     lastSafeAreaInsets = { left = -1, top = -1, right = -1, bottom = -1 }
@@ -1019,6 +1088,12 @@ local function createHudGui()
     if okInset and typeof(insetSignal) == "RBXScriptSignal" then
         table.insert(connections, (insetSignal :: RBXScriptSignal):Connect(updateSafeAreaPadding))
     end
+
+    safePadding = Instance.new("UIPadding")
+    safePadding.Name = "SafeAreaPadding"
+    safePadding.Parent = hudContainer
+    updateSafePadding()
+    initSafeAreaListeners()
 
     createCounters()
     createStatusPanel()
