@@ -1,3 +1,10 @@
+--[=[
+    @module TargetHealthServer
+    Central authority for arena target health, shields, and victory conditions.
+    The server keeps an authoritative copy of lane health that other services
+    consume via HUD snapshots and the GameOver bindable event.
+]=]
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -38,6 +45,13 @@ local arenas = {}
 local gameOverEvent = Instance.new("BindableEvent")
 TargetHealthServer.GameOver = gameOverEvent.Event
 
+--[=[
+    Update the target immunity module if it is available.
+    @param arenaId any -- Arena identifier the shield should affect.
+    @param enabled boolean -- Whether the shield should be active.
+    @param durationSeconds number? -- Optional lifetime of the shield.
+    @param token any? -- Token used by TargetImmunityServer for idempotency.
+]=]
 local function updateTargetImmunity(arenaId, enabled, durationSeconds, token)
     local module = TargetImmunityServer
     if not module then
@@ -212,11 +226,21 @@ local function ensureLane(state, laneId)
     return laneState
 end
 
+--[=[
+    Removes all cached data for an arena and clears any active shield state.
+    @param arenaId any -- Unique arena identifier to reset.
+]=]
 function TargetHealthServer.ClearArena(arenaId)
     updateTargetImmunity(arenaId, false, nil, nil)
     arenas[arenaId] = nil
 end
 
+--[=[
+    Initializes or reconfigures an arena with optional overrides.
+    @param arenaId any -- Unique arena identifier to initialize.
+    @param options table? -- Optional table of overrides such as Level or LaneCount.
+    @return table? -- The mutable arena state table when initialization succeeds.
+]=]
 function TargetHealthServer.InitializeArena(arenaId, options)
     assert(arenaId ~= nil, "arenaId is required")
 
@@ -258,6 +282,11 @@ function TargetHealthServer.InitializeArena(arenaId, options)
     return state
 end
 
+--[=[
+    Sets the number of active lanes tracked for an arena.
+    @param arenaId any -- Unique arena identifier to mutate.
+    @param laneCount number -- Desired lane count; values below zero clamp to zero.
+]=]
 function TargetHealthServer.SetLaneCount(arenaId, laneCount)
     assert(arenaId ~= nil, "arenaId is required")
     assert(laneCount ~= nil, "laneCount is required")
@@ -285,6 +314,13 @@ function TargetHealthServer.SetLaneCount(arenaId, laneCount)
     snapshotState(state)
 end
 
+--[=[
+    Applies damage to a single lane if the arena is running and shields allow it.
+    @param arenaId any -- Arena identifier that owns the lane.
+    @param laneId number -- One-indexed lane identifier receiving damage.
+    @param damage number -- Amount of health to subtract.
+    @return number? -- The resulting lane health or nil if the request was rejected.
+]=]
 function TargetHealthServer.ApplyDamage(arenaId, laneId, damage)
     assert(arenaId ~= nil, "arenaId is required")
     assert(laneId ~= nil, "laneId is required")
@@ -329,6 +365,12 @@ function TargetHealthServer.ApplyDamage(arenaId, laneId, damage)
     return laneState.currentHP
 end
 
+--[=[
+    Toggles the arena-wide shield and optionally schedules an automatic timeout.
+    @param arenaId any -- Arena identifier affected by the shield.
+    @param enabled boolean -- Whether the shield should be enabled.
+    @param durationSeconds number? -- Optional duration before the shield expires.
+]=]
 function TargetHealthServer.SetShield(arenaId, enabled, durationSeconds)
     assert(arenaId ~= nil, "arenaId is required")
 
@@ -384,6 +426,13 @@ function TargetHealthServer.SetShield(arenaId, enabled, durationSeconds)
     snapshotState(state)
 end
 
+--[=[
+    Boosts maximum health and/or heals lanes according to the provided percents.
+    @param arenaId any -- Arena identifier to update.
+    @param bonusPct number? -- Percentage increase applied to max health.
+    @param healPct number? -- Percentage of the new max used to heal current HP.
+    @return boolean -- Whether any change was applied to the arena state.
+]=]
 function TargetHealthServer.ApplyHealthBoost(arenaId, bonusPct, healPct)
     assert(arenaId ~= nil, "arenaId is required")
 
@@ -443,10 +492,20 @@ function TargetHealthServer.ApplyHealthBoost(arenaId, bonusPct, healPct)
     return true
 end
 
+--[=[
+    Returns the mutable arena state tracked for the supplied identifier.
+    @param arenaId any -- Arena identifier to read.
+    @return table? -- Arena state table or nil if the arena was never initialized.
+]=]
 function TargetHealthServer.GetArenaState(arenaId)
     return arenas[arenaId]
 end
 
+--[=[
+    Connects a callback that fires when any lane reaches zero health.
+    @param callback fun(arenaId: any, laneId: number) -- Handler invoked on defeat.
+    @return RBXScriptConnection -- Connection for the provided handler.
+]=]
 function TargetHealthServer.OnGameOver(callback)
     return gameOverEvent.Event:Connect(callback)
 end

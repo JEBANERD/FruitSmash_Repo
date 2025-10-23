@@ -1,3 +1,10 @@
+--[=[
+    @module TurretControllerServer
+    Coordinates automated turret firing patterns by selecting lanes, applying
+    fruit spawn weights, and respecting arena-level multipliers. The module
+    exposes a lightweight API so other services can schedule or tune waves.
+]=]
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -23,6 +30,11 @@ local MAX_RATE_MULTIPLIER = 20
 local arenaStates = {}
 local pendingRateMultipliers = {}
 
+--[=[
+    Normalizes any arena identifier into a stable string key used internally.
+    @param arenaId any -- Identifier supplied by external systems.
+    @return string? -- String representation or nil when arenaId is invalid.
+]=]
 local function resolveArenaKey(arenaId)
     if arenaId == nil then
         return nil
@@ -33,6 +45,11 @@ local function resolveArenaKey(arenaId)
     return tostring(arenaId)
 end
 
+--[=[
+    Computes the turret firing rate for a given level using configuration data.
+    @param level number -- Arena or match level used for scaling.
+    @return number -- Base shots per second prior to multiplier adjustments.
+]=]
 local function computeShotsPerSecond(level)
     local base = TurretSettings.BaseShotsPerSecond or 0
     local pct = TurretSettings.ShotsPerLevelPct or 0
@@ -87,6 +104,11 @@ local function normalizeWeights(weights)
     return normalized
 end
 
+--[=[
+    Builds the fruit roster lookup used by the bag generator.
+    @param rosterOverride table? -- Optional roster definition supplied by callers.
+    @return table -- Table keyed by fruit id with config entries.
+]=]
 local function resolveRoster(rosterOverride)
     if typeof(rosterOverride) ~= "table" then
         local roster = FruitConfig.All and FruitConfig.All() or FruitConfig.Roster
@@ -153,6 +175,13 @@ local function resolveRoster(rosterOverride)
     return fallback
 end
 
+--[=[
+    Produces a generator function that yields fruit identifiers on demand.
+    @param rng Random -- Random number generator dedicated to the arena state.
+    @param rosterOverride table? -- Optional roster configuration.
+    @param weightsOverride table? -- Optional weighting overrides per fruit id.
+    @return () -> any -- Iterator returning the next fruit identifier.
+]=]
 local function buildFruitBag(rng, rosterOverride, weightsOverride)
     local roster = resolveRoster(rosterOverride)
     local weights = normalizeWeights(weightsOverride)
@@ -221,6 +250,11 @@ local function buildFruitBag(rng, rosterOverride, weightsOverride)
     end
 end
 
+--[=[
+    Sanitizes multiplier inputs so callers can safely pass numbers or strings.
+    @param value any -- Proposed multiplier value.
+    @return number -- Clamped multiplier between MIN_RATE_MULTIPLIER and MAX_RATE_MULTIPLIER.
+]=]
 local function normalizeMultiplier(value)
     local numeric = tonumber(value)
     if not numeric then
@@ -253,6 +287,11 @@ local function getRateMultiplier(state)
     return multiplier
 end
 
+--[=[
+    Applies context hints from callers to influence the active arena state.
+    @param state table -- Arena state table being mutated.
+    @param context any -- Context object (number or table) describing overrides.
+]=]
 local function applyContext(state, context)
     if context == nil then
         return
@@ -575,6 +614,12 @@ local function runArena(state)
     end
 end
 
+--[=[
+    Ensures an arena loop is running and applies any provided context.
+    @param arenaId any -- Identifier of the arena to start or refresh.
+    @param context any -- Optional context passed through scheduling helpers.
+    @return boolean -- True if the arena loop is active after the call.
+]=]
 local function startArena(arenaId, context)
     assert(arenaId ~= nil, "arenaId is required")
     local arenaKey = resolveArenaKey(arenaId)
@@ -654,6 +699,12 @@ local function startArena(arenaId, context)
     return true
 end
 
+--[=[
+    Internal helper that records per-arena firing multipliers, even before start.
+    @param arenaId any -- Target arena identifier.
+    @param multiplier any -- Value to normalize and store.
+    @return boolean, number? -- Success flag and resulting multiplier.
+]=]
 local function setRateMultiplierInternal(arenaId, multiplier)
     local key = resolveArenaKey(arenaId)
     if not key then
@@ -669,6 +720,11 @@ local function setRateMultiplierInternal(arenaId, multiplier)
     return true, numeric
 end
 
+--[=[
+    Reads the currently effective multiplier for an arena.
+    @param arenaId any -- Target arena identifier.
+    @return number -- Active multiplier or the default when unset.
+]=]
 local function getRateMultiplierForArena(arenaId)
     local key = resolveArenaKey(arenaId)
     if not key then
@@ -703,14 +759,29 @@ end
 TurretControllerServer.Start = startArena
 TurretControllerServer.Stop = stopArena
 
+--[=[
+    Starts or refreshes the turret loop for an arena using method-call syntax.
+    @param arenaId any -- Arena identifier to run.
+    @param context any -- Optional context forwarded to the scheduler.
+    @return boolean -- True if scheduling is active after the call.
+]=]
 function TurretControllerServer:Start(arenaId, context)
     return startArena(arenaId, context)
 end
 
+--[=[
+    Stops the scheduled turret loop for the supplied arena.
+    @param arenaId any -- Arena identifier to shut down.
+]=]
 function TurretControllerServer:Stop(arenaId)
     return stopArena(arenaId)
 end
 
+--[=[
+    Convenience entry point for legacy APIs that only provide a level hint.
+    @param arenaId any -- Arena identifier to schedule.
+    @param level any -- Level context forwarded to `startArena`.
+]=]
 function TurretControllerServer.SchedulePattern(arenaId, level)
     return startArena(arenaId, level)
 end
@@ -719,6 +790,12 @@ function TurretControllerServer:SchedulePattern(arenaId, level)
     return startArena(arenaId, level)
 end
 
+--[=[
+    Schedules arenas using richer context data, typically lane counts or weights.
+    @param _ any -- Legacy first argument ignored in old call sites.
+    @param arenaId any -- Arena identifier to schedule.
+    @param context any -- Context forwarded to `startArena`.
+]=]
 function TurretControllerServer.SchedulePatterns(_, arenaId, context)
     return startArena(arenaId, context)
 end
@@ -727,6 +804,13 @@ function TurretControllerServer:SchedulePatterns(arenaId, context)
     return startArena(arenaId, context)
 end
 
+--[=[
+    Public wrapper for setting arena fire-rate multipliers regardless of call style.
+    @param arenaIdOrSelf any -- Arena identifier or self reference when called with ':' syntax.
+    @param multiplierOrArenaId any -- Either the multiplier or arena id depending on invocation style.
+    @param maybeMultiplier any -- Optional multiplier when called with ':' syntax.
+    @return boolean, number? -- Success flag and resulting multiplier.
+]=]
 function TurretControllerServer:SetRateMultiplier(arenaIdOrSelf, multiplierOrArenaId, maybeMultiplier)
     local arenaId
     local multiplier
@@ -740,6 +824,12 @@ function TurretControllerServer:SetRateMultiplier(arenaIdOrSelf, multiplierOrAre
     return setRateMultiplierInternal(arenaId, multiplier)
 end
 
+--[=[
+    Retrieves the active multiplier for an arena.
+    @param arenaIdOrSelf any -- Arena identifier or self reference.
+    @param maybeArenaId any -- Optional arena id when using ':' syntax.
+    @return number -- Effective multiplier currently applied.
+]=]
 function TurretControllerServer:GetRateMultiplier(arenaIdOrSelf, maybeArenaId)
     local arenaId
     if maybeArenaId ~= nil then
