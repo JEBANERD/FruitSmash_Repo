@@ -1,0 +1,22 @@
+{
+  "repo_name": "FruitSmash_Repo",
+  "generated_at": "2025-10-23T00:19:03.967297Z",
+  "total_files": 101,
+  "source_manifest": "repo_manifest.json",
+  "page_count": 1,
+  "thresholds": {
+    "max_lines": 5000,
+    "max_bytes": 2621440
+  },
+  "pages": [
+    {
+      "page": 1,
+      "path": "repo_manifest_pages/repo_manifest_page_1.json",
+      "entries": 101,
+      "entry_start_index": 1,
+      "entry_end_index": 101,
+      "lines": 1026,
+      "bytes": 29800
+    }
+  ]
+}
