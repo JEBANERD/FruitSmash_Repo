@@ -1,3 +1,6 @@
+# Architecture
+
+_Content to be migrated._
 # Fruit Smash Architecture Overview
 
 This document pairs the module dependency graph from Task 11 with a code-level review of the Roblox experience to explain how the pieces operate together. It highlights the responsibilities of each layer, how data flows from startup through shutdown, and how remotes carry state between server and client.

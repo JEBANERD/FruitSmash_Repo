@@ -1,3 +1,9 @@
+# Documentation Orientation
+
+Follow this trail: [SUMMARY](./SUMMARY.md) → [ARCHITECTURE](./ARCHITECTURE.md) → [API](./API.md).
+- SUMMARY gives a top-level feature map and vocabulary.
+- ARCHITECTURE maps systems, services, and data flows.
+- API documents endpoints, payloads, and integration patterns.
 # FruitSmash Documentation Hub
 
 FruitSmash ships with a distributed Luau codebase that mirrors the live Roblox experience. These docs gather the core references we use while developing and operating the experience.
