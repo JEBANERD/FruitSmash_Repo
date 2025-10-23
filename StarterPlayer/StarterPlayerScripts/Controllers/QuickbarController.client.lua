@@ -27,8 +27,10 @@ local meleeSlotCount = math.clamp(quickbarConfig.MeleeSlots or 2, 0, 2)
 local tokenSlotCount = math.clamp(quickbarConfig.TokenSlots or 3, 0, 3)
 
 if meleeSlotCount + tokenSlotCount <= 0 then
-	return
+        return
 end
+
+local CameraFeelBus = require(script.Parent:WaitForChild("CameraFeelBus"))
 
 type SlotKind = "melee" | "token"
 
@@ -232,17 +234,19 @@ local missingTokenRemoteWarned = false
 
 local function requestUseToken(slotIndex: number)
 	local remote = useTokenRemote
-	if not remote then
-		if not missingTokenRemoteWarned then
-			missingTokenRemoteWarned = true
-			warn("[QuickbarController] RF_UseToken remote is unavailable; cannot use tokens.")
-		end
-		return
-	end
+        if not remote then
+                if not missingTokenRemoteWarned then
+                        missingTokenRemoteWarned = true
+                        warn("[QuickbarController] RF_UseToken remote is unavailable; cannot use tokens.")
+                end
+                return
+        end
 
-	local success, err = pcall(function()
-		remote:InvokeServer(slotIndex)
-	end)
+        CameraFeelBus.TokenBump()
+
+        local success, err = pcall(function()
+                remote:InvokeServer(slotIndex)
+        end)
 
 	if not success then
 		warn(string.format("[QuickbarController] Failed to invoke RF_UseToken for slot %d: %s", slotIndex, tostring(err)))

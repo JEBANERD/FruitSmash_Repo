@@ -4,7 +4,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 
 local localPlayer: Player = Players.LocalPlayer
 
@@ -14,12 +13,14 @@ local meleeRemote: RemoteEvent? = RemotesModule and RemotesModule.RE_MeleeHitAtt
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local systemsFolder = sharedFolder:WaitForChild("Systems")
 local okAudioBus, AudioBusModule = pcall(function()
-	return require(systemsFolder:WaitForChild("AudioBus"))
+        return require(systemsFolder:WaitForChild("AudioBus"))
 end)
 if not okAudioBus then
-	warn(string.format("[MeleeController] Failed to load AudioBus: %s", tostring(AudioBusModule)))
+        warn(string.format("[MeleeController] Failed to load AudioBus: %s", tostring(AudioBusModule)))
 end
 local AudioBus = if okAudioBus then AudioBusModule else nil
+
+local CameraFeelBus = require(script.Parent:WaitForChild("CameraFeelBus"))
 
 local ACTION_NAME = "FruitSmashMeleeSwing"
 local SWING_COOLDOWN_SECONDS = 0.35
@@ -30,8 +31,6 @@ local SWING_ANIMATION_ID = "rbxassetid://507771019" -- Sword slash placeholder
 local HIT_POSITION_TOLERANCE = 6
 
 local aimAssistStrength: number = 0.75
-local cameraShakeStrength: number = 0.7
-local currentShakeConnection: RBXScriptConnection? = nil
 
 local function getClientMaxTargetDistance(): number
         local clamped = math.clamp(aimAssistStrength, 0, 1)
@@ -47,61 +46,6 @@ local function updateAimAssistFromAttribute(): ()
         end
 end
 
-local function updateCameraShakeStrength(): ()
-        local attr = localPlayer:GetAttribute("CameraShakeStrength")
-        if typeof(attr) == "number" then
-                cameraShakeStrength = math.clamp(attr, 0, 3)
-        else
-                cameraShakeStrength = 0.7
-        end
-end
-
-local function playCameraShake(): ()
-        if cameraShakeStrength <= 0 then
-                return
-        end
-
-        local camera = Workspace.CurrentCamera
-        if not camera then
-                return
-        end
-
-        local duration = 0.2
-        local amplitude = 0.4 * cameraShakeStrength
-        local startTime = os.clock()
-        local previousOffset = Vector3.zero
-
-        if currentShakeConnection then
-                currentShakeConnection:Disconnect()
-                currentShakeConnection = nil
-        end
-
-        currentShakeConnection = RunService.RenderStepped:Connect(function()
-                local now = os.clock()
-                local progress = (now - startTime) / duration
-                if progress >= 1 then
-                        if previousOffset.Magnitude > 0 then
-                                camera.CFrame = camera.CFrame * CFrame.new(-previousOffset)
-                        end
-                        if currentShakeConnection then
-                                currentShakeConnection:Disconnect()
-                                currentShakeConnection = nil
-                        end
-                        previousOffset = Vector3.zero
-                        return
-                end
-
-                local decay = 1 - progress
-                local offset = Vector3.new(
-                        math.noise(now * 12, 0, 0),
-                        math.noise(0, now * 14, 0),
-                        0
-                ) * amplitude * decay
-
-                camera.CFrame = camera.CFrame * CFrame.new(offset - previousOffset)
-                previousOffset = offset
-        end)
-end
 
 local pointerLocation: Vector2? = nil
 local lastSwingTime = -math.huge
@@ -419,7 +363,7 @@ local function fireSwing(inputObject: InputObject?)
         local fruitId = if typeof(fruitIdValue) == "string" and fruitIdValue ~= "" then fruitIdValue else fruitPart.Name
         local attackPosition = hitPosition or fruitPart.Position
 
-        playCameraShake()
+        CameraFeelBus.HitShake()
 
 	if AudioBus and typeof(AudioBus.Play) == "function" then
 		AudioBus.Play("swing", attackPosition)
@@ -475,9 +419,6 @@ end
 
 updateAimAssistFromAttribute()
 localPlayer:GetAttributeChangedSignal("AimAssistWindow"):Connect(updateAimAssistFromAttribute)
-
-updateCameraShakeStrength()
-localPlayer:GetAttributeChangedSignal("CameraShakeStrength"):Connect(updateCameraShakeStrength)
 
 if localPlayer.Character then
         setCharacter(localPlayer.Character)
