@@ -3,6 +3,8 @@ local RS = game:GetService("ReplicatedStorage")
 local SS = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
 
+local PlayModeUtils = require(script.Parent:WaitForChild("Utilities"):WaitForChild("PlayModeUtils"))
+
 -- Require remotes table
 local Remotes
 local ok, err = pcall(function()
@@ -95,10 +97,10 @@ local arenas = workspace:FindFirstChild("Arenas") or Instance.new("Folder", work
 arenas.Name = "Arenas"
 
 local function spawnArena()
-	local baseFolder = SS:FindFirstChild("ArenaTemplates")
-	local base = baseFolder and baseFolder:FindFirstChild("BaseArena")
-	if not base then
-		warn("[Init] Missing ServerStorage/ArenaTemplates/BaseArena")
+        local baseFolder = SS:FindFirstChild("ArenaTemplates")
+        local base = baseFolder and baseFolder:FindFirstChild("BaseArena")
+        if not base then
+                warn("[Init] Missing ServerStorage/ArenaTemplates/BaseArena")
 		return
 	end
 	-- Clear previous
@@ -108,6 +110,12 @@ local function spawnArena()
 	inst.Name = "Arena_1"
 	inst.Parent = arenas
 	print("[Init] Spawned Arena_1")
+end
+
+if PlayModeUtils.IsDirectStudioTest() then
+        print("[Init] Studio solo test detected — spawning dev test arena")
+        local arenaId = require(script.Parent:WaitForChild("ArenaServer")).SpawnArena("DevTest")
+        require(script.Parent:WaitForChild("FruitSpawnerServer")).Start(arenaId)
 end
 
 -- Start on GameStart remote (e.g., from your G key or floor button)
