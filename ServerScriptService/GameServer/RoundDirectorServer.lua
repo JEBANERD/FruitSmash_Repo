@@ -1,3 +1,4 @@
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local HUDServer = require(script.Parent:WaitForChild("HUDServer"))

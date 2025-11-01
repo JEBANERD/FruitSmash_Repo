@@ -1,3 +1,4 @@
+--!strict
 local VFXBus = {}
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

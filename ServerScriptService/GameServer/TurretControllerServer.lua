@@ -1,3 +1,4 @@
+--!strict
 --[=[
     @module TurretControllerServer
     Coordinates automated turret firing patterns by selecting lanes, applying

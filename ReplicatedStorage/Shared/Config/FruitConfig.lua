@@ -1,7 +1,30 @@
+--!strict
+
 -- FruitConfig.lua
 -- Defines fruit roster: size, speed, damage to targets, durability wear, coins/points, pathing.
 
-local Fruit = {}
+type FruitEntry = {
+    Id: string,
+    Size: string,
+    Speed: number,
+    Damage: number,
+    Wear: number,
+    Coins: number,
+    Points: number,
+    Path: string,
+    HPClass: string?,
+    BundleCount: number?,
+    BundleCountMax: number?,
+}
+
+type FruitModule = {
+    Roster: { [string]: FruitEntry },
+    HPByClass: { [string]: number },
+    All: () -> { [string]: FruitEntry },
+    Get: (id: string) -> FruitEntry?,
+}
+
+local Fruit = {} :: FruitModule
 
 -- Path tags: "straight", "zig", "arc", "wobble", "bundle"
 -- Size tags: "XS","S","M","L","XL"
@@ -12,10 +35,10 @@ Fruit.Roster = {
         Size = "S",
         Speed = 14,        -- studs/s
         Damage = 8,        -- to lane target on hit
-        Wear   = 1,        -- melee durability wear on hit
-        Coins  = 2,
+        Wear = 1,          -- melee durability wear on hit
+        Coins = 2,
         Points = 1,
-        Path   = "straight",
+        Path = "straight",
         HPClass = "Light", -- for melee breakpoints if needed
     },
     Banana = {
@@ -23,10 +46,10 @@ Fruit.Roster = {
         Size = "M",
         Speed = 12,
         Damage = 10,
-        Wear   = 1,
-        Coins  = 2,
+        Wear = 1,
+        Coins = 2,
         Points = 1,
-        Path   = "arc",
+        Path = "arc",
         HPClass = "Medium",
     },
     Orange = {
@@ -34,10 +57,10 @@ Fruit.Roster = {
         Size = "S",
         Speed = 13,
         Damage = 9,
-        Wear   = 1,
-        Coins  = 2,
+        Wear = 1,
+        Coins = 2,
         Points = 1,
-        Path   = "wobble",
+        Path = "wobble",
         HPClass = "Light",
     },
     GrapeBundle = {
@@ -45,10 +68,10 @@ Fruit.Roster = {
         Size = "XS",
         Speed = 16,
         Damage = 3,   -- per grape
-        Wear   = 1,   -- per grape
-        Coins  = 3,   -- total across bundle (distribute as needed)
+        Wear = 1,     -- per grape
+        Coins = 3,    -- total across bundle (distribute as needed)
         Points = 1,
-        Path   = "zig",
+        Path = "zig",
         HPClass = "Light",
         BundleCount = 3, -- 3–4 possible
         BundleCountMax = 4,
@@ -58,10 +81,10 @@ Fruit.Roster = {
         Size = "L",
         Speed = 10,
         Damage = 15,
-        Wear   = 2,
-        Coins  = 4,
+        Wear = 2,
+        Coins = 4,
         Points = 2,
-        Path   = "arc",
+        Path = "arc",
         HPClass = "Heavy",
     },
     Coconut = {
@@ -69,10 +92,10 @@ Fruit.Roster = {
         Size = "L",
         Speed = 11,
         Damage = 18,
-        Wear   = 3,
-        Coins  = 5,
+        Wear = 3,
+        Coins = 5,
         Points = 3,
-        Path   = "straight",
+        Path = "straight",
         HPClass = "Heavy",
     },
     Watermelon = {
@@ -80,32 +103,28 @@ Fruit.Roster = {
         Size = "XL",
         Speed = 9,
         Damage = 22,
-        Wear   = 4,
-        Coins  = 6,
+        Wear = 4,
+        Coins = 6,
         Points = 4,
-        Path   = "wobble",
+        Path = "wobble",
         HPClass = "XL",
     },
 }
 
 -- Optional melee HP buckets (for balancing breakpoints)
 Fruit.HPByClass = {
-    Light  = 15,
+    Light = 15,
     Medium = 30,
-    Heavy  = 50,
-    XL     = 70,
+    Heavy = 50,
+    XL = 70,
 }
 
-function Fruit.All()
+function Fruit.All(): { [string]: FruitEntry }
     return Fruit.Roster
 end
 
-function Fruit.Get(id)
+function Fruit.Get(id: string): FruitEntry?
     return Fruit.Roster[id]
 end
 
 return Fruit
-
-
-
-

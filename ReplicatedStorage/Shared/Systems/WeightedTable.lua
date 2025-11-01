@@ -1,14 +1,25 @@
-local WeightedTable = {}
+--!strict
 
-local function resolveNextNumber(rng, minimum, maximum)
+type WeightedEntry = {
+    Weight: number?,
+    [string]: any,
+}
+
+type WeightedTableModule = {
+    Pick: (entries: { WeightedEntry }, rng: Random?) -> WeightedEntry?,
+}
+
+local WeightedTable = {} :: WeightedTableModule
+
+local function resolveNextNumber(rng: Random?, minimum: number, maximum: number): number
     if rng then
-        local rngType = typeof and typeof(rng) or type(rng)
+        local rngType = typeof(rng)
 
         if rngType == "Random" then
             return rng:NextNumber(minimum, maximum)
         end
 
-        local nextNumber = rng.NextNumber
+        local nextNumber = (rng :: any).NextNumber
         if type(nextNumber) == "function" then
             local success, value = pcall(nextNumber, minimum, maximum)
             if success then
@@ -28,7 +39,7 @@ local function resolveNextNumber(rng, minimum, maximum)
     return Random.new():NextNumber(minimum, maximum)
 end
 
-function WeightedTable.Pick(entries, rng)
+function WeightedTable.Pick(entries: { WeightedEntry }, rng: Random?): WeightedEntry?
     if type(entries) ~= "table" or #entries == 0 then
         return nil
     end
@@ -60,26 +71,5 @@ function WeightedTable.Pick(entries, rng)
 
     return nil
 end
-
---[=[
-    Unit Test Stub:
-    describe("WeightedTable", function()
-        it("returns nil when weights sum to zero", function()
-            -- local result = WeightedTable.Pick({ { ItemId = 1, Weight = 0 } })
-            -- expect(result).to.equal(nil)
-        end)
-
-        it("selects entries proportionally", function()
-            -- local mockRng = { NextNumber = function(_, minimum, maximum)
-            --     return minimum + (maximum - minimum) * 0.6
-            -- end }
-            -- local result = WeightedTable.Pick({
-            --     { ItemId = "A", Weight = 4 },
-            --     { ItemId = "B", Weight = 6 },
-            -- }, mockRng)
-            -- expect(result.ItemId).to.equal("B")
-        end)
-    end)
-]=]
 
 return WeightedTable

@@ -1,16 +1,33 @@
-local Analytics = {}
+--!strict
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local SUMMARY_INTERVAL_SECONDS = 120
 
 local GameConfigModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig"))
-local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
+local GameConfig = if typeof(GameConfigModule.Get) == "function" then GameConfigModule.Get() else GameConfigModule
 
-local analyticsData = {}
-local debugEnabled = GameConfig.Debug and GameConfig.Debug.Enabled
+type AnalyticsEntry = {
+    Fruit: number,
+    Waves: number,
+    Levels: number,
+    Continues: number,
+    StartTime: number?,
+    [string]: number?,
+}
 
-local function createEntry()
+type AnalyticsModule = { [string]: AnalyticsEntry } & {
+    InitArena: (arenaId: string) -> AnalyticsEntry?,
+    Log: (arenaId: string?, key: string?, amount: number?) -> (),
+    Get: (arenaId: string?) -> AnalyticsEntry?,
+}
+
+local Analytics = {} :: AnalyticsModule
+
+local analyticsData: { [string]: AnalyticsEntry } = {}
+local debugEnabled = (GameConfig :: any).Debug and (GameConfig :: any).Debug.Enabled
+
+local function createEntry(): AnalyticsEntry
     return {
         Fruit = 0,
         Waves = 0,
@@ -20,7 +37,7 @@ local function createEntry()
     }
 end
 
-local function ensureArena(arenaId)
+local function ensureArena(arenaId: string?): AnalyticsEntry?
     if not arenaId then
         return nil
     end
@@ -42,8 +59,9 @@ local function printSummary()
         hasData = true
 
         local elapsed = 0
-        if entry.StartTime then
-            elapsed = os.clock() - entry.StartTime
+        local startTime = entry.StartTime
+        if startTime then
+            elapsed = os.clock() - startTime
         end
 
         print(string.format(
@@ -62,11 +80,11 @@ local function printSummary()
     end
 end
 
-function Analytics.InitArena(arenaId)
+function Analytics.InitArena(arenaId: string): AnalyticsEntry?
     return ensureArena(arenaId)
 end
 
-function Analytics.Log(arenaId, key, amount)
+function Analytics.Log(arenaId: string?, key: string?, amount: number?)
     if not arenaId or not key then
         return
     end
@@ -76,14 +94,16 @@ function Analytics.Log(arenaId, key, amount)
         return
     end
 
-    local delta = amount
-    if delta == nil then
+    local delta: number
+    if amount == nil then
         delta = 1
-    elseif typeof(delta) ~= "number" then
-        delta = tonumber(delta) or 0
+    elseif typeof(amount) == "number" then
+        delta = amount
+    else
+        delta = tonumber(amount) or 0
     end
 
-    local currentValue = entry[key]
+    local currentValue: any = entry[key]
     if typeof(currentValue) == "number" then
         entry[key] = currentValue + delta
     elseif currentValue == nil then
@@ -93,7 +113,7 @@ function Analytics.Log(arenaId, key, amount)
     end
 end
 
-function Analytics.Get(arenaId)
+function Analytics.Get(arenaId: string?): AnalyticsEntry?
     if not arenaId then
         return nil
     end

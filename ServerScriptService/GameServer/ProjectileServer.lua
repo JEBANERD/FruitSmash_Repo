@@ -1,3 +1,4 @@
+--!strict
 local ProjectileServer = {}
 
 local projectileModule = script.Parent:FindFirstChild("ProjectileMotionServer")

@@ -1,6 +1,22 @@
-local VFXAssets = {}
+--!strict
 
-local function createBasePart(name)
+type VFXEmitterDefinition = {
+    Name: string,
+    Count: any,
+}
+
+type VFXDefinition = {
+    Type: string,
+    Lifetime: number,
+    Emitters: { [number]: VFXEmitterDefinition }?,
+    Factory: () -> Instance,
+}
+
+type VFXAssetModule = { [string]: VFXDefinition }
+
+local VFXAssets: VFXAssetModule = {}
+
+local function createBasePart(name: string): BasePart
 	local part = Instance.new("Part")
 	part.Name = name .. "Root"
 	part.Anchored = true

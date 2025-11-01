@@ -1,3 +1,4 @@
+--!strict
 local ArenaAdapter = {}
 
 local function safeRequire(instance)

@@ -1,4 +1,9 @@
-local ContentRegistry = {}
+--!strict
+
+local ContentRegistry = {} :: {
+    GetAsset: (id: string) -> any,
+    Preload: (ids: { any } | { [any]: any } | string | nil) -> (),
+}
 
 local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6,18 +11,32 @@ local RunService = game:GetService("RunService")
 
 local isServer = RunService:IsServer()
 
-local ServerStorage do
+local ServerStorage: ServerStorage?
+do
     local ok, service = pcall(game.GetService, game, "ServerStorage")
     if ok then
         ServerStorage = service
     end
 end
 
-local assetResolvers = {}
-local assetCache = {}
-local warningCache = {}
+type ResolverTable = {
+    Instance: Instance?,
+    Factory: (() -> any)?,
+    Resolve: (() -> any)?,
+    Builder: (() -> any)?,
+    Create: (() -> any)?,
+    Value: any?,
+    ServerOnly: boolean?,
+    Optional: boolean?,
+}
 
-local function warnOnce(key, message)
+type AssetResolver = Instance | (() -> any) | ResolverTable
+
+local assetResolvers: { [string]: AssetResolver } = {}
+local assetCache: { [string]: Instance | false | any } = {}
+local warningCache: { [string]: boolean } = {}
+
+local function warnOnce(key: string, message: string)
     if warningCache[key] then
         return
     end
@@ -26,7 +45,7 @@ local function warnOnce(key, message)
     warn(message)
 end
 
-local function describeInstance(instance)
+local function describeInstance(instance: Instance?): string
     if not instance then
         return "<nil>"
     end
@@ -36,14 +55,15 @@ local function describeInstance(instance)
         return fullName
     end
 
-    if instance.Name then
-        return instance.Name
+    local name = instance.Name
+    if name then
+        return name
     end
 
     return tostring(instance)
 end
 
-local function safeRequire(moduleScript, warnKey, contextName)
+local function safeRequire(moduleScript: Instance?, warnKey: string, contextName: string): any
     if not moduleScript or not moduleScript:IsA("ModuleScript") then
         return nil
     end
@@ -61,11 +81,11 @@ local function safeRequire(moduleScript, warnKey, contextName)
     return result
 end
 
-local function resolveInstanceDefinition(entry)
+local function resolveInstanceDefinition(entry: any): (AssetResolver?, string?)
     local entryType = typeof(entry)
 
     if entryType == "Instance" or entryType == "function" then
-        return entry, entryType
+        return entry :: AssetResolver, entryType
     end
 
     if entryType ~= "table" then
@@ -85,7 +105,7 @@ local function resolveInstanceDefinition(entry)
     end
 
     if typeof(entry.Factory) == "function" or typeof(entry.Resolve) == "function" then
-        return entry, "table"
+        return entry :: AssetResolver, "table"
     end
 
     if typeof(entry.Builder) == "function" then
@@ -122,7 +142,7 @@ local function resolveInstanceDefinition(entry)
     return nil, entryType
 end
 
-local function normalizeIds(ids)
+local function normalizeIds(ids: { any } | { [any]: any } | string | nil): { any }
     if ids == nil then
         return {}
     end
@@ -131,9 +151,9 @@ local function normalizeIds(ids)
         return { ids }
     end
 
-    local ordered = {}
+    local ordered: { any } = {}
 
-    for index, value in ipairs(ids) do
+    for _, value in ipairs(ids) do
         ordered[#ordered + 1] = value
     end
 
@@ -148,45 +168,43 @@ local function normalizeIds(ids)
     return ordered
 end
 
-local function evaluateResolver(resolver)
+local function evaluateResolver(resolver: AssetResolver): (any, string?)
     if typeof(resolver) == "function" then
-        return resolver()
+        return resolver(), nil
     end
 
     if typeof(resolver) == "Instance" then
-        return resolver
+        return resolver, nil
     end
 
-    if typeof(resolver) == "table" then
-        if resolver.ServerOnly and not isServer then
-            return nil, "unavailable"
-        end
+    local resolverTable = resolver :: ResolverTable
 
-        if typeof(resolver.Instance) == "Instance" then
-            return resolver.Instance
-        end
-
-        if typeof(resolver.Resolve) == "function" then
-            return resolver.Resolve()
-        end
-
-        if typeof(resolver.Factory) == "function" then
-            return resolver.Factory()
-        end
-
-        if resolver.Value ~= nil then
-            return resolver.Value
-        end
-
-        return resolver
+    if resolverTable.ServerOnly and not isServer then
+        return nil, "unavailable"
     end
 
-    return resolver
+    if typeof(resolverTable.Instance) == "Instance" then
+        return resolverTable.Instance, nil
+    end
+
+    if typeof(resolverTable.Resolve) == "function" then
+        return resolverTable.Resolve(), nil
+    end
+
+    if typeof(resolverTable.Factory) == "function" then
+        return resolverTable.Factory(), nil
+    end
+
+    if resolverTable.Value ~= nil then
+        return resolverTable.Value, nil
+    end
+
+    return resolverTable, nil
 end
 
-local function resolveAsset(id)
-    if assetCache[id] ~= nil then
-        local cached = assetCache[id]
+local function resolveAsset(id: string): (any, string?)
+    local cached = assetCache[id]
+    if cached ~= nil then
         if cached == false then
             return nil, "missing"
         end
@@ -201,7 +219,7 @@ local function resolveAsset(id)
         return nil, "missing"
     end
 
-    local options = typeof(resolver) == "table" and resolver or nil
+    local options = typeof(resolver) == "table" and (resolver :: ResolverTable) or nil
 
     if options and options.ServerOnly and not isServer then
         return nil, "unavailable"
@@ -233,7 +251,7 @@ local function resolveAsset(id)
     return resolved, nil
 end
 
-function ContentRegistry.GetAsset(id)
+function ContentRegistry.GetAsset(id: string): any
     assert(typeof(id) == "string", "Asset id must be a string")
 
     local asset = resolveAsset(id)
@@ -242,7 +260,7 @@ function ContentRegistry.GetAsset(id)
     end
 
     if typeof(asset) == "Instance" then
-        local ok, cloneOrError = pcall(asset.Clone, asset)
+        local ok, cloneOrError = pcall((asset :: Instance).Clone, asset)
         if not ok then
             warnOnce("clone-failed:" .. id, string.format("[ContentRegistry] Failed to clone asset '%s': %s", id, tostring(cloneOrError)))
             return nil
@@ -254,13 +272,13 @@ function ContentRegistry.GetAsset(id)
     return asset
 end
 
-function ContentRegistry.Preload(ids)
+function ContentRegistry.Preload(ids: { any } | { [any]: any } | string | nil)
     local ordered = normalizeIds(ids)
     if #ordered == 0 then
         return
     end
 
-    local preloadTargets = {}
+    local preloadTargets: { Instance } = {}
 
     for _, id in ipairs(ordered) do
         local asset = resolveAsset(id)
@@ -279,12 +297,12 @@ function ContentRegistry.Preload(ids)
     end
 end
 
-local function registerAsset(id, resolver)
+local function registerAsset(id: string, resolver: AssetResolver)
     assetResolvers[id] = resolver
     assetCache[id] = nil
 end
 
-local function applyPhysicsDefaults(part)
+local function applyPhysicsDefaults(part: BasePart)
     part.Anchored = false
     part.CanCollide = false
     part.CanTouch = false
@@ -293,7 +311,7 @@ local function applyPhysicsDefaults(part)
     part.CastShadow = false
 end
 
-local function createFruitPrototype(name, color, shape)
+local function createFruitPrototype(name: string, color: Color3, shape: Enum.PartType?): BasePart
     local part = Instance.new("Part")
     part.Name = string.format("%sPrototype", name)
     part.Material = Enum.Material.SmoothPlastic
@@ -368,7 +386,7 @@ local function registerFruitAssets()
     end
 end
 
-local function resolveArenaTemplate(name)
+local function resolveArenaTemplate(name: string): (Instance?, string?)
     if not isServer or not ServerStorage then
         return nil, "unavailable"
     end
@@ -447,7 +465,11 @@ local function registerArenaAssets()
     registerAsset("Arena.BaseArena", {
         ServerOnly = true,
         Resolve = function()
-            return resolveArenaTemplate("BaseArena")
+            local instance = resolveArenaTemplate("BaseArena")
+            if instance then
+                return instance
+            end
+            return nil
         end,
     })
 end
