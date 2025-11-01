@@ -21,7 +21,7 @@ local function waitForChildOfClass(parent: Instance, childName: string, classNam
         if child and className and not child:IsA(className) then
                 return nil
         end
-        return child
+        return 
 end
 
 local remotesFolder = waitForChildOfClass(ReplicatedStorage, "Remotes", "Folder", 5)
@@ -124,7 +124,7 @@ local function createLabel(text: string, textSize: number?, bold: boolean?): Tex
         label.BackgroundTransparency = 1
         label.Size = UDim2.new(1, 0, 0, 0)
         label.AutomaticSize = Enum.AutomaticSize.Y
-        label.Font = if bold then Enum.Font.GothamSemibold else Enum.Font.Gotham
+        label.Font = if bold then Enum.Font.GothamBold else Enum.Font.Gotham
         label.TextColor3 = Color3.fromRGB(235, 240, 255)
         label.TextSize = textSize or 16
         label.TextWrapped = true
@@ -170,7 +170,7 @@ local function createTextButton(parent: Instance, text: string): TextButton
         button.BackgroundColor3 = Color3.fromRGB(52, 62, 92)
         button.Size = UDim2.new(0, 0, 0, 32)
         button.AutomaticSize = Enum.AutomaticSize.XY
-        button.Font = Enum.Font.GothamSemibold
+        button.Font = Enum.Font.GothamBold
         button.TextSize = 15
         button.TextColor3 = Color3.fromRGB(240, 244, 255)
         button.Text = text

@@ -18,7 +18,7 @@ end
 
 local textLabel = surfaceGui:FindFirstChildWhichIsA("TextLabel", true)
 if not textLabel then
-        return
+	return
 end
 
 local function getRemotesFolder(): Folder?
@@ -67,33 +67,22 @@ end
 
 script.Destroying:Connect(cleanup)
 
-local localPlayer = Players.LocalPlayer
-if localPlayer then
-        local ancestryConnection = localPlayer.AncestryChanged:Connect(function(_, parent)
-                if parent == nil then
-                        cleanup()
-                end
-        end)
-        table.insert(connections, ancestryConnection)
 
-        local localeConnection = localPlayer:GetAttributeChangedSignal("Locale"):Connect(function()
-                refreshLocale()
-        end)
-        table.insert(connections, localeConnection)
-end
+
+
 
 local function setStatusText(key: string)
-        lastEntries = nil
-        lastStatusKey = key
-        lastCustomMessage = nil
-        textLabel.Text = Localizer.t(key, nil, currentLocale)
+	lastEntries = nil
+	lastStatusKey = key
+	lastCustomMessage = nil
+	textLabel.Text = Localizer.t(key, nil, currentLocale)
 end
 
 local function findLeaderboardRemote(): RemoteFunction?
-        local remote = remotesFolder:FindFirstChild("RF_GetGlobalLeaderboard")
-        if remote and remote:IsA("RemoteFunction") then
-                return remote
-        end
+	local remote = remotesFolder:FindFirstChild("RF_GetGlobalLeaderboard")
+	if remote and remote:IsA("RemoteFunction") then
+		return remote
+	end
 	return nil
 end
 
@@ -142,111 +131,110 @@ local function gatherEntries(rawData: any): { any }
 end
 
 local function formatEntry(rank: number, entry: any): string
-        local nameValue
-        local scoreValue
+	local nameValue
+	local scoreValue
 
-        if typeof(entry) == "table" then
-                nameValue = entry.name or entry.username or entry.displayName or entry.player or entry.user or entry[1]
-                scoreValue = entry.score or entry.points or entry.value or entry.total or entry[2]
-        else
-                nameValue = entry
-        end
+	if typeof(entry) == "table" then
+		nameValue = entry.name or entry.username or entry.displayName or entry.player or entry.user or entry[1]
+		scoreValue = entry.score or entry.points or entry.value or entry.total or entry[2]
+	else
+		nameValue = entry
+	end
 
-        local nameText = if nameValue ~= nil then tostring(nameValue) else nil
-        if not nameText or nameText == "" then
-                nameText = Localizer.t("ui.leaderboard.anonymous", nil, currentLocale)
-        end
+	local nameText = if nameValue ~= nil then tostring(nameValue) else nil
+	if not nameText or nameText == "" then
+		nameText = Localizer.t("ui.leaderboard.anonymous", nil, currentLocale)
+	end
 
-        local scoreText = nil
-        if scoreValue ~= nil then
-                scoreText = tostring(scoreValue)
-        end
+	local scoreText = nil
+	if scoreValue ~= nil then
+		scoreText = tostring(scoreValue)
+	end
 
-        if scoreText and scoreText ~= "" and scoreText ~= "-" then
-                return Localizer.t("ui.leaderboard.entry", {
-                        rank = rank,
-                        name = nameText,
-                        score = scoreText,
-                }, currentLocale)
-        end
+	if scoreText and scoreText ~= "" and scoreText ~= "-" then
+		return Localizer.t("ui.leaderboard.entry", {
+			rank = rank,
+			name = nameText,
+			score = scoreText,
+		}, currentLocale)
+	end
 
-        return Localizer.t("ui.leaderboard.entryNoScore", {
-                rank = rank,
-                name = nameText,
-        }, currentLocale)
+	return Localizer.t("ui.leaderboard.entryNoScore", {
+		rank = rank,
+		name = nameText,
+	}, currentLocale)
 end
 
 local function displayEntries(entries: { any })
-        lastEntries = entries
-        lastStatusKey = nil
-        lastCustomMessage = nil
-        if #entries == 0 then
-                setStatusText("ui.leaderboard.empty")
-                return
-        end
+	lastEntries = entries
+	lastStatusKey = nil
+	lastCustomMessage = nil
+	if #entries == 0 then
+		setStatusText("ui.leaderboard.empty")
+		return
+	end
 
-        local lines: { string } = {}
-        local limit = math.min(#entries, 10)
-        for index = 1, limit do
-                lines[#lines + 1] = formatEntry(index, entries[index])
-        end
+	local lines: { string } = {}
+	local limit = math.min(#entries, 10)
+	for index = 1, limit do
+		lines[#lines + 1] = formatEntry(index, entries[index])
+	end
 
-        textLabel.Text = table.concat(lines, "\n")
+	textLabel.Text = table.concat(lines, "\n")
 end
 
 local function renderLeaderboard(data: any)
-        local entries = gatherEntries(data)
-        displayEntries(entries)
+	local entries = gatherEntries(data)
+	displayEntries(entries)
 end
 
-local function refreshLocale()
-        currentLocale = Localizer.getLocalPlayerLocale()
-        if lastEntries then
-                displayEntries(lastEntries)
-                return
-        end
 
-        if lastStatusKey then
-                setStatusText(lastStatusKey)
-                return
-        end
-
-        if lastCustomMessage then
-                textLabel.Text = lastCustomMessage
-                return
-        end
-
-        setStatusText("ui.leaderboard.fetching")
-end
 
 setStatusText("ui.leaderboard.fetching")
 
 local function updateLeaderboard(remote: RemoteFunction)
-        setStatusText("ui.leaderboard.fetching")
+	setStatusText("ui.leaderboard.fetching")
 
-        local ok, result = pcall(function()
-                return remote:InvokeServer()
-        end)
+	local ok, result = pcall(function()
+		return remote:InvokeServer()
+	end)
 
-        if not running then
+	if not running then
 		return
 	end
 
-        if ok and result ~= nil then
-                if typeof(result) == "table" then
-                        renderLeaderboard(result)
-                        return
-                elseif typeof(result) == "string" or typeof(result) == "number" then
-                        lastEntries = nil
-                        lastStatusKey = nil
-                        lastCustomMessage = tostring(result)
-                        textLabel.Text = lastCustomMessage
-                        return
-                end
-        end
+	if ok and result ~= nil then
+		if typeof(result) == "table" then
+			renderLeaderboard(result)
+			return
+		elseif typeof(result) == "string" or typeof(result) == "number" then
+			lastEntries = nil
+			lastStatusKey = nil
+			lastCustomMessage = tostring(result)
+			textLabel.Text = lastCustomMessage
+			return
+		end
+	end
 
-        setStatusText("ui.leaderboard.unavailable")
+	setStatusText("ui.leaderboard.unavailable")
 end
+
+local localPlayer = Players.LocalPlayer
+if localPlayer then
+	local ancestryConnection = localPlayer.AncestryChanged:Connect(function(_, parent)
+		if parent == nil then
+			cleanup()
+		end
+	end)
+	table.insert(connections, ancestryConnection)
+
+	local localeConnection = localPlayer:GetAttributeChangedSignal("Locale"):Connect(function()
+		refreshLocale()
+	end)
+	table.insert(connections, localeConnection)
+end
+
+
 
 local function pollLoop()
 	while running do
@@ -255,11 +243,11 @@ local function pollLoop()
 			break
 		end
 
-                if remote then
-                        updateLeaderboard(remote)
-                else
-                        setStatusText("ui.leaderboard.fetching")
-                end
+		if remote then
+			updateLeaderboard(remote)
+		else
+			setStatusText("ui.leaderboard.fetching")
+		end
 
 		local elapsed = 0
 		while running and elapsed < FETCH_INTERVAL_SECONDS do

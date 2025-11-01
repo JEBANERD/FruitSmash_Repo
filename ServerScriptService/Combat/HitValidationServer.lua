@@ -9,8 +9,7 @@ local Remotes = require(RemotesModule)
 
 local FruitConfigModule = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("FruitConfig")
 local FruitConfig = require(FruitConfigModule)
-
-local GameConfigModule = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig")
+local GameConfigModule = require(ReplicatedStorage.Shared.Config.GameConfig)
 local GameConfig = typeof(GameConfigModule.Get) == "function" and GameConfigModule.Get() or GameConfigModule
 local MeleeConfig = GameConfig.Melee or {}
 
@@ -31,72 +30,74 @@ local EconomyServer = nil
 local lastEconomyAttempt = 0
 
 local function currentTime()
-        return os.clock()
+	return os.clock()
 end
 
+-- ⬇️ Move this section ABOVE the do block
+local function resolveEconomyModule()
+	local candidates = {
+		{ "Economy", "EconomyServer" },
+		{ "GameServer", "Economy", "EconomyServer" },
+	}
+
+	for _, pathParts in ipairs(candidates) do
+		local current = ServerScriptService
+		local found = true
+		for _, name in ipairs(pathParts) do
+			if not current then
+				found = false
+				break
+			end
+			current = current:FindFirstChild(name)
+		end
+
+		if found and current and current:IsA("ModuleScript") then
+			local ok, result = pcall(require, current)
+			if ok and result then
+				return result
+			elseif not ok then
+				warn(string.format("[HitValidationServer] Failed to require %s: %s", current:GetFullName(), tostring(result)))
+			end
+		end
+	end
+
+	return nil
+end
+
+-- ✅ This can now safely call resolveEconomyModule
 do
-        local initialEconomy = resolveEconomyModule()
-        if initialEconomy then
-                EconomyServer = initialEconomy
-                lastEconomyAttempt = currentTime()
-        end
+	local initialEconomy = resolveEconomyModule()
+	if initialEconomy then
+		EconomyServer = initialEconomy
+		lastEconomyAttempt = currentTime()
+	end
 end
 
 local function safeSetAttribute(instance, attribute, value)
-        if not instance or instance.Parent == nil then
-                return
-        end
+	if not instance or instance.Parent == nil then
+		return
+	end
 
-        local ok, err = pcall(function()
-                instance:SetAttribute(attribute, value)
-        end)
+	local ok, err = pcall(function()
+		instance:SetAttribute(attribute, value)
+	end)
 
-        if not ok then
-                warn(string.format("[HitValidationServer] Failed to set %s on %s: %s", tostring(attribute), tostring(instance), tostring(err)))
-        end
+	if not ok then
+		warn(string.format("[HitValidationServer] Failed to set %s on %s: %s", tostring(attribute), tostring(instance), tostring(err)))
+	end
 end
 
 local function getPlayerState(player)
-        local state = playerStates[player]
-        if not state then
-                state = {
-                        lastAttempt = -math.huge,
-                        disabledUntil = nil,
-                        breakToken = 0,
-                }
-                playerStates[player] = state
-        end
-        return state
-end
-
-local function resolveEconomyModule()
-        local candidates = {
-                { "Economy", "EconomyServer" },
-                { "GameServer", "Economy", "EconomyServer" },
-        }
-
-        for _, pathParts in ipairs(candidates) do
-                local current = ServerScriptService
-                local found = true
-                for _, name in ipairs(pathParts) do
-                        if not current then
-                                found = false
-                                break
-                        end
-                        current = current:FindFirstChild(name)
-                end
-
-                if found and current and current:IsA("ModuleScript") then
-                        local ok, result = pcall(require, current)
-                        if ok and result then
-                                return result
-                        elseif not ok then
-                                warn(string.format("[HitValidationServer] Failed to require %s: %s", current:GetFullName(), tostring(result)))
-                        end
-                end
-        end
-
-        return nil
+	local state = playerStates[player]
+	if not state then
+		state = {
+			lastAttempt = -math.huge,
+			disabledUntil = nil,
+			breakToken = 0,
+		}
+		playerStates[player] = state
+	end
+	return state
 end
 
 local function getAttributeFromAncestors(instance, attribute, maxHops)

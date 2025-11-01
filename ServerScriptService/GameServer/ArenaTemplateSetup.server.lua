@@ -2,14 +2,8 @@
 
 local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
 
 local TAG = "[ArenaTemplateSetup]"
-
-local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
-local systemsFolder = sharedFolder:WaitForChild("Systems")
-local Localizer = require(systemsFolder:WaitForChild("Localizer"))
-local WARNING_KEY = "notices.general.serverWarning"
 
 local function getNoticeRemote(): RemoteEvent?
 	local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
@@ -28,21 +22,16 @@ end
 local noticeRemote = getNoticeRemote()
 
 local function sendNotice(message: string)
-        if noticeRemote == nil then
-                return
-        end
+	if noticeRemote == nil then
+		return
+	end
 
-        local args = { message = message }
-        for _, player in ipairs(Players:GetPlayers()) do
-                local locale = Localizer.getPlayerLocale(player)
-                noticeRemote:FireClient(player, {
-                        msg = Localizer.t(WARNING_KEY, args, locale),
-                        kind = "warning",
-                        key = WARNING_KEY,
-                        args = args,
-                        locale = locale,
-                })
-        end
+	local payload = {
+		msg = message,
+		kind = "warning",
+	}
+
+	noticeRemote:FireAllClients(payload)
 end
 
 local function reportInfo(message: string)

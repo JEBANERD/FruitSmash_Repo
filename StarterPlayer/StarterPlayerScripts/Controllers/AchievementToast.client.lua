@@ -66,7 +66,7 @@ local function ensureGui(): boolean
         return true
     end
 
-    screenGui = Instance.new("ScreenGui")
+    local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "AchievementToasts"
     screenGui.ResetOnSpawn = false
     screenGui.IgnoreGuiInset = true
@@ -74,7 +74,7 @@ local function ensureGui(): boolean
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     screenGui.Parent = parent
 
-    toastFrame = Instance.new("Frame")
+    local toastFrame = Instance.new("Frame")
     toastFrame.Name = "Toast"
     toastFrame.AnchorPoint = Vector2.new(0.5, 0)
     toastFrame.Position = UDim2.new(0.5, 0, OFFSET_HIDDEN, 0)
@@ -88,7 +88,7 @@ local function ensureGui(): boolean
     corner.CornerRadius = UDim.new(0, 12)
     corner.Parent = toastFrame
 
-    borderStroke = Instance.new("UIStroke")
+    local borderStroke = Instance.new("UIStroke")
     borderStroke.Name = "Border"
     borderStroke.Thickness = 2
     borderStroke.Color = Color3.fromRGB(116, 140, 255)
@@ -102,7 +102,7 @@ local function ensureGui(): boolean
     padding.PaddingRight = UDim.new(0, 20)
     padding.Parent = toastFrame
 
-    titleLabel = Instance.new("TextLabel")
+    local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "Title"
     titleLabel.BackgroundTransparency = 1
     titleLabel.Font = Enum.Font.GothamBold
@@ -114,10 +114,10 @@ local function ensureGui(): boolean
     titleLabel.Size = UDim2.new(1, 0, 0, 30)
     titleLabel.Parent = toastFrame
 
-    messageLabel = Instance.new("TextLabel")
+    local messageLabel = Instance.new("TextLabel")
     messageLabel.Name = "Message"
     messageLabel.BackgroundTransparency = 1
-    messageLabel.Font = Enum.Font.GothamSemibold
+    messageLabel.Font = Enum.Font.GothamBold
     messageLabel.TextColor3 = Color3.fromRGB(210, 214, 228)
     messageLabel.TextSize = 18
     messageLabel.TextWrapped = true

@@ -184,6 +184,7 @@ C.Monetization = {
 }
 
 -- == UI/UX flags ==
+
 C.UI = {
 	UseQuickbar = true,
 	Quickbar = {
@@ -199,6 +200,7 @@ C.UI = {
 		RoundTimerEnabled = true,
 	},
 }
+
 
 -- == Match / Teleport Settings ==
 C.Match = {
