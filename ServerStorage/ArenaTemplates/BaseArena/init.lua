@@ -1,4 +1,6 @@
-local function applyPartDefaults(part)
+--!strict
+
+local function applyPartDefaults(part: BasePart)
     part.Anchored = true
     part.CanCollide = false
     part.CanQuery = false
@@ -8,12 +10,12 @@ local function applyPartDefaults(part)
     part.BottomSurface = Enum.SurfaceType.Smooth
 end
 
-local function setAttachmentOffset(attachment, offset)
+local function setAttachmentOffset(attachment: Attachment, offset: Vector3)
     attachment.Position = offset
     attachment:SetAttribute("Offset", offset)
 end
 
-local function createLane(index, cframe)
+local function createLane(index: number, cframe: CFrame): BasePart
     local lane = Instance.new("Part")
     lane.Name = string.format("Lane%d", index)
     lane.Size = Vector3.new(4, 1, 6)
@@ -43,7 +45,7 @@ local function createLane(index, cframe)
     return lane
 end
 
-local function createTarget(index, position)
+local function createTarget(index: number, position: CFrame): BasePart
     local target = Instance.new("Part")
     target.Name = string.format("Lane%dTarget", index)
     target.Size = Vector3.new(6, 8, 1)
@@ -55,7 +57,7 @@ local function createTarget(index, position)
     return target
 end
 
-local function createSpawnMarker(index, position)
+local function createSpawnMarker(index: number, position: CFrame): BasePart
     local marker = Instance.new("Part")
     marker.Name = string.format("Lane%dSpawn", index)
     marker.Size = Vector3.new(6, 1, 6)
@@ -68,7 +70,7 @@ local function createSpawnMarker(index, position)
     return marker
 end
 
-local function createDecorColumn(name, cframe, height)
+local function createDecorColumn(name: string, cframe: CFrame, height: number): BasePart
     local column = Instance.new("Part")
     column.Name = name
     column.Size = Vector3.new(2, height, 2)
@@ -79,7 +81,7 @@ local function createDecorColumn(name, cframe, height)
     return column
 end
 
-local function createBaseArena()
+local function createBaseArena(): Model
     local model = Instance.new("Model")
     model.Name = "BaseArena"
 
@@ -165,6 +167,6 @@ local function createBaseArena()
     return model
 end
 
-local prototype = createBaseArena()
+local prototype: Model = createBaseArena()
 
 return prototype

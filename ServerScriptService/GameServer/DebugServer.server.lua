@@ -1,3 +1,4 @@
+--!strict
 -- DebugServer.server.lua
 -- Dev-only debug utilities wired via bindable events when GameConfig.Debug.Enabled is true.
 

@@ -1,21 +1,42 @@
-local T = {
-  PrepTimer = { --[[
-    seconds: number
-  ]]},
-  WaveChanged = { --[[
-    wave: number, level: number
-  ]]},
-  TargetHP = { --[[
-    laneId: number, hp: number, max: number
-  ]]},
-  CoinPointDelta = { --[[
-    coins: number, points: number, reason: string
-  ]]},
-  QuickbarUpdate = { --[[
-    slots: table
-  ]]},
-  Notice = { --[[
-    msg: string, kind: "info"|"warn"|"error"
-  ]]},
+--!strict
+
+export type PrepTimer = {
+    seconds: number,
 }
-return T
+
+export type WaveChanged = {
+    wave: number,
+    level: number,
+}
+
+export type TargetHP = {
+    laneId: number,
+    hp: number,
+    max: number,
+}
+
+export type CoinPointDelta = {
+    coins: number,
+    points: number,
+    reason: string,
+}
+
+export type QuickbarUpdate = {
+    slots: { [number]: any },
+}
+
+export type Notice = {
+    msg: string,
+    kind: "info" | "warn" | "error",
+}
+
+local NetTypes = {
+    PrepTimer = {} :: PrepTimer,
+    WaveChanged = {} :: WaveChanged,
+    TargetHP = {} :: TargetHP,
+    CoinPointDelta = {} :: CoinPointDelta,
+    QuickbarUpdate = {} :: QuickbarUpdate,
+    Notice = {} :: Notice,
+}
+
+return NetTypes

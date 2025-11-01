@@ -1,3 +1,4 @@
+--!strict
 local FruitSpawnerServer = {}
 
 local CollectionService = game:GetService("CollectionService")

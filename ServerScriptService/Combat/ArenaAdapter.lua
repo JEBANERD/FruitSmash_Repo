@@ -1,3 +1,4 @@
+--!strict
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local ArenaServer = require(ServerScriptService:WaitForChild("GameServer"):WaitForChild("ArenaServer"))

@@ -1,3 +1,4 @@
+--!strict
 -- Server bootstrap: wires remotes and spawns an arena when requested
 local RS = game:GetService("ReplicatedStorage")
 local SS = game:GetService("ServerStorage")

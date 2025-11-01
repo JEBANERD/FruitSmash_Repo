@@ -1,3 +1,4 @@
+--!strict
 local ArenaServer = {}
 
 local HttpService = game:GetService("HttpService")

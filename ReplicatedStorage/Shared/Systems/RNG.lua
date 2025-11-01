@@ -1,8 +1,16 @@
-local RNG = {}
+--!strict
 
-local seededRandom
+type RNGModule = {
+    NextNumber: (minimum: number?, maximum: number?) -> number,
+    NextInteger: (minimum: number, maximum: number) -> number,
+    Chance: (probability: number?) -> boolean,
+}
 
-local function getRandom()
+local RNG = {} :: RNGModule
+
+local seededRandom: Random?
+
+local function getRandom(): Random
     if not seededRandom then
         seededRandom = Random.new(os.clock())
     end
@@ -10,39 +18,33 @@ local function getRandom()
     return seededRandom
 end
 
-function RNG.NextNumber(minimum, maximum)
-    return getRandom():NextNumber(minimum, maximum)
+function RNG.NextNumber(minimum: number?, maximum: number?): number
+    local random = getRandom()
+    if minimum ~= nil and maximum ~= nil then
+        return random:NextNumber(minimum, maximum)
+    elseif minimum ~= nil then
+        return random:NextNumber(minimum, 1)
+    elseif maximum ~= nil then
+        return random:NextNumber(0, maximum)
+    end
+
+    return random:NextNumber()
 end
 
-function RNG.NextInteger(minimum, maximum)
+function RNG.NextInteger(minimum: number, maximum: number): number
     return getRandom():NextInteger(minimum, maximum)
 end
 
-function RNG.Chance(probability)
-    probability = probability or 0
+function RNG.Chance(probability: number?): boolean
+    local chance = probability or 0
 
-    if probability <= 0 then
+    if chance <= 0 then
         return false
-    elseif probability >= 1 then
+    elseif chance >= 1 then
         return true
     end
 
-    return getRandom():NextNumber() < probability
+    return getRandom():NextNumber() < chance
 end
-
---[=[
-    Unit Test Stub:
-    describe("RNG", function()
-        it("returns deterministic results when seeded", function()
-            -- local first = RNG.NextNumber()
-            -- expect(first).to.equal(RNG.NextNumber())
-        end)
-
-        it("supports probability checks", function()
-            -- expect(RNG.Chance(0)).to.equal(false)
-            -- expect(RNG.Chance(1)).to.equal(true)
-        end)
-    end)
-]=]
 
 return RNG

@@ -1,7 +1,27 @@
+--!strict
+
 -- ShopConfig.lua
 -- Day-one shop inventory: melee, consumable tokens, utility, cosmetics, economy/meta.
 
-local Shop = {}
+type ShopItem = {
+    Id: string,
+    Kind: string,
+    Name: string,
+    PriceCoins: number,
+    [string]: any,
+}
+
+type ShopModule = {
+    Items: { [string]: ShopItem },
+    Gacha: {
+        SpinsPerLevelCap: number,
+        Table: { [number]: { ItemId: string, Weight: number } },
+    },
+    All: () -> { [string]: ShopItem },
+    Get: (id: string) -> ShopItem?,
+}
+
+local Shop = {} :: ShopModule
 
 Shop.Items = {
     -- == Melee Weapons ==
@@ -137,24 +157,20 @@ Shop.Gacha = {
     SpinsPerLevelCap = 3,
     Table = {
         -- weight-based outcomes
-        { ItemId = "MetalBat",  Weight = 10 },
-        { ItemId = "Wrench",    Weight = 8  },
-        { ItemId = "Katana",    Weight = 6  },
-        { ItemId = "Hammer",    Weight = 5  },
-        { ItemId = "Nothing",   Weight = 20 }, -- whiff
-    }
+        { ItemId = "MetalBat", Weight = 10 },
+        { ItemId = "Wrench", Weight = 8 },
+        { ItemId = "Katana", Weight = 6 },
+        { ItemId = "Hammer", Weight = 5 },
+        { ItemId = "Nothing", Weight = 20 }, -- whiff
+    },
 }
 
-function Shop.All()
+function Shop.All(): { [string]: ShopItem }
     return Shop.Items
 end
 
-function Shop.Get(id)
+function Shop.Get(id: string): ShopItem?
     return Shop.Items[id]
 end
 
 return Shop
-
-
-
-
