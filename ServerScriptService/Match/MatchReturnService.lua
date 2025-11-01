@@ -82,12 +82,36 @@ end
 
 local MatchReturnService = {}
 
-local function extractPlayer(entry: any): Player?
-    if typeof(entry) == "Instance" and entry:IsA("Player") then
-        if entry.Parent == Players then
-            return entry
-        end
+local function resolvePlayerFromCharacter(character: Instance?): Player?
+    if not character then
         return nil
+    end
+
+    local model: Instance? = character
+    if model and not model:IsA("Model") then
+        model = model:FindFirstAncestorOfClass("Model")
+    end
+
+    if model and model:IsA("Model") then
+        local playerFromCharacter = Players:GetPlayerFromCharacter(model)
+        if playerFromCharacter and playerFromCharacter.Parent == Players then
+            return playerFromCharacter
+        end
+    end
+
+    return nil
+end
+
+local function extractPlayer(entry: any): Player?
+    if typeof(entry) == "Instance" then
+        if entry:IsA("Player") then
+            if entry.Parent == Players then
+                return entry
+            end
+            return nil
+        end
+
+        return resolvePlayerFromCharacter(entry)
     end
 
     if typeof(entry) ~= "table" then
@@ -97,6 +121,11 @@ local function extractPlayer(entry: any): Player?
     local candidate = entry.player or entry.Player or entry.owner or entry.Owner or entry.user
     if typeof(candidate) == "Instance" and candidate:IsA("Player") and candidate.Parent == Players then
         return candidate
+    end
+
+    local characterCandidate = entry.character or entry.Character
+    if typeof(characterCandidate) == "Instance" then
+        return resolvePlayerFromCharacter(characterCandidate)
     end
 
     return nil
