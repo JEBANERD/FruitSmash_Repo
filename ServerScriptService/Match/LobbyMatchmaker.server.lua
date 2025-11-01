@@ -8,8 +8,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local HttpService = game:GetService("HttpService")
 
+type Player = Players.Player
+type Instance = typeof(workspace)
+
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
-local Remotes = require(ReplicatedStorage.Remotes.RemoteBootstrap)
+local RemotesModule = require(ReplicatedStorage.Remotes.RemoteBootstrap)
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local systemsFolder = sharedFolder:WaitForChild("Systems")
 local Localizer = require(systemsFolder:WaitForChild("Localizer"))
@@ -35,10 +38,23 @@ local retryRandom = Random.new()
 
 local MAX_PARTY_SIZE = 4
 
-local joinQueueRemote = Remotes and Remotes.RF_JoinQueue or nil
-local leaveQueueRemote = Remotes and Remotes.RF_LeaveQueue or nil
-local partyUpdateRemote = Remotes and Remotes.PartyUpdate or nil
-local noticeRemote = Remotes and Remotes.RE_Notice or nil
+local function getRemoteOfType(candidate: any, className: string)
+        if typeof(candidate) == "Instance" and candidate:IsA(className) then
+                return candidate
+        end
+        return nil
+end
+
+local Remotes = if typeof(RemotesModule) == "table" then RemotesModule else nil
+
+local joinQueueRemote = Remotes and getRemoteOfType(Remotes.RF_JoinQueue, "RemoteFunction") or nil
+local leaveQueueRemote = Remotes and getRemoteOfType(Remotes.RF_LeaveQueue, "RemoteFunction") or nil
+local partyUpdateRemote = Remotes and getRemoteOfType(Remotes.PartyUpdate, "RemoteEvent") or nil
+local noticeRemote = Remotes and getRemoteOfType(Remotes.RE_Notice, "RemoteEvent") or nil
+
+if RemotesModule and not Remotes then
+        warn("[LobbyMatchmaker] RemoteBootstrap returned unexpected value; remotes disabled")
+end
 
 type Party = {
         id: string,
@@ -58,6 +74,25 @@ local partiesById: { [string]: Party } = {}
 local partyByPlayer: { [Player]: Party } = {}
 local partyQueue: { Party } = {}
 local processingQueue = false
+
+local function isValidPartyEntry(candidate: any): boolean
+        if typeof(candidate) ~= "table" then
+                return false
+        end
+
+        local id = candidate.id
+        local members = candidate.members
+
+        if typeof(id) ~= "string" or id == "" then
+                return false
+        end
+
+        if typeof(members) ~= "table" then
+                return false
+        end
+
+        return true
+end
 
 local localArenaServer: any = nil
 local localRoundDirector: any = nil
@@ -358,6 +393,12 @@ local function sanitizeRetryReason(reason: string?): string
         return trimmed
 end
 
+local VALID_NOTICE_KINDS: { [string]: boolean } = {
+        info = true,
+        warning = true,
+        error = true,
+}
+
 local function schedulePartyRetry(party: Party, reason: string, options: any?)
         local attempt = (party.retryCount or 0) + 1
         local delaySeconds = computeRetryDelay(attempt)
@@ -372,7 +413,7 @@ local function schedulePartyRetry(party: Party, reason: string, options: any?)
         if typeof(options) == "table" then
                 local customReason = options.reasonText
                 if typeof(customReason) == "string" and customReason ~= "" then
-                        friendlyReason = customReason
+                        friendlyReason = sanitizeRetryReason(customReason)
                 end
         end
 
@@ -384,43 +425,23 @@ local function schedulePartyRetry(party: Party, reason: string, options: any?)
         }
         sendPartyUpdate(party, "retrying", retryExtra)
 
-        local sendNotice = true
         local noticeKind = "warning"
-        local noticeMessage: string? = nil
-
         if typeof(options) == "table" then
-                if options.sendNotice == false then
-                        sendNotice = false
-                end
                 local customKind = options.noticeKind
-                if typeof(customKind) == "string" and customKind ~= "" then
-                        noticeKind = customKind
-                end
-                local rawMessage = options.noticeMessage
-                if typeof(rawMessage) == "function" then
-                        local ok, result = pcall(rawMessage, delaySeconds, attempt, friendlyReason)
-                        if ok and typeof(result) == "string" then
-                                noticeMessage = result
+                if typeof(customKind) == "string" then
+                        local lowered = string.lower(customKind)
+                        if VALID_NOTICE_KINDS[lowered] then
+                                noticeKind = lowered
                         end
-                elseif typeof(rawMessage) == "string" then
-                        noticeMessage = rawMessage
                 end
         end
 
-        if sendNotice then
-                if not noticeMessage or noticeMessage == "" then
-                        noticeMessage = string.format("Matchmaking retry in %d seconds (%s).", flooredDelay, friendlyReason)
-                end
-                sendNoticeToParty(party, noticeMessage, noticeKind)
-        end
-
-        debugPrint("Party %s retrying in %.1f seconds (%s, attempt %d)", party.id, delaySeconds, friendlyReason, attempt)
         local seconds = math.max(1, math.floor(delaySeconds + 0.5))
-        sendNoticeToParty(party, "notices.matchmaking.retry", "warning", {
+        sendNoticeToParty(party, "notices.matchmaking.retry", noticeKind, {
                 seconds = seconds,
-                reason = reasonText,
+                reason = friendlyReason,
         })
-        debugPrint("Party %s retrying in %.1f seconds (%s, attempt %d)", party.id, delaySeconds, reasonText, attempt)
+        debugPrint("Party %s retrying in %.1f seconds (%s, attempt %d)", party.id, delaySeconds, friendlyReason, attempt)
 
         local retryToken = party.retryToken
 
@@ -448,6 +469,11 @@ local function schedulePartyRetry(party: Party, reason: string, options: any?)
                 end
 
                 if alreadyQueued then
+                        return
+                end
+
+                if not isValidPartyEntry(party) then
+                        warn("[LobbyMatchmaker] Skipping invalid party when re-queueing")
                         return
                 end
 
@@ -734,9 +760,6 @@ local function removePlayerFromParty(party: Party, player: Player, shouldDisband
 
         if shouldDisbandIfEmpty then
                 sendPartyUpdate(party, "update", nil, true)
-                if noticeMessage then
-                        sendNoticeToParty(party, noticeMessage, "info")
-                end
                 sendPartyUpdate(party, "update")
                 if noticeKey then
                         sendNoticeToParty(party, noticeKey, "info", noticeArgs)
@@ -751,136 +774,140 @@ local function processQueue()
 
 	processingQueue = true
 
-	while #partyQueue > 0 do
-		local party = partyQueue[1]
+        while #partyQueue > 0 do
+                local candidate = partyQueue[1]
 
-		if not party then
-			table.remove(partyQueue, 1)
-		elseif party.teleporting then
-			table.remove(partyQueue, 1)
-		elseif party.pendingRetry then
-			table.remove(partyQueue, 1)
-		else
-			local playersToTeleport = {}
-			for _, member in ipairs(party.members) do
-				if member.Parent == Players then
-					table.insert(playersToTeleport, member)
-				end
-			end
+                if not isValidPartyEntry(candidate) then
+                        table.remove(partyQueue, 1)
+                        warn("[LobbyMatchmaker] Removed invalid party entry from queue")
+                        continue
+                end
 
-			if #playersToTeleport == 0 then
-				table.remove(partyQueue, 1)
-				debugPrint("Party %s removed from queue (no active members)", party.id)
-				disbandParty(party)
-			else
-				table.remove(partyQueue, 1)
+                local party = candidate :: Party
 
-                                local matchPlaceValid = typeof(MATCH_PLACE_ID) == "number" and MATCH_PLACE_ID > 0
-                                local teleportDisabled = not TELEPORT_ENABLED
-                                local canTeleport = (not teleportDisabled) and matchPlaceValid
-                                local fallbackReason = "teleport unavailable"
+                if party.teleporting or party.pendingRetry then
+                        table.remove(partyQueue, 1)
+                        continue
+                end
+
+                local playersToTeleport = {}
+                for _, member in ipairs(party.members) do
+                        if member.Parent == Players then
+                                table.insert(playersToTeleport, member)
+                        end
+                end
+
+                if #playersToTeleport == 0 then
+                        table.remove(partyQueue, 1)
+                        debugPrint("Party %s removed from queue (no active members)", party.id)
+                        disbandParty(party)
+                        continue
+                end
+
+                table.remove(partyQueue, 1)
+
+                local matchPlaceValid = typeof(MATCH_PLACE_ID) == "number" and MATCH_PLACE_ID > 0
+                local teleportDisabled = not TELEPORT_ENABLED
+                local canTeleport = (not teleportDisabled) and matchPlaceValid
+                local fallbackReason = "teleport unavailable"
+                if teleportDisabled then
+                        fallbackReason = "teleport disabled"
+                elseif not matchPlaceValid then
+                        fallbackReason = "match place unavailable"
+                end
+
+                local function runLocalFallback(reason: string): boolean
+                        if not LOCAL_MATCH_READY then
+                                return false
+                        end
+
+                        if reason ~= "" then
+                                debugPrint("Attempting local fallback for party %s (%s)", party.id, reason)
+                        else
+                                debugPrint("Attempting local fallback for party %s", party.id)
+                        end
+
+                        local success = startLocalMatch(party.id, playersToTeleport)
+                        if success then
+                                resetPartyRetry(party)
+                                sendPartyUpdate(party, "local")
+                                sendNoticeToParty(party, "notices.matchmaking.serverUnavailable", "info")
+                                debugPrint("Party %s started local fallback arena (%d members)", party.id, #playersToTeleport)
+                                releasePartyForMatch(party)
+                                return true
+                        end
+
+                        warn(string.format("[LobbyMatchmaker] Local fallback failed for party %s", party.id))
+                        return false
+                end
+
+                if not canTeleport then
+                        if runLocalFallback(fallbackReason) then
+                                -- handled via local fallback
+                        else
                                 if teleportDisabled then
-                                        fallbackReason = "teleport disabled"
-                                elseif not matchPlaceValid then
-                                        fallbackReason = "match place unavailable"
+                                        warn("[LobbyMatchmaker] Teleport requested while disabled and no fallback succeeded")
+                                else
+                                        warn("[LobbyMatchmaker] Invalid MatchPlaceId; cannot teleport")
                                 end
+                                sendNoticeToParty(party, "notices.matchmaking.unavailable", "error")
+                                schedulePartyRetry(party, fallbackReason)
+                        end
+                        continue
+                end
 
-				local function runLocalFallback(reason: string): boolean
-					if not LOCAL_MATCH_READY then
-						return false
-					end
+                local reserveOk, accessCodeOrErr = pcall(TeleportService.ReserveServer, TeleportService, MATCH_PLACE_ID)
+                if not reserveOk then
+                        warn(string.format("[LobbyMatchmaker] ReserveServer failed: %s", tostring(accessCodeOrErr)))
+                        if LOCAL_FALLBACK_ON_FAILURE and runLocalFallback("reserve failure") then
+                                -- handled
+                        else
+                                schedulePartyRetry(party, "reserve failure")
+                        end
+                        continue
+                end
 
-					if reason ~= "" then
-						debugPrint("Attempting local fallback for party %s (%s)", party.id, reason)
-					else
-						debugPrint("Attempting local fallback for party %s", party.id)
-					end
+                local accessCode: string = accessCodeOrErr
+                party.teleporting = true
+                party.queued = false
+                cancelPartyRetry(party)
 
-					local success = startLocalMatch(party.id, playersToTeleport)
-					if success then
-						resetPartyRetry(party)
-						sendPartyUpdate(party, "local")
-                                                sendNoticeToParty(party, "notices.matchmaking.serverUnavailable", "info")
-						debugPrint("Party %s started local fallback arena (%d members)", party.id, #playersToTeleport)
-						releasePartyForMatch(party)
-						return true
-					end
+                sendPartyUpdate(party, "teleporting")
+                debugPrint("Teleporting party %s with %d members", party.id, #playersToTeleport)
 
-					warn(string.format("[LobbyMatchmaker] Local fallback failed for party %s", party.id))
-					return false
-				end
+                local teleportDataMembers = {}
+                for _, member in ipairs(playersToTeleport) do
+                        table.insert(teleportDataMembers, getPlayerSummary(member))
+                end
 
-				if not canTeleport then
-					if runLocalFallback(fallbackReason) then
-						-- handled via local fallback
-					else
-						if teleportDisabled then
-							warn("[LobbyMatchmaker] Teleport requested while disabled and no fallback succeeded")
-						else
-							warn("[LobbyMatchmaker] Invalid MatchPlaceId; cannot teleport")
-						end
-                                                sendNoticeToParty(party, "notices.matchmaking.unavailable", "error")
-						schedulePartyRetry(party, fallbackReason)
-					end
-				else
-					local reserveOk, accessCodeOrErr = pcall(TeleportService.ReserveServer, TeleportService, MATCH_PLACE_ID)
-					if not reserveOk then
-						warn(string.format("[LobbyMatchmaker] ReserveServer failed: %s", tostring(accessCodeOrErr)))
-						if LOCAL_FALLBACK_ON_FAILURE and runLocalFallback("reserve failure") then
-							-- handled
-						else
-							schedulePartyRetry(party, "reserve failure")
-						end
-					else
-						local accessCode: string = accessCodeOrErr
-						party.teleporting = true
-						party.queued = false
-						cancelPartyRetry(party)
+                local teleportData = {
+                        partyId = party.id,
+                        members = teleportDataMembers,
+                }
 
-						sendPartyUpdate(party, "teleporting")
-						debugPrint("Teleporting party %s with %d members", party.id, #playersToTeleport)
+                local teleportOk, teleportErr = pcall(function()
+                        TeleportService:TeleportToPrivateServer(MATCH_PLACE_ID, accessCode, playersToTeleport, nil, teleportData)
+                end)
 
-						local teleportDataMembers = {}
-						for _, member in ipairs(playersToTeleport) do
-							table.insert(teleportDataMembers, getPlayerSummary(member))
-						end
+                if not teleportOk then
+                        warn(string.format("[LobbyMatchmaker] Teleport failed for party %s: %s", party.id, tostring(teleportErr)))
+                        party.teleporting = false
+                        party.queued = true
+                        if LOCAL_FALLBACK_ON_FAILURE and runLocalFallback("teleport failure") then
+                                -- handled
+                        else
+                                schedulePartyRetry(party, tostring(teleportErr), {
+                                        noticeKind = "warning",
+                                        reasonText = "teleport error",
+                                })
+                        end
+                else
+                        debugPrint("Teleport initiated for party %s (code %s)", party.id, accessCode)
+                        resetPartyRetry(party)
+                end
+        end
 
-						local teleportData = {
-							partyId = party.id,
-							members = teleportDataMembers,
-						}
-
-						local teleportOk, teleportErr = pcall(function()
-							TeleportService:TeleportToPrivateServer(MATCH_PLACE_ID, accessCode, playersToTeleport, nil, teleportData)
-						end)
-
-						if not teleportOk then
-                                                        warn(string.format("[LobbyMatchmaker] Teleport failed for party %s: %s", party.id, tostring(teleportErr)))
-                                                        party.teleporting = false
-                                                        party.queued = true
-                                                        if LOCAL_FALLBACK_ON_FAILURE and runLocalFallback("teleport failure") then
-                                                                -- handled
-                                                        else
-                                                                schedulePartyRetry(party, tostring(teleportErr), {
-                                                                        noticeKind = "warning",
-                                                                        reasonText = "teleport error",
-                                                                        noticeMessage = function(delaySeconds)
-                                                                                local seconds = math.max(1, math.floor(delaySeconds + 0.5))
-                                                                                return string.format("Teleport failed. Retrying in %d seconds.", seconds)
-                                                                        end,
-                                                                })
-                                                        end
-                                                else
-                                                        debugPrint("Teleport initiated for party %s (code %s)", party.id, accessCode)
-                                                        resetPartyRetry(party)
-                                                end
-                                        end
-				end
-			end
-		end
-	end
-
-	processingQueue = false
+        processingQueue = false
 end
 
 local function scheduleQueueProcessing()
@@ -945,7 +972,16 @@ local function handleJoinQueue(player: Player, options: any?)
 
         local party = createParty(player, members)
         party.queued = true
-        table.insert(partyQueue, party)
+        if isValidPartyEntry(party) then
+                table.insert(partyQueue, party)
+        else
+                warn("[LobbyMatchmaker] Failed to queue malformed party")
+                disbandParty(party)
+                return {
+                        ok = false,
+                        error = "InvalidParty",
+                }
+        end
 
         sendPartyUpdate(party, "queued")
         sendNoticeToParty(party, "notices.matchmaking.joinedQueue", "info")
