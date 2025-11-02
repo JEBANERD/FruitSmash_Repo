@@ -36,6 +36,13 @@ type SlotDefinition = {
 	index: number,
 }
 
+type DirectionInfo = {
+        keyCode: Enum.KeyCode,
+        name: string,
+}
+
+type BindActionInput = Enum.KeyCode | Enum.UserInputType
+
 local slotDefinitions: { SlotDefinition } = {}
 
 for index = 1, meleeSlotCount do
@@ -47,22 +54,20 @@ for index = 1, tokenSlotCount do
 end
 
 local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
-local useTokenRemote = remotesFolder:WaitForChild("RF_UseToken")
-
-if not useTokenRemote:IsA("RemoteFunction") then
-	useTokenRemote = nil
-end
+local useTokenRemoteInstance = remotesFolder:WaitForChild("RF_UseToken")
+local useTokenRemote: RemoteFunction? =
+        if useTokenRemoteInstance:IsA("RemoteFunction") then useTokenRemoteInstance else nil
 
 local missingTokenRemoteWarned = false
 
 local function requestUseToken(slotIndex: number): boolean
-	local remote = useTokenRemote
-	if not remote then
-		if not missingTokenRemoteWarned then
-			missingTokenRemoteWarned = true
-			warn("[ControllerSupport] RF_UseToken remote is unavailable; cannot use tokens.")
-		end
-		return false
+        local remote = useTokenRemote
+        if remote == nil then
+                if not missingTokenRemoteWarned then
+                        missingTokenRemoteWarned = true
+                        warn("[ControllerSupport] RF_UseToken remote is unavailable; cannot use tokens.")
+                end
+                return false
 	end
 
 	CameraFeelBus.TokenBump()
@@ -84,16 +89,16 @@ local quickbarContainerName = "QuickbarContainer"
 local quickbarFrame: Frame? = nil
 local slotButtonsOrdered: { GuiButton } = {}
 
-local glyphObjects: { [GuiButton]: ImageLabel } = {}
-local glyphAssignments: { [GuiButton]: number } = {}
-local glyphImages: { [Enum.KeyCode]: string } = {}
-local buttonCleanupConnections: { [GuiButton]: RBXScriptConnection } = {}
+local glyphObjects: { [GuiButton]: ImageLabel? } = {}
+local glyphAssignments: { [GuiButton]: number? } = {}
+local glyphImages: { [Enum.KeyCode]: string? } = {}
+local buttonCleanupConnections: { [GuiButton]: RBXScriptConnection? } = {}
 
-local DPAD_LAYOUT = {
-	{ keyCode = Enum.KeyCode.DPadLeft, name = "Left" },
-	{ keyCode = Enum.KeyCode.DPadUp, name = "Up" },
-	{ keyCode = Enum.KeyCode.DPadRight, name = "Right" },
-	{ keyCode = Enum.KeyCode.DPadDown, name = "Down" },
+local DPAD_LAYOUT: { DirectionInfo } = {
+        { keyCode = Enum.KeyCode.DPadLeft, name = "Left" },
+        { keyCode = Enum.KeyCode.DPadUp, name = "Up" },
+        { keyCode = Enum.KeyCode.DPadRight, name = "Right" },
+        { keyCode = Enum.KeyCode.DPadDown, name = "Down" },
 }
 
 local pageStartIndex = 1
@@ -128,12 +133,12 @@ local function shouldAllowQuickbarInput(): boolean
 	return true
 end
 
-local function isGamepadInputType(inputType: Enum.UserInputType): boolean
-	if typeof(inputType) ~= "EnumItem" then
-		return false
-	end
-	local value = inputType.Value
-	local first = Enum.UserInputType.Gamepad1.Value
+local function isGamepadInputType(inputType: Enum.UserInputType?): boolean
+        if inputType == nil then
+                return false
+        end
+        local value = inputType.Value
+        local first = Enum.UserInputType.Gamepad1.Value
 	local last = Enum.UserInputType.Gamepad8.Value
 	if value >= first and value <= last then
 		return true
@@ -142,7 +147,8 @@ local function isGamepadInputType(inputType: Enum.UserInputType): boolean
 	return string.find(name, "Gamepad", 1, true) ~= nil
 end
 
-local gamepadPreferred = isGamepadInputType(UserInputService:GetLastInputType())
+local lastInputType: Enum.UserInputType? = UserInputService:GetLastInputType()
+local gamepadPreferred = isGamepadInputType(lastInputType)
 
 local function clearButtonTracking(button: GuiButton)
 	local glyph = glyphObjects[button]
@@ -159,14 +165,16 @@ local function clearButtonTracking(button: GuiButton)
 end
 
 local function updateGlyphVisibility()
-	local shouldShow = gamepadPreferred and quickbarFrame ~= nil and quickbarFrame.Parent ~= nil and shouldAllowQuickbarInput()
-	for button, glyph in pairs(glyphObjects) do
-		local assigned = glyphAssignments[button]
-		glyph.Visible = shouldShow and assigned ~= nil
-	end
+        local shouldShow = gamepadPreferred and quickbarFrame ~= nil and quickbarFrame.Parent ~= nil and shouldAllowQuickbarInput()
+        for button, glyph in pairs(glyphObjects) do
+                if glyph then
+                        local assigned = glyphAssignments[button]
+                        glyph.Visible = shouldShow and assigned ~= nil
+                end
+        end
 end
 
-local function ensureGlyph(button: GuiButton, directionInfo: { keyCode: Enum.KeyCode, name: string })
+local function ensureGlyph(button: GuiButton, directionInfo: DirectionInfo)
 	local glyph = glyphObjects[button]
 	if not glyph then
 		glyph = Instance.new("ImageLabel")
@@ -180,20 +188,20 @@ local function ensureGlyph(button: GuiButton, directionInfo: { keyCode: Enum.Key
 		glyph.Parent = button
 		glyphObjects[button] = glyph
 
-		if not buttonCleanupConnections[button] then
-			buttonCleanupConnections[button] = button.Destroying:Connect(function()
-				clearButtonTracking(button)
-				updateGlyphVisibility()
-			end)
-		end
+                if buttonCleanupConnections[button] == nil then
+                        buttonCleanupConnections[button] = button.Destroying:Connect(function()
+                                clearButtonTracking(button)
+                                updateGlyphVisibility()
+                        end)
+                end
 	end
 
-	local cachedImage = glyphImages[directionInfo.keyCode]
-	if not cachedImage then
-		local ok, result = pcall(function()
-			return UserInputService:GetImageForKeyCode(directionInfo.keyCode)
-		end)
-		if ok and typeof(result) == "string" then
+        local cachedImage = glyphImages[directionInfo.keyCode]
+        if cachedImage == nil then
+                local ok, result = pcall(function()
+                        return UserInputService:GetImageForKeyCode(directionInfo.keyCode)
+                end)
+                if ok and typeof(result) == "string" then
 			cachedImage = result
 		else
 			cachedImage = ""
@@ -201,20 +209,20 @@ local function ensureGlyph(button: GuiButton, directionInfo: { keyCode: Enum.Key
 		glyphImages[directionInfo.keyCode] = cachedImage
 	end
 
-	glyph.Image = cachedImage or ""
+        glyph.Image = cachedImage or ""
 end
 
 local function updateGlyphAssignments()
-	for button, _ in pairs(glyphAssignments) do
-		glyphAssignments[button] = nil
-	end
+        for button, _ in pairs(glyphAssignments) do
+                glyphAssignments[button] = nil
+        end
 
-	local totalSlots = #slotButtonsOrdered
-	if totalSlots == 0 then
-		pageStartIndex = 1
-		updateGlyphVisibility()
-		return
-	end
+        local totalSlots = #slotButtonsOrdered
+        if totalSlots == 0 then
+                pageStartIndex = 1
+                updateGlyphVisibility()
+                return
+        end
 
 	local dpadCount = #DPAD_LAYOUT
 	local maxStart = math.max(totalSlots - (dpadCount - 1), 1)
@@ -225,9 +233,11 @@ local function updateGlyphAssignments()
 		pageStartIndex = 1
 	end
 
-	for button, glyph in pairs(glyphObjects) do
-		glyph.Visible = false
-	end
+        for button, glyph in pairs(glyphObjects) do
+                if glyph then
+                        glyph.Visible = false
+                end
+        end
 
 	for offset, directionInfo in ipairs(DPAD_LAYOUT) do
 		local slotIndex = pageStartIndex + offset - 1
@@ -278,12 +288,12 @@ local function refreshSlotButtons()
 	end
 
 	for _, button in ipairs(newButtons) do
-		if not buttonCleanupConnections[button] then
-			buttonCleanupConnections[button] = button.Destroying:Connect(function()
-				clearButtonTracking(button)
-				updateGlyphVisibility()
-			end)
-		end
+                if buttonCleanupConnections[button] == nil then
+                        buttonCleanupConnections[button] = button.Destroying:Connect(function()
+                                clearButtonTracking(button)
+                                updateGlyphVisibility()
+                        end)
+                end
 	end
 
 	slotButtonsOrdered = newButtons
@@ -436,10 +446,14 @@ local function useFirstAvailableToken(): boolean
 	return false
 end
 
-local function bindAction(name: string, handler: (string, Enum.UserInputState, InputObject?) -> Enum.ContextActionResult, ...: Enum.KeyCode)
-	ContextActionService:UnbindAction(name)
-	ContextActionService:BindAction(name, handler, false, ...)
-	table.insert(boundActions, name)
+local function bindAction(
+        name: string,
+        handler: (string, Enum.UserInputState, InputObject?) -> Enum.ContextActionResult,
+        ...: BindActionInput
+)
+        ContextActionService:UnbindAction(name)
+        ContextActionService:BindAction(name, handler, false, ...)
+        table.insert(boundActions, name)
 end
 
 for _, conn in ipairs(connections) do
@@ -447,32 +461,32 @@ for _, conn in ipairs(connections) do
 end
 
 connections = {
-	playerGui.ChildAdded:Connect(function(child)
-		if child.Name == quickbarGuiName then
-			task.defer(tryAttachQuickbar)
-		end
-	end),
-	playerGui.ChildRemoved:Connect(function(child)
-		if child.Name == quickbarGuiName then
-			setQuickbarFrame(nil)
-		end
-	end),
-	UserInputService.LastInputTypeChanged:Connect(function(newType)
-		if isGamepadInputType(newType) then
-			setGamepadPreferred(true)
-		elseif not UserInputService.GamepadEnabled then
-			setGamepadPreferred(false)
-		end
-	end),
-	UserInputService.GamepadConnected:Connect(function(_gamepad)
-		setGamepadPreferred(true)
-	end),
-	UserInputService.GamepadDisconnected:Connect(function(_gamepad)
-		if not UserInputService.GamepadEnabled then
-			setGamepadPreferred(false)
-		else
-			setGamepadPreferred(isGamepadInputType(UserInputService:GetLastInputType()))
-		end
+        playerGui.ChildAdded:Connect(function(child: Instance)
+                if child.Name == quickbarGuiName then
+                        task.defer(tryAttachQuickbar)
+                end
+        end),
+        playerGui.ChildRemoved:Connect(function(child: Instance)
+                if child.Name == quickbarGuiName then
+                        setQuickbarFrame(nil)
+                end
+        end),
+        UserInputService.LastInputTypeChanged:Connect(function(newType: Enum.UserInputType)
+                if isGamepadInputType(newType) then
+                        setGamepadPreferred(true)
+                elseif not UserInputService.GamepadEnabled then
+                        setGamepadPreferred(false)
+                end
+        end),
+        UserInputService.GamepadConnected:Connect(function(_gamepad: Enum.UserInputType)
+                setGamepadPreferred(true)
+        end),
+        UserInputService.GamepadDisconnected:Connect(function(_gamepad: Enum.UserInputType)
+                if not UserInputService.GamepadEnabled then
+                        setGamepadPreferred(false)
+                else
+                        setGamepadPreferred(isGamepadInputType(UserInputService:GetLastInputType()))
+                end
 	end),
 	GuiService:GetPropertyChangedSignal("SelectedObject"):Connect(function()
 		updateGlyphVisibility()
@@ -575,7 +589,9 @@ script.Destroying:Connect(function()
 	for _, conn in ipairs(quickbarConnections) do
 		conn:Disconnect()
 	end
-	for _, conn in pairs(buttonCleanupConnections) do
-		conn:Disconnect()
-	end
+        for _, conn in pairs(buttonCleanupConnections) do
+                if conn then
+                        conn:Disconnect()
+                end
+        end
 end)
