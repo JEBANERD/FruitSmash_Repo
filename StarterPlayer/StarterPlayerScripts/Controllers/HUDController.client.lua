@@ -1,46 +1,45 @@
 --!strict
-
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
 local Workspace = game:GetService("Workspace")
-local RemotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
-
 
 local localPlayer = Players.LocalPlayer
 if not localPlayer then
-	return
+        return
 end
 
-local RemotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
-if not RemotesFolder then
-	local ok, result = pcall(function()
-		return ReplicatedStorage:WaitForChild("Remotes", 5)
-	end)
-	if ok and result then
-		RemotesFolder = result
-	end
+local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
+if not remotesFolder then
+        local ok, result = pcall(function()
+                return ReplicatedStorage:WaitForChild("Remotes", 5)
+        end)
+        if ok and result and result:IsA("Folder") then
+                remotesFolder = result
+        end
 end
 
-local RemotesFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+local remotesModule: ModuleScript? = nil
+if remotesFolder then
+        local candidate = remotesFolder:FindFirstChild("RemoteBootstrap")
+        if candidate and candidate:IsA("ModuleScript") then
+                remotesModule = candidate
+        end
+end
+
 local Remotes
-
-if RemotesFolder then
-	local remoteModule = RemotesFolder:FindFirstChild("RemoteBootstrap")
-	if remoteModule and remoteModule:IsA("ModuleScript") then
-		local ok, result = pcall(require, remoteModule)
-		if ok then
-			Remotes = result
-		else
-			warn("[HUDController] Failed to require RemoteBootstrap:", result)
-		end
-	else
-		warn("[HUDController] RemoteBootstrap is missing or not a ModuleScript")
-	end
+if remotesModule then
+        local ok, result = pcall(require, remotesModule)
+        if ok and typeof(result) == "table" then
+                Remotes = result
+        else
+                warn("[HUDController] Failed to require RemoteBootstrap:", result)
+        end
+else
+        warn("[HUDController] RemoteBootstrap is missing or not a ModuleScript")
 end
-
 
 local coinRemote: RemoteEvent? = Remotes and Remotes.RE_CoinPointDelta or nil
 local prepRemote: RemoteEvent? = Remotes and Remotes.RE_PrepTimer or nil
@@ -153,7 +152,6 @@ local waveLabel: TextLabel? = nil
 local lanesPanel: Frame? = nil
 local lanesContainer: Frame? = nil
 local safePadding: UIPadding? = nil
-local cameraViewportConnection: RBXScriptConnection? = nil
 
 local lanePanels: { [number]: {
 	frame: Frame,
@@ -280,11 +278,11 @@ local function initSafeAreaListeners()
 		end
 	end
 
-	connectCameraViewportListener(workspace.CurrentCamera)
-	table.insert(connections, workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-		connectCameraViewportListener(workspace.CurrentCamera)
-		updateSafePadding()
-	end))
+        connectCameraViewportListener(Workspace.CurrentCamera)
+        table.insert(connections, Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+                connectCameraViewportListener(Workspace.CurrentCamera)
+                updateSafePadding()
+        end))
 end
 
 local function disconnectAll()
@@ -299,13 +297,13 @@ end
 local function runCleanupTasks(): (boolean, string?)
 	local hadError = false
 
-	for index, taskFn in ipairs(cleanupTasks) do
-		local ok, result = runCleanupTasks()
-		if not ok then
-			hadError = true
-			warn("[HUDController] Cleanup task #" .. index .. " failed:", result)
-		end
-	end
+        for index, taskFn in ipairs(cleanupTasks) do
+                local ok, result = pcall(taskFn)
+                if not ok then
+                        hadError = true
+                        warn("[HUDController] Cleanup task #" .. index .. " failed:", result)
+                end
+        end
 
 	table.clear(cleanupTasks)
 	return not hadError, hadError and "Some tasks failed" or nil
@@ -432,7 +430,7 @@ end
 
 script.Destroying:Connect(onDestroy)
 
-local ancestryConnection = localPlayer.AncestryChanged:Connect(function(_, parent)
+local ancestryConnection = localPlayer.AncestryChanged:Connect(function(_descendant: Instance, parent: Instance?)
 	if parent == nil then
 		onDestroy()
 	end
@@ -728,7 +726,7 @@ local function setLaneCount(count: number)
 
 	for index = 1, count do
 		if not lanePanels[index] and lanesContainer then
-			local frame = Instance.new("Frame")
+                        local frame: Frame = Instance.new("Frame")
 			frame.Name = string.format("Lane_%d", index)
 			frame.LayoutOrder = index
 			frame.Size = UDim2.new(0, LANE_PANEL_WIDTH, 1, -12)
@@ -741,7 +739,7 @@ local function setLaneCount(count: number)
 			corner.CornerRadius = UDim.new(0, 8)
 			corner.Parent = frame
 
-			local laneLabel = Instance.new("TextLabel")
+                        local laneLabel: TextLabel = Instance.new("TextLabel")
 			laneLabel.Name = "LaneLabel"
 			laneLabel.AnchorPoint = Vector2.new(0.5, 0)
 			laneLabel.Position = UDim2.new(0.5, 0, 0, 6)
@@ -753,7 +751,7 @@ local function setLaneCount(count: number)
 			laneLabel.Text = string.format("Lane %d", index)
 			laneLabel.Parent = frame
 
-			local shieldLabel = Instance.new("TextLabel")
+                        local shieldLabel: TextLabel = Instance.new("TextLabel")
 			shieldLabel.Name = "ShieldLabel"
 			shieldLabel.AnchorPoint = Vector2.new(0.5, 0)
 			shieldLabel.Position = UDim2.new(0.5, 0, 0, 26)
@@ -766,7 +764,7 @@ local function setLaneCount(count: number)
 			shieldLabel.Text = "Shield"
 			shieldLabel.Parent = frame
 
-			local barHolder = Instance.new("Frame")
+                        local barHolder: Frame = Instance.new("Frame")
 			barHolder.Name = "Bar"
 			barHolder.AnchorPoint = Vector2.new(0.5, 0)
 			barHolder.Position = UDim2.new(0.5, 0, 0, 44)
@@ -774,7 +772,7 @@ local function setLaneCount(count: number)
 			barHolder.BackgroundTransparency = 1
 			barHolder.Parent = frame
 
-			local barBackground = Instance.new("Frame")
+                        local barBackground: Frame = Instance.new("Frame")
 			barBackground.Name = "Background"
 			barBackground.Size = UDim2.new(1, 0, 1, 0)
 			barBackground.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
@@ -786,7 +784,7 @@ local function setLaneCount(count: number)
 			barCorner.CornerRadius = UDim.new(0, 6)
 			barCorner.Parent = barBackground
 
-			local fill = Instance.new("Frame")
+                        local fill: Frame = Instance.new("Frame")
 			local colorUtils = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Utils"):WaitForChild("ColorUtils"))
 			local colorForPercent = colorUtils.colorForPercent
 			fill.Name = "Fill"
@@ -801,7 +799,7 @@ local function setLaneCount(count: number)
 			fillCorner.CornerRadius = UDim.new(0, 6)
 			fillCorner.Parent = fill
 
-			local flash = Instance.new("Frame")
+                        local flash: Frame = Instance.new("Frame")
 			flash.Name = "DamageFlash"
 			flash.Size = UDim2.new(1, 0, 1, 0)
 			flash.BackgroundColor3 = activePalette.damageFlash
@@ -814,7 +812,7 @@ local function setLaneCount(count: number)
 			flashCorner.CornerRadius = UDim.new(0, 6)
 			flashCorner.Parent = flash
 
-			local hpLabel = Instance.new("TextLabel")
+                        local hpLabel: TextLabel = Instance.new("TextLabel")
 			hpLabel.Name = "HPLabel"
 			hpLabel.AnchorPoint = Vector2.new(0.5, 1)
 			hpLabel.Position = UDim2.new(0.5, 0, 1, -6)
@@ -867,16 +865,16 @@ local function ensureLaneContainer()
 		return
 	end
 
-	local lanesPanel = Instance.new("Frame")
-	lanesPanel.Name = "LanesPanel"
-	lanesPanel.AnchorPoint = Vector2.new(0.5, 1)
-	lanesPanel.Position = UDim2.new(0.5, 0, 1, -36)
-	lanesPanel.Size = UDim2.new(0, LANE_PANEL_MIN_WIDTH, 0, LANE_PANEL_HEIGHT)
-	lanesPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-	lanesPanel.BackgroundTransparency = 0.2
-	lanesPanel.BorderSizePixel = 0
-	lanesPanel.Visible = false
-	lanesPanel.Parent = hudContainer
+        lanesPanel = Instance.new("Frame")
+        lanesPanel.Name = "LanesPanel"
+        lanesPanel.AnchorPoint = Vector2.new(0.5, 1)
+        lanesPanel.Position = UDim2.new(0.5, 0, 1, -36)
+        lanesPanel.Size = UDim2.new(0, LANE_PANEL_MIN_WIDTH, 0, LANE_PANEL_HEIGHT)
+        lanesPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        lanesPanel.BackgroundTransparency = 0.2
+        lanesPanel.BorderSizePixel = 0
+        lanesPanel.Visible = false
+        lanesPanel.Parent = hudContainer
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 12)
@@ -888,24 +886,24 @@ local function ensureLaneContainer()
 	stroke.Transparency = 0.85
 	stroke.Parent = lanesPanel
 
-	local title = Instance.new("TextLabel")
-	title.Name = "Title"
-	title.AnchorPoint = Vector2.new(0.5, 0)
-	title.Position = UDim2.new(0.5, 0, 0, 8)
-	title.Size = UDim2.new(1, -16, 0, 22)
-	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBold
-	title.TextSize = 16
-	title.TextColor3 = Color3.fromRGB(240, 240, 240)
-	title.Text = "Target Lanes"
-	title.Parent = lanesPanel
+        local title: TextLabel = Instance.new("TextLabel")
+        title.Name = "Title"
+        title.AnchorPoint = Vector2.new(0.5, 0)
+        title.Position = UDim2.new(0.5, 0, 0, 8)
+        title.Size = UDim2.new(1, -16, 0, 22)
+        title.BackgroundTransparency = 1
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 16
+        title.TextColor3 = Color3.fromRGB(240, 240, 240)
+        title.Text = "Target Lanes"
+        title.Parent = lanesPanel
 
-	local lanesContainer = Instance.new("Frame")
-	lanesContainer.Name = "LaneContainer"
-	lanesContainer.Position = UDim2.new(0, 8, 0, 32)
-	lanesContainer.Size = UDim2.new(1, -16, 1, -48)
-	lanesContainer.BackgroundTransparency = 1
-	lanesContainer.Parent = lanesPanel
+        local lanesContainerLocal: Frame = Instance.new("Frame")
+        lanesContainerLocal.Name = "LaneContainer"
+        lanesContainerLocal.Position = UDim2.new(0, 8, 0, 32)
+        lanesContainerLocal.Size = UDim2.new(1, -16, 1, -48)
+        lanesContainerLocal.BackgroundTransparency = 1
+        lanesContainerLocal.Parent = lanesPanel
 
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
@@ -913,7 +911,8 @@ local function ensureLaneContainer()
 	layout.VerticalAlignment = Enum.VerticalAlignment.Center
 	layout.Padding = UDim.new(0, LANE_PANEL_PADDING)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = lanesContainer
+        layout.Parent = lanesContainerLocal
+        lanesContainer = lanesContainerLocal
 
 	setLaneCount(laneState.count)
 end
@@ -923,7 +922,7 @@ local function createCounters()
 		return
 	end
 
-	local frame = Instance.new("Frame")
+        local frame: Frame = Instance.new("Frame")
 	frame.Name = "Counters"
 	frame.Position = UDim2.new(0, 20, 0, 20)
 	frame.Size = UDim2.new(0, 280, 0, 120)
@@ -957,15 +956,15 @@ local function createCounters()
 	layout.Padding = UDim.new(0, 10)
 	layout.Parent = frame
 
-	local function createRow(name: string, layoutOrder: number)
-		local row = Instance.new("Frame")
+        local function createRow(name: string, layoutOrder: number)
+                local row: Frame = Instance.new("Frame")
 		row.Name = name .. "Row"
 		row.BackgroundTransparency = 1
 		row.Size = UDim2.new(1, 0, 0, 40)
 		row.LayoutOrder = layoutOrder
 		row.Parent = frame
 
-		local label = Instance.new("TextLabel")
+                local label: TextLabel = Instance.new("TextLabel")
 		label.Name = "Label"
 		label.BackgroundTransparency = 1
 		label.Size = UDim2.new(0.4, 0, 1, 0)
@@ -976,7 +975,7 @@ local function createCounters()
 		label.Text = string.upper(name)
 		label.Parent = row
 
-		local valueLabel = Instance.new("TextLabel")
+                local valueLabel: TextLabel = Instance.new("TextLabel")
 		valueLabel.Name = "Value"
 		valueLabel.AnchorPoint = Vector2.new(1, 0.5)
 		valueLabel.Position = UDim2.new(1, 0, 0.5, 0)
@@ -989,7 +988,7 @@ local function createCounters()
 		valueLabel.Text = "0"
 		valueLabel.Parent = row
 
-		local deltaLabel = Instance.new("TextLabel")
+                local deltaLabel: TextLabel = Instance.new("TextLabel")
 		deltaLabel.Name = "Delta"
 		deltaLabel.AnchorPoint = Vector2.new(1, 1)
 		deltaLabel.Position = UDim2.new(1, 0, 1, -4)
@@ -1027,7 +1026,7 @@ local function createStatusPanel()
 		return
 	end
 
-	local panel = Instance.new("Frame")
+        local panel: Frame = Instance.new("Frame")
 	panel.Name = "StatusPanel"
 	panel.AnchorPoint = Vector2.new(0.5, 0)
 	panel.Position = UDim2.new(0.5, 0, 0, 18)
@@ -1047,70 +1046,72 @@ local function createStatusPanel()
 	stroke.Transparency = 0.85
 	stroke.Parent = panel
 
-	local timerLabel: TextLabel = Instance.new("TextLabel")
-	timerLabel.Name = "TimerLabel"
-	timerLabel.AnchorPoint = Vector2.new(0.5, 0)
-	timerLabel.Position = UDim2.new(0.5, 0, 0, 12)
-	timerLabel.Size = UDim2.new(1, -24, 0, 38)
-	timerLabel.BackgroundTransparency = 1
-	timerLabel.Font = Enum.Font.GothamBold
-	timerLabel.TextSize = 26
-	timerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	timerLabel.TextXAlignment = Enum.TextXAlignment.Center
-	timerLabel.Text = "Lobby"
-	timerLabel.Parent = panel
+        local timerLabelLocal: TextLabel = Instance.new("TextLabel")
+        timerLabelLocal.Name = "TimerLabel"
+        timerLabelLocal.AnchorPoint = Vector2.new(0.5, 0)
+        timerLabelLocal.Position = UDim2.new(0.5, 0, 0, 12)
+        timerLabelLocal.Size = UDim2.new(1, -24, 0, 38)
+        timerLabelLocal.BackgroundTransparency = 1
+        timerLabelLocal.Font = Enum.Font.GothamBold
+        timerLabelLocal.TextSize = 26
+        timerLabelLocal.TextColor3 = Color3.fromRGB(255, 255, 255)
+        timerLabelLocal.TextXAlignment = Enum.TextXAlignment.Center
+        timerLabelLocal.Text = "Lobby"
+        timerLabelLocal.Parent = panel
 
-	local waveLabel: TextLabel = Instance.new("TextLabel")
-	waveLabel.Name = "WaveLabel"
-	waveLabel.AnchorPoint = Vector2.new(0.5, 0)
-	waveLabel.Position = UDim2.new(0.5, 0, 0, 48)
-	waveLabel.Size = UDim2.new(1, -24, 0, 28)
-	waveLabel.BackgroundTransparency = 1
-	waveLabel.Font = Enum.Font.Gotham
-	waveLabel.TextSize = 18
-	waveLabel.TextColor3 = Color3.fromRGB(210, 210, 210)
-	waveLabel.TextXAlignment = Enum.TextXAlignment.Center
-	waveLabel.Text = "Level 0 — Lobby"
-	waveLabel.Parent = panel
+        local waveLabelLocal: TextLabel = Instance.new("TextLabel")
+        waveLabelLocal.Name = "WaveLabel"
+        waveLabelLocal.AnchorPoint = Vector2.new(0.5, 0)
+        waveLabelLocal.Position = UDim2.new(0.5, 0, 0, 48)
+        waveLabelLocal.Size = UDim2.new(1, -24, 0, 28)
+        waveLabelLocal.BackgroundTransparency = 1
+        waveLabelLocal.Font = Enum.Font.Gotham
+        waveLabelLocal.TextSize = 18
+        waveLabelLocal.TextColor3 = Color3.fromRGB(210, 210, 210)
+        waveLabelLocal.TextXAlignment = Enum.TextXAlignment.Center
+        waveLabelLocal.Text = "Level 0 — Lobby"
+        waveLabelLocal.Parent = panel
 
-	refreshTimerLabel()
-	refreshWaveLabel()
+        timerLabel = timerLabelLocal
+        waveLabel = waveLabelLocal
+        refreshTimerLabel()
+        refreshWaveLabel()
 end
 
 local function createHudGui()
-	if hudGui then
-		return
-	end
+        if hudGui then
+                return
+        end
 
-	local hudGui = Instance.new("ScreenGui")
-	hudGui.Name = HUD_NAME
-	hudGui.IgnoreGuiInset = true
-	hudGui.ResetOnSpawn = false
-	hudGui.DisplayOrder = 10
-	hudGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        hudGui = Instance.new("ScreenGui")
+        hudGui.Name = HUD_NAME
+        hudGui.IgnoreGuiInset = true
+        hudGui.ResetOnSpawn = false
+        hudGui.DisplayOrder = 10
+        hudGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-	if playerGui then
-		hudGui.Parent = playerGui
-	else
-		hudGui.Parent = localPlayer:WaitForChild("PlayerGui")
-	end
+        if playerGui then
+                hudGui.Parent = playerGui
+        else
+                hudGui.Parent = localPlayer:WaitForChild("PlayerGui")
+        end
 
-	local safeAreaFrame = Instance.new("Frame")
-	safeAreaFrame.Name = "SafeArea"
-	safeAreaFrame.Size = UDim2.new(1, 0, 1, 0)
-	safeAreaFrame.BackgroundTransparency = 1
-	safeAreaFrame.BorderSizePixel = 0
-	safeAreaFrame.Parent = hudGui
+        safeAreaFrame = Instance.new("Frame")
+        safeAreaFrame.Name = "SafeArea"
+        safeAreaFrame.Size = UDim2.new(1, 0, 1, 0)
+        safeAreaFrame.BackgroundTransparency = 1
+        safeAreaFrame.BorderSizePixel = 0
+        safeAreaFrame.Parent = hudGui
 
-	local safeAreaPadding = Instance.new("UIPadding")
-	safeAreaPadding.Name = "SafeAreaPadding"
-	safeAreaPadding.Parent = safeAreaFrame
+        safeAreaPadding = Instance.new("UIPadding")
+        safeAreaPadding.Name = "SafeAreaPadding"
+        safeAreaPadding.Parent = safeAreaFrame
 
-	local hudContainer = Instance.new("Frame")
-	hudContainer.Name = HUD_SECTION_NAME
-	hudContainer.Size = UDim2.new(1, 0, 1, 0)
-	hudContainer.BackgroundTransparency = 1
-	hudContainer.Parent = safeAreaFrame
+        hudContainer = Instance.new("Frame")
+        hudContainer.Name = HUD_SECTION_NAME
+        hudContainer.Size = UDim2.new(1, 0, 1, 0)
+        hudContainer.BackgroundTransparency = 1
+        hudContainer.Parent = safeAreaFrame
 
 	updateSafeAreaPadding()
 	updateCameraViewportConnection(Workspace.CurrentCamera)
@@ -1135,9 +1136,13 @@ local function createHudGui()
 	end
 
 
-	local safePadding = Instance.new("UIPadding")
-	safePadding.Name = "SafeAreaPadding"
-	safePadding.Parent = hudContainer
+        safePadding = Instance.new("UIPadding")
+        safePadding.Name = "SafeAreaPadding"
+        safePadding.PaddingTop = UDim.new(0, 12)
+        safePadding.PaddingLeft = UDim.new(0, 12)
+        safePadding.PaddingRight = UDim.new(0, 12)
+        safePadding.PaddingBottom = UDim.new(0, 12)
+        safePadding.Parent = hudContainer
 	updateSafePadding()
 	initSafeAreaListeners()
 	local PaletteUtils = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Utils"):WaitForChild("PaletteUtils"))
@@ -1163,14 +1168,14 @@ local function ensureHudParent()
 	end
 end
 
-table.insert(connections, localPlayer.ChildAdded:Connect(function(child)
+table.insert(connections, localPlayer.ChildAdded:Connect(function(child: Instance)
 	if child:IsA("PlayerGui") then
 		playerGui = child
 		ensureHudParent()
 	end
 end))
 
-table.insert(connections, localPlayer.ChildRemoved:Connect(function(child)
+table.insert(connections, localPlayer.ChildRemoved:Connect(function(child: Instance)
 	if child:IsA("PlayerGui") then
 		playerGui = nil
 		task.defer(ensureHudParent)
@@ -1372,7 +1377,7 @@ end
 
 
 
-local function onCoinEvent(firstArg, secondArg)
+local function onCoinEvent(firstArg: any, secondArg: any)
 	if typeof(firstArg) == "table" then
 		handleCoinPayload(firstArg)
 		if typeof(secondArg) == "table" then
@@ -1408,7 +1413,7 @@ local function parseSeconds(value: any): number?
 	return nil
 end
 
-local function onPrepEvent(firstArg, secondArg)
+local function onPrepEvent(firstArg: any, secondArg: any)
 	local payload: { [string]: any } = {}
 
 	if typeof(firstArg) == "table" then
@@ -1468,7 +1473,7 @@ local function onPrepEvent(firstArg, secondArg)
 	refreshWaveLabel()
 end
 
-local function onWaveEvent(firstArg, secondArg, thirdArg)
+local function onWaveEvent(firstArg: any, secondArg: any, thirdArg: any)
 	local payload: { [string]: any } = {}
 
 	if typeof(firstArg) == "table" then
@@ -1527,7 +1532,7 @@ local function onWaveEvent(firstArg, secondArg, thirdArg)
 	refreshWaveLabel()
 end
 
-local function onTargetEvent(payload)
+local function onTargetEvent(payload: any)
 	if typeof(payload) ~= "table" then
 		return
 	end
@@ -1576,7 +1581,7 @@ end
 
 syncAttributes()
 
-local attributeConnection = localPlayer.AttributeChanged:Connect(function(name)
+local attributeConnection = localPlayer.AttributeChanged:Connect(function(name: string)
 	if name == "Coins" then
 		local value = localPlayer:GetAttribute("Coins")
 		if typeof(value) == "number" then
@@ -1612,19 +1617,17 @@ if targetRemote then
 end
 
 local renderConnection = RunService.RenderStepped:Connect(function()
-	if statusState.countdownActive then
-		refreshTimerLabel()
-	end
-	if laneState.shieldActive and laneState.shieldExpiresAt then
-		updateShieldLabels()
-	end
+        if statusState.countdownActive then
+                refreshTimerLabel()
+        end
+        if laneState.shieldActive and laneState.shieldExpiresAt then
+                updateShieldLabels()
+        end
 end)
 table.insert(connections, renderConnection)
-	print(typeof(counterState), typeof(counterState.coins), typeof(counterState.coins.total))
 
 ensureHudParent()
 refreshTimerLabel()
 refreshWaveLabel()
 updateShieldLabels()
-return createAnimator
 end

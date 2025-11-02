@@ -48,7 +48,7 @@ if not partyUpdateRemote then
     return
 end
 
-local screenGui = Instance.new("ScreenGui")
+local screenGui: ScreenGui = Instance.new("ScreenGui")
 screenGui.Name = "QueueUI"
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
@@ -62,7 +62,7 @@ local highlightColor = Color3.fromRGB(255, 228, 116)
 local textColor = Color3.fromRGB(235, 235, 235)
 local subTextColor = Color3.fromRGB(205, 208, 224)
 
-local container = Instance.new("Frame")
+local container: Frame = Instance.new("Frame")
 container.Name = "QueueContainer"
 container.AnchorPoint = Vector2.new(0.5, 0)
 container.Position = UDim2.new(0.5, 0, 0, 80)
@@ -97,7 +97,7 @@ containerLayout.SortOrder = Enum.SortOrder.LayoutOrder
 containerLayout.Padding = UDim.new(0, 8)
 containerLayout.Parent = container
 
-local titleLabel = Instance.new("TextLabel")
+local titleLabel: TextLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
 titleLabel.LayoutOrder = 1
 titleLabel.Size = UDim2.new(1, 0, 0, 0)
@@ -110,7 +110,7 @@ titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Text = "Matchmaking"
 titleLabel.Parent = container
 
-local statusLabel = Instance.new("TextLabel")
+local statusLabel: TextLabel = Instance.new("TextLabel")
 statusLabel.Name = "Status"
 statusLabel.LayoutOrder = 2
 statusLabel.Size = UDim2.new(1, 0, 0, 0)
@@ -124,7 +124,7 @@ statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.Text = ""
 statusLabel.Parent = container
 
-local detailLabel = Instance.new("TextLabel")
+local detailLabel: TextLabel = Instance.new("TextLabel")
 detailLabel.Name = "Detail"
 detailLabel.LayoutOrder = 3
 detailLabel.Size = UDim2.new(1, 0, 0, 0)
@@ -140,7 +140,7 @@ detailLabel.Visible = false
 detailLabel.Text = ""
 detailLabel.Parent = container
 
-local membersLabel = Instance.new("TextLabel")
+local membersLabel: TextLabel = Instance.new("TextLabel")
 membersLabel.Name = "Members"
 membersLabel.LayoutOrder = 4
 membersLabel.Size = UDim2.new(1, 0, 0, 0)
@@ -207,7 +207,7 @@ local function updateMembersLabel(membersPayload: any)
         return
     end
 
-    local names = {}
+    local names: {string} = {}
     for _, entry in ipairs(membersPayload) do
         if typeof(entry) == "table" then
             local nameValue = entry.name or entry.Name or entry.displayName or entry.DisplayName
@@ -270,7 +270,7 @@ local function startCountdown(durationSeconds: number)
     countdownEndsAt = os.clock() + math.max(0, durationSeconds)
     updateRetryLabel()
 
-    countdownConnection = RunService.Heartbeat:Connect(function()
+    countdownConnection = RunService.Heartbeat:Connect(function(_deltaTime: number)
         if not countdownEndsAt then
             stopCountdown()
             return
@@ -415,13 +415,13 @@ local function cleanup()
     table.clear(connections)
 end
 
-trackConnection(localPlayer.ChildAdded:Connect(function(child)
+trackConnection(localPlayer.ChildAdded:Connect(function(child: Instance)
     if child:IsA("PlayerGui") then
         reparentToGui(child)
     end
 end))
 
-trackConnection(localPlayer.ChildRemoved:Connect(function(child)
+trackConnection(localPlayer.ChildRemoved:Connect(function(child: Instance)
     if child:IsA("PlayerGui") then
         task.defer(function()
             local replacement = localPlayer:FindFirstChildOfClass("PlayerGui")
@@ -439,7 +439,7 @@ if not playerGui then
     end
 end
 
-trackConnection(localPlayer.AncestryChanged:Connect(function(_, parent)
+trackConnection(localPlayer.AncestryChanged:Connect(function(_descendant: Instance, parent: Instance?)
     if parent == nil then
         cleanup()
     end
@@ -447,7 +447,7 @@ end))
 
 script.Destroying:Connect(cleanup)
 
-local partyConnection = partyUpdateRemote.OnClientEvent:Connect(function(payload)
+local partyConnection = partyUpdateRemote.OnClientEvent:Connect(function(payload: any)
     if typeof(payload) ~= "table" then
         return
     end

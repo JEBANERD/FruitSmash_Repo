@@ -60,13 +60,13 @@ local function reparentToPlayerGui(newGui: PlayerGui?)
     screenGui.Parent = playerGui
 end
 
-localPlayer.ChildAdded:Connect(function(child)
+localPlayer.ChildAdded:Connect(function(child: Instance)
     if child:IsA("PlayerGui") then
         reparentToPlayerGui(child)
     end
 end)
 
-localPlayer.ChildRemoved:Connect(function(child)
+localPlayer.ChildRemoved:Connect(function(child: Instance)
     if child:IsA("PlayerGui") then
         task.defer(function()
             local replacement = localPlayer:FindFirstChildOfClass("PlayerGui")
@@ -82,7 +82,7 @@ if existingContainer and existingContainer:IsA("Frame") then
     existingContainer:Destroy()
 end
 
-local container = Instance.new("Frame")
+local container: Frame = Instance.new("Frame")
 container.Name = "LeaderboardContainer"
 container.AnchorPoint = Vector2.new(1, 0.5)
 container.Position = UDim2.new(1, -40, 0.5, 0)
@@ -117,7 +117,7 @@ containerLayout.SortOrder = Enum.SortOrder.LayoutOrder
 containerLayout.Padding = UDim.new(0, 12)
 containerLayout.Parent = container
 
-local headerLabel = Instance.new("TextLabel")
+local headerLabel: TextLabel = Instance.new("TextLabel")
 headerLabel.Name = "Header"
 headerLabel.LayoutOrder = 1
 headerLabel.Size = UDim2.new(1, 0, 0, 32)
@@ -129,7 +129,7 @@ headerLabel.TextXAlignment = Enum.TextXAlignment.Left
 headerLabel.Text = "Points Leaderboard"
 headerLabel.Parent = container
 
-local subHeaderLabel = Instance.new("TextLabel")
+local subHeaderLabel: TextLabel = Instance.new("TextLabel")
 subHeaderLabel.Name = "SubHeader"
 subHeaderLabel.LayoutOrder = 2
 subHeaderLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -142,7 +142,7 @@ subHeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
 subHeaderLabel.Text = "Hold Tab to view · Press R to refresh global"
 subHeaderLabel.Parent = container
 
-local sessionSection = Instance.new("Frame")
+local sessionSection: Frame = Instance.new("Frame")
 sessionSection.Name = "SessionSection"
 sessionSection.LayoutOrder = 3
 sessionSection.Size = UDim2.new(1, 0, 0, 0)
@@ -156,7 +156,7 @@ sessionLayout.SortOrder = Enum.SortOrder.LayoutOrder
 sessionLayout.Padding = UDim.new(0, 6)
 sessionLayout.Parent = sessionSection
 
-local sessionTitle = Instance.new("TextLabel")
+local sessionTitle: TextLabel = Instance.new("TextLabel")
 sessionTitle.Name = "SessionTitle"
 sessionTitle.LayoutOrder = 1
 sessionTitle.Size = UDim2.new(1, 0, 0, 24)
@@ -168,7 +168,7 @@ sessionTitle.TextXAlignment = Enum.TextXAlignment.Left
 sessionTitle.Text = "This Session"
 sessionTitle.Parent = sessionSection
 
-local sessionStatusLabel = Instance.new("TextLabel")
+local sessionStatusLabel: TextLabel = Instance.new("TextLabel")
 sessionStatusLabel.Name = "SessionStatus"
 sessionStatusLabel.LayoutOrder = 2
 sessionStatusLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -181,7 +181,7 @@ sessionStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 sessionStatusLabel.Text = "No scores yet."
 sessionStatusLabel.Parent = sessionSection
 
-local sessionList = Instance.new("Frame")
+local sessionList: Frame = Instance.new("Frame")
 sessionList.Name = "SessionList"
 sessionList.LayoutOrder = 3
 sessionList.Size = UDim2.new(1, 0, 0, 0)
@@ -197,7 +197,7 @@ sessionListLayout.Parent = sessionList
 
 local sessionRows: {TextLabel} = {}
 for index = 1, SESSION_ROWS do
-    local row = Instance.new("TextLabel")
+    local row: TextLabel = Instance.new("TextLabel")
     row.Name = string.format("SessionRow%d", index)
     row.LayoutOrder = index
     row.Size = UDim2.new(1, 0, 0, 24)
@@ -214,7 +214,7 @@ for index = 1, SESSION_ROWS do
     sessionRows[index] = row
 end
 
-local globalSection = Instance.new("Frame")
+local globalSection: Frame = Instance.new("Frame")
 globalSection.Name = "GlobalSection"
 globalSection.LayoutOrder = 4
 globalSection.Size = UDim2.new(1, 0, 0, 0)
@@ -228,7 +228,7 @@ globalLayout.SortOrder = Enum.SortOrder.LayoutOrder
 globalLayout.Padding = UDim.new(0, 6)
 globalLayout.Parent = globalSection
 
-local globalTitle = Instance.new("TextLabel")
+local globalTitle: TextLabel = Instance.new("TextLabel")
 globalTitle.Name = "GlobalTitle"
 globalTitle.LayoutOrder = 1
 globalTitle.Size = UDim2.new(1, 0, 0, 24)
@@ -240,7 +240,7 @@ globalTitle.TextXAlignment = Enum.TextXAlignment.Left
 globalTitle.Text = "Global Top"
 globalTitle.Parent = globalSection
 
-local globalStatusLabel = Instance.new("TextLabel")
+local globalStatusLabel: TextLabel = Instance.new("TextLabel")
 globalStatusLabel.Name = "GlobalStatus"
 globalStatusLabel.LayoutOrder = 2
 globalStatusLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -253,7 +253,7 @@ globalStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 globalStatusLabel.Text = "Global leaderboard pending..."
 globalStatusLabel.Parent = globalSection
 
-local globalList = Instance.new("Frame")
+local globalList: Frame = Instance.new("Frame")
 globalList.Name = "GlobalList"
 globalList.LayoutOrder = 3
 globalList.Size = UDim2.new(1, 0, 0, 0)
@@ -269,7 +269,7 @@ globalListLayout.Parent = globalList
 
 local globalRows: {TextLabel} = {}
 for index = 1, SESSION_ROWS do
-    local row = Instance.new("TextLabel")
+    local row: TextLabel = Instance.new("TextLabel")
     row.Name = string.format("GlobalRow%d", index)
     row.LayoutOrder = index
     row.Size = UDim2.new(1, 0, 0, 24)
@@ -286,7 +286,7 @@ for index = 1, SESSION_ROWS do
     globalRows[index] = row
 end
 
-local footer = Instance.new("Frame")
+local footer: Frame = Instance.new("Frame")
 footer.Name = "Footer"
 footer.LayoutOrder = 5
 footer.Size = UDim2.new(1, 0, 0, 0)
@@ -300,7 +300,7 @@ footerLayout.SortOrder = Enum.SortOrder.LayoutOrder
 footerLayout.Padding = UDim.new(0, 4)
 footerLayout.Parent = footer
 
-local yourRankLabel = Instance.new("TextLabel")
+local yourRankLabel: TextLabel = Instance.new("TextLabel")
 yourRankLabel.Name = "YourRank"
 yourRankLabel.LayoutOrder = 1
 yourRankLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -312,7 +312,7 @@ yourRankLabel.TextXAlignment = Enum.TextXAlignment.Left
 yourRankLabel.Text = "Your Rank: —"
 yourRankLabel.Parent = footer
 
-local yourScoreLabel = Instance.new("TextLabel")
+local yourScoreLabel: TextLabel = Instance.new("TextLabel")
 yourScoreLabel.Name = "YourScore"
 yourScoreLabel.LayoutOrder = 2
 yourScoreLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -324,12 +324,9 @@ yourScoreLabel.TextXAlignment = Enum.TextXAlignment.Left
 yourScoreLabel.Text = "Your Points: 0"
 yourScoreLabel.Parent = footer
 
-local openButton = screenGui:FindFirstChild("LeaderboardOpenButton")
-if openButton and not openButton:IsA("TextButton") then
-    openButton = nil
-end
-
-if not openButton then
+local openButtonCandidate = screenGui:FindFirstChild("LeaderboardOpenButton")
+local openButton: TextButton
+if not openButtonCandidate or not openButtonCandidate:IsA("TextButton") then
     openButton = Instance.new("TextButton")
     openButton.Name = "LeaderboardOpenButton"
     openButton.AnchorPoint = Vector2.new(0, 1)
@@ -355,6 +352,7 @@ if not openButton then
     buttonStroke.Thickness = 1
     buttonStroke.Parent = openButton
 else
+    openButton = openButtonCandidate
     openButton.Text = "Leaderboard"
     openButton.BackgroundColor3 = openButtonColor
     openButton.Parent = screenGui
@@ -667,7 +665,7 @@ openButton.MouseButton1Click:Connect(function()
 end)
 
 if sessionRemote then
-    sessionRemote.OnClientEvent:Connect(function(payload)
+    sessionRemote.OnClientEvent:Connect(function(payload: any)
         if typeof(payload) ~= "table" then
             return
         end
@@ -716,7 +714,7 @@ if sessionRemote then
     end)
 end
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
+UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
     if gameProcessed then
         return
     end
@@ -736,7 +734,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input)
+UserInputService.InputEnded:Connect(function(input: InputObject)
     if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Tab then
         if tabToggleActive then
             setVisible(false)
