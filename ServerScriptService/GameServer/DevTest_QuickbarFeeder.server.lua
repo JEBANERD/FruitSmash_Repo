@@ -1,7 +1,12 @@
 --!strict
 -- DevTest_QuickbarFeeder.server.lua
 -- Sends a sample quickbar state so the HUD has something to render in Studio.
--- Safe to keep around; you can disable/remove in live builds.
+-- Safe to keep around; guarded to avoid impacting live builds.
+
+local RunService = game:GetService("RunService")
+if not RunService:IsStudio() then
+        return
+end
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
@@ -11,7 +16,28 @@ local Remotes = require(ReplicatedStorage.Remotes.RemoteBootstrap)
 
 -- Pull ShopConfig for proper Ids / effects
 local ShopConfig = require(ReplicatedStorage.Shared.Config.ShopConfig)
-local Items = (type(ShopConfig.All) == "function" and ShopConfig.All()) or ShopConfig.Items
+local Items = (type(ShopConfig.All) == "function" and ShopConfig.All()) or ShopConfig.Items or {}
+
+type QuickbarMeleeEntry = { Id: string, Active: boolean? }
+type QuickbarTokenEntry = { Id: string, Count: number?, StackLimit: number? }
+type QuickbarState = {
+        melee: { QuickbarMeleeEntry? }?,
+        tokens: { QuickbarTokenEntry? }?,
+        coins: number?,
+}
+
+type MockData = { Coins: number }
+type MockInventory = {
+        ActiveMelee: string?,
+        MeleeLoadout: {string},
+        TokenCounts: {[string]: number},
+}
+
+local SAMPLE_MELEE = "WoodenBat"
+local SAMPLE_TOKENS = { "Token_SpeedBoost", "Token_DoubleCoins", "Token_Shield" }
+local SAMPLE_COINS = 999
+
+local QuickbarServer: any = nil
 
 do
         local gameServer = ServerScriptService:FindFirstChild("GameServer")
@@ -19,67 +45,129 @@ do
         if quickbarModule and quickbarModule:IsA("ModuleScript") then
                 local ok, quickbar = pcall(require, quickbarModule)
                 if ok and typeof(quickbar) == "table" then
-                        local isEnabled = (quickbar :: any).IsEnabled
-                        local active = false
-                        if typeof(isEnabled) == "function" then
-                                local okCall, result = pcall(isEnabled)
-                                active = okCall and result == true
-                        else
-                                active = true
-                        end
-                        if active then
-                                warn("[DevTest QuickbarFeeder] QuickbarServer is active; skipping sample feeder.")
-                                return
-                        end
+                        QuickbarServer = quickbar
+                else
+                        warn(string.format("[DevTest QuickbarFeeder] Failed to require QuickbarServer: %s", tostring(quickbar)))
                 end
         end
 end
 
-type QuickbarMeleeEntry = { Id: string, Active: boolean? }
-type QuickbarTokenEntry = { Id: string, Count: number?, StackLimit: number? }
-type QuickbarState = {
-	melee: { QuickbarMeleeEntry? }?,
-	tokens: { QuickbarTokenEntry? }?,
-	coins: number?,
-}
+local function createMockDataAndInventory(): (MockData, MockInventory)
+        local loadout = { SAMPLE_MELEE }
+        local tokenCounts: {[string]: number} = {}
+        for _, tokenId in ipairs(SAMPLE_TOKENS) do
+                tokenCounts[tokenId] = 1
+        end
+
+        local data: MockData = { Coins = SAMPLE_COINS }
+        local inventory: MockInventory = {
+                ActiveMelee = SAMPLE_MELEE,
+                MeleeLoadout = loadout,
+                TokenCounts = tokenCounts,
+        }
+
+        return data, inventory
+end
+
+local function registerMockInventoryResolver()
+        if QuickbarServer == nil then
+                return
+        end
+
+        local registerResolver = (QuickbarServer :: any).RegisterInventoryResolver
+        if typeof(registerResolver) ~= "function" then
+                return
+        end
+
+        local ok, err = pcall(function()
+                registerResolver(function(_player: Player)
+                        local data, inventory = createMockDataAndInventory()
+                        return data, inventory
+                end)
+        end)
+
+        if not ok then
+                warn(string.format("[DevTest QuickbarFeeder] Failed to register mock inventory resolver: %s", tostring(err)))
+        end
+end
+
+registerMockInventoryResolver()
 
 local function findToken(id: string): QuickbarTokenEntry
-	local t = (Items and Items[id]) or {}
-	return {
-		Id = id,
-		Count = 1,
-		StackLimit = (typeof(t.StackLimit) == "number") and t.StackLimit or nil,
-	}
+        local t = (Items and Items[id]) or {}
+        local stackLimit = if typeof(t) == "table" and typeof(t.StackLimit) == "number" then t.StackLimit else nil
+        return {
+                Id = id,
+                Count = 1,
+                StackLimit = stackLimit,
+        }
+end
+
+local function buildManualState(): QuickbarState
+        local tokens: {QuickbarTokenEntry?} = {}
+        for index, tokenId in ipairs(SAMPLE_TOKENS) do
+                tokens[index] = findToken(tokenId)
+        end
+
+        return {
+                melee = {
+                        { Id = SAMPLE_MELEE, Active = true },
+                        nil, -- second melee slot empty
+                },
+                tokens = tokens,
+                coins = SAMPLE_COINS,
+        }
 end
 
 local function buildSampleState(): QuickbarState
-	return {
-		melee = {
-			{ Id = "WoodenBat", Active = true },
-			nil, -- second melee slot empty
-		},
-		tokens = {
-			findToken("Token_SpeedBoost"),
-			findToken("Token_DoubleCoins"),
-			findToken("Token_Shield"),
-		},
-		coins = 999, -- purely visual for now
-	}
+        if QuickbarServer ~= nil then
+                local buildState = (QuickbarServer :: any).BuildState
+                if typeof(buildState) == "function" then
+                        local data, inventory = createMockDataAndInventory()
+                        local ok, state = pcall(buildState, data, inventory)
+                        if ok and typeof(state) == "table" then
+                                return state :: QuickbarState
+                        end
+                end
+        end
+
+        return buildManualState()
 end
 
-local function sendState(plr: Player)
-	local state = buildSampleState()
-	Remotes.RE_QuickbarUpdate:FireClient(plr, state)
+local function sendState(player: Player)
+        if QuickbarServer ~= nil then
+                local refresh = (QuickbarServer :: any).Refresh
+                if typeof(refresh) == "function" then
+                        local data, inventory = createMockDataAndInventory()
+                        local ok, err = pcall(refresh, player, data, inventory)
+                        if ok then
+                                return
+                        end
+                        warn(string.format("[DevTest QuickbarFeeder] QuickbarServer.Refresh failed: %s", tostring(err)))
+                end
+        end
+
+        local state = buildSampleState()
+        Remotes.RE_QuickbarUpdate:FireClient(player, state)
 end
 
--- On join, give them something to look at
-Players.PlayerAdded:Connect(function(plr)
-	plr.CharacterAdded:Once(function()
-		sendState(plr)
-	end)
-end)
+local function attachPlayer(player: Player)
+        if player.Character ~= nil then
+                task.defer(sendState, player)
+                return
+        end
 
--- Also resend when your local test starts (so it repopulates after teleport/pivot)
+        player.CharacterAdded:Once(function()
+                sendState(player)
+        end)
+end
+
+Players.PlayerAdded:Connect(attachPlayer)
+
+for _, player in ipairs(Players:GetPlayers()) do
+        attachPlayer(player)
+end
+
 local gameStartRemote = Remotes.GameStart
 if gameStartRemote and typeof(gameStartRemote) == "Instance" and gameStartRemote:IsA("RemoteEvent") then
         local function broadcastGameStart(payload: any?)
@@ -89,8 +177,7 @@ if gameStartRemote and typeof(gameStartRemote) == "Instance" and gameStartRemote
                 end
         end
 
-        -- If you fire GameStart from server anywhere, mirror quickbar to everyone
-        gameStartRemote.OnServerEvent:Connect(function(player, payload)
+        gameStartRemote.OnServerEvent:Connect(function(_player, payload)
                 for _, p in ipairs(Players:GetPlayers()) do
                         sendState(p)
                 end
