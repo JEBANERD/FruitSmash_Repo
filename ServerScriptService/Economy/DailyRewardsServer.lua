@@ -19,9 +19,9 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local configFolder = sharedFolder:WaitForChild("Config")
 
 local function safeRequire(moduleScript: Instance?): any
-	if not moduleScript or not moduleScript:IsA("ModuleScript") then
-		return nil
-	end
+        if not moduleScript or not moduleScript:IsA("ModuleScript") then
+                return nil
+        end
 
 	local ok, result = pcall(require, moduleScript)
 	if not ok then
@@ -32,20 +32,71 @@ local function safeRequire(moduleScript: Instance?): any
 	return result
 end
 
-local SaveService = safeRequire(dataFolder:FindFirstChild("SaveService"))
-local ProfileServer = safeRequire(dataFolder:FindFirstChild("ProfileServer"))
-local EconomyServer = safeRequire(economyFolder:FindFirstChild("EconomyServer"))
+type SavePayload = { [string]: any }
+
+type SaveServiceModule = {
+        LoadAsync: (number) -> (SavePayload?, string?),
+        UpdateAsync: (number, (SavePayload?) -> SavePayload?) -> (SavePayload?, string?),
+        GetCached: (number) -> SavePayload?,
+}
+
+type ProfileSerialized = {
+        Coins: number?,
+        Stats: { [string]: any }?,
+        Inventory: {
+                MeleeLoadout: { string }?,
+                ActiveMelee: string?,
+                TokenCounts: { [string]: number }?,
+                UtilityQueue: { string }?,
+                OwnedMelee: { [string]: boolean }?,
+        }?,
+        Settings: { [string]: any }?,
+}
+
+type ProfileServerModule = {
+        GrantItem: ((Player, string) -> (boolean, string?))?,
+        AddCoins: ((Player, number) -> number)?,
+        Serialize: (Player) -> ProfileSerialized,
+}
+
+type AwardTotals = {
+        coins: number,
+        points: number,
+}
+
+type AwardSummary = {
+        coinsDelta: number,
+        pointsDelta: number,
+        totals: AwardTotals,
+        metadata: { [string]: any }?,
+}
+
+type EconomyServerModule = {
+        GrantCoins: (Player, number, { [string]: any }?) -> AwardSummary?,
+        Totals: (Player) -> AwardTotals,
+}
+
+local SaveService = safeRequire(dataFolder:FindFirstChild("SaveService")) :: SaveServiceModule?
+local ProfileServer = safeRequire(dataFolder:FindFirstChild("ProfileServer")) :: ProfileServerModule?
+local EconomyServer = safeRequire(economyFolder:FindFirstChild("EconomyServer")) :: EconomyServerModule?
 local ShopConfig = safeRequire(configFolder:FindFirstChild("ShopConfig"))
 
-local saveServiceLoadAsync = if SaveService and typeof((SaveService :: any).LoadAsync) == "function" then (SaveService :: any).LoadAsync else nil
-local saveServiceUpdateAsync = if SaveService and typeof((SaveService :: any).UpdateAsync) == "function" then (SaveService :: any).UpdateAsync else nil
-local saveServiceGetCached = if SaveService and typeof((SaveService :: any).GetCached) == "function" then (SaveService :: any).GetCached else nil
+local saveServiceLoadAsync: ((number) -> (SavePayload?, string?))? =
+        if SaveService and typeof(SaveService.LoadAsync) == "function" then SaveService.LoadAsync else nil
+local saveServiceUpdateAsync: ((number, (SavePayload?) -> SavePayload?) -> (SavePayload?, string?))? =
+        if SaveService and typeof(SaveService.UpdateAsync) == "function" then SaveService.UpdateAsync else nil
+local saveServiceGetCached: ((number) -> SavePayload?)? =
+        if SaveService and typeof(SaveService.GetCached) == "function" then SaveService.GetCached else nil
 
-local profileGrantItem = if ProfileServer and typeof((ProfileServer :: any).GrantItem) == "function" then (ProfileServer :: any).GrantItem else nil
-local profileAddCoins = if ProfileServer and typeof((ProfileServer :: any).AddCoins) == "function" then (ProfileServer :: any).AddCoins else nil
-local profileSerialize = if ProfileServer and typeof((ProfileServer :: any).Serialize) == "function" then (ProfileServer :: any).Serialize else nil
+local profileGrantItem: ((Player, string) -> (boolean, string?))? =
+        if ProfileServer and typeof(ProfileServer.GrantItem) == "function" then ProfileServer.GrantItem else nil
+local profileAddCoins: ((Player, number) -> number)? =
+        if ProfileServer and typeof(ProfileServer.AddCoins) == "function" then ProfileServer.AddCoins else nil
+local profileSerialize: ((Player) -> ProfileSerialized)? =
+        if ProfileServer and typeof(ProfileServer.Serialize) == "function" then ProfileServer.Serialize else nil
 
-local economyGrantCoins = if EconomyServer and typeof((EconomyServer :: any).GrantCoins) == "function" then (EconomyServer :: any).GrantCoins else nil
+local economyGrantCoins: ((Player, number, { [string]: any }?) -> AwardSummary?)? =
+        if EconomyServer and typeof(EconomyServer.GrantCoins) == "function" then EconomyServer.GrantCoins else nil
 
 local function coerceNumber(value: any): number?
 	if typeof(value) == "number" then
@@ -201,12 +252,12 @@ local function getNumericUserId(player: Player): number
 	return 0
 end
 
-local function readPayload(userId: number): any
-	if saveServiceGetCached then
-		local cached = saveServiceGetCached(userId)
-		if cached ~= nil then
-			return cached
-		end
+local function readPayload(userId: number): SavePayload?
+        if saveServiceGetCached then
+                local cached = saveServiceGetCached(userId)
+                if cached ~= nil then
+                        return cached
+                end
 	end
 
 	if not saveServiceLoadAsync then
@@ -219,11 +270,11 @@ local function readPayload(userId: number): any
 		return nil
 	end
 
-	if loadErr then
-		warn(string.format("[DailyRewards] Load failed for %d: %s", userId, tostring(loadErr)))
-	end
+        if loadErr then
+                warn(string.format("[DailyRewards] Load failed for %d: %s", userId, tostring(loadErr)))
+        end
 
-	return payload
+        return payload
 end
 
 local function hasProfileShape(payload: any): boolean
@@ -248,13 +299,13 @@ local function hasProfileShape(payload: any): boolean
 	return false
 end
 
-local function normalizePayload(payload: any, player: Player?): {[string]: any}
-	local container = if type(payload) == "table" then payload else {}
-	local cast = container :: any
+local function normalizePayload(payload: SavePayload?, player: Player?): SavePayload
+        local container: SavePayload = if type(payload) == "table" then payload else {}
+        local cast = container :: any
 
-	if type(cast.Profile) ~= "table" then
-		if hasProfileShape(container) then
-			container = { Profile = container }
+        if type(cast.Profile) ~= "table" then
+                if hasProfileShape(container) then
+                        container = { Profile = container }
 			cast = container :: any
 		elseif profileSerialize and player then
 			local ok, serialized = pcall(profileSerialize, player)
@@ -357,13 +408,13 @@ local function persistState(player: Player, state: DailyState): boolean
 		return false
 	end
 
-	local ok, updatedPayload, saveErr = pcall(saveServiceUpdateAsync, userId, function(payload)
-		local container = normalizePayload(payload, player);
-		(container :: any).DailyRewards = {
-			streak = state.streak,
-			lastClaimUtcDay = state.lastClaimUtcDay,
-			lastClaimTimestamp = state.lastClaimTimestamp,
-			lastTokenIndex = state.lastTokenIndex,
+        local ok, updatedPayload, saveErr = pcall(saveServiceUpdateAsync, userId, function(payload: SavePayload?)
+                local container = normalizePayload(payload, player)
+                (container :: any).DailyRewards = {
+                        streak = state.streak,
+                        lastClaimUtcDay = state.lastClaimUtcDay,
+                        lastClaimTimestamp = state.lastClaimTimestamp,
+                        lastTokenIndex = state.lastTokenIndex,
 			version = DAILY_SAVE_VERSION,
 		}
 		return container
@@ -398,13 +449,13 @@ end
 local DailyRewardsServer = {}
 
 export type ClaimReward = {
-	coins: number,
-	tokenId: string?,
-	tokenGranted: boolean?,
-	tokenError: string?,
-	nextClaimUtc: number,
-	summary: any?,
-	persisted: boolean?,
+        coins: number,
+        tokenId: string?,
+        tokenGranted: boolean?,
+        tokenError: string?,
+        nextClaimUtc: number,
+        summary: AwardSummary?,
+        persisted: boolean?,
 }
 
 export type ClaimResult = {
@@ -518,21 +569,21 @@ function DailyRewardsServer.Claim(player: Player): ClaimResult
 		tokenError = "GrantUnavailable"
 	end
 
-	local summary: any = nil
-	if coinsReward > 0 then
-		if economyGrantCoins then
-			local ok, result = pcall(economyGrantCoins, player, coinsReward, {
-				reason = "DailyReward",
-				streak = newStreak,
-				dayIndex = dayIndex,
-				tokenId = tokenId,
-			})
-			if ok then
-				summary = result
-			else
-				warn(string.format("[DailyRewards] Coin grant failed for %s (%d): %s", player.Name, userId, tostring(result)))
-				summary = nil
-			end
+        local summary: AwardSummary? = nil
+        if coinsReward > 0 then
+                if economyGrantCoins then
+                        local ok, result = pcall(economyGrantCoins, player, coinsReward, {
+                                reason = "DailyReward",
+                                streak = newStreak,
+                                dayIndex = dayIndex,
+                                tokenId = tokenId,
+                        })
+                        if ok and type(result) == "table" then
+                                summary = result :: AwardSummary
+                        else
+                                warn(string.format("[DailyRewards] Coin grant failed for %s (%d): %s", player.Name, userId, tostring(result)))
+                                summary = nil
+                        end
 		elseif profileAddCoins then
 			local ok, err = pcall(profileAddCoins, player, coinsReward)
 			if not ok then

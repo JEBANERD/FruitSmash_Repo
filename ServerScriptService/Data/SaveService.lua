@@ -4,7 +4,7 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local DataStoreService = game:GetService("DataStoreService")
+local DataStoreService = game:GetService("DataStoreService") :: DataStoreService
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local SAVE_STORE_NAME = "PlayerProfiles"
@@ -17,7 +17,7 @@ local SAVE_COOLDOWN_SECONDS = if IS_STUDIO then 0 else 6
 local BIND_CLOSE_TIMEOUT_SECONDS = 30
 local BIND_CLOSE_POLL_INTERVAL = 0.25
 
-local dataStore = if not IS_STUDIO then DataStoreService:GetDataStore(SAVE_STORE_NAME) else nil
+local dataStore: GlobalDataStore? = if not IS_STUDIO then DataStoreService:GetDataStore(SAVE_STORE_NAME) else nil
 
 local SaveService = {}
 
@@ -235,16 +235,17 @@ local function performStoreSave(userId: number, data: SavePayload): (boolean, st
 		return true, nil
 	end
 
-	local key = getKey(userId)
-	local payload = deepCopy(data)
+        local key = getKey(userId)
+        local payload = deepCopy(data)
+        local store = dataStore :: GlobalDataStore
 
 	local lastError: string? = nil
 	for attempt = 1, MAX_RETRIES do
-		local success, err = pcall(function()
-			dataStore:UpdateAsync(key, function()
-				return payload
-			end)
-		end)
+                local success, err = pcall(function()
+                        store:UpdateAsync(key, function(previous: SavePayload?): SavePayload
+                                return payload
+                        end)
+                end)
 
 		if success then
 			writeMemory(userId, payload)
@@ -275,12 +276,13 @@ local function loadFromStore(userId: number): (SavePayload?, string?)
 		return readMemory(userId), nil
 	end
 
-	local key = getKey(userId)
+        local key = getKey(userId)
+        local store = dataStore :: GlobalDataStore
 	local lastError: string? = nil
-	for attempt = 1, MAX_RETRIES do
-		local success, result = pcall(function()
-			return dataStore:GetAsync(key)
-		end)
+        for attempt = 1, MAX_RETRIES do
+                local success, result = pcall(function(): SavePayload?
+                        return store:GetAsync(key)
+                end)
 
 		if success then
 			if typeof(result) == "table" then
