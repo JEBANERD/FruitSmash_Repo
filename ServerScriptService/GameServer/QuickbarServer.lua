@@ -14,7 +14,11 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local Remotes = require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap"))
+type QuickbarRemotes = {
+        RE_QuickbarUpdate: RemoteEvent?,
+}
+
+local Remotes = (require(ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RemoteBootstrap")) :: any) :: QuickbarRemotes
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local configFolder = sharedFolder:WaitForChild("Config")
@@ -193,6 +197,8 @@ end
 
 local inventoryResolver: ((Player) -> (any?, any?))? = nil
 local lastStates: {[Player]: QuickbarState} = {}
+
+local quickbarUpdateRemote = Remotes.RE_QuickbarUpdate
 
 local tokensEnabled = true
 
@@ -606,9 +612,9 @@ function QuickbarServer.Refresh(player: Player, data: any?, inventory: any?): Qu
 	local state = QuickbarServer.BuildState(resolvedData, resolvedInventory)
 	lastStates[player] = state
 
-	if Remotes.RE_QuickbarUpdate then
-		Remotes.RE_QuickbarUpdate:FireClient(player, state)
-	end
+        if quickbarUpdateRemote then
+                quickbarUpdateRemote:FireClient(player, state)
+        end
 
 	return state
 end
@@ -633,21 +639,28 @@ function QuickbarServer.GetState(player: Player): QuickbarState?
 end
 
 function QuickbarServer.GetTokenSlot(player: Player, slotIndex: number): QuickbarTokenEntry?
-	if typeof(slotIndex) ~= "number" or slotIndex < 1 then
-		return nil
-	end
-	if not tokensEnabled then
-		return nil
-	end
-	local state = lastStates[player]
-	if not state then
-		return nil
-	end
-	local tokens = state.tokens
-	if typeof(tokens) ~= "table" then
-		return nil
-	end
-	return tokens[slotIndex]
+        if typeof(slotIndex) ~= "number" then
+                return nil
+        end
+        local numericSlot = math.floor(slotIndex)
+        if numericSlot < 1 or numericSlot > TOKEN_SLOTS then
+                return nil
+        end
+        if numericSlot ~= slotIndex then
+                return nil
+        end
+        if not tokensEnabled then
+                return nil
+        end
+        local state = lastStates[player]
+        if not state then
+                return nil
+        end
+        local tokens = state.tokens
+        if typeof(tokens) ~= "table" then
+                return nil
+        end
+        return tokens[numericSlot]
 end
 
 function QuickbarServer.IsEnabled(): boolean
