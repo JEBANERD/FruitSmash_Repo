@@ -50,7 +50,7 @@ type Wallet = { coins: number, points: number }
 
 type BonusConfig = { Base: number?, PerLevel: number?, PointsBase: number?, PointsPerLevel: number?, Points: number? }
 
-type Metadata = { [string]: any }
+export type Metadata = { [string]: any }
 
 type MultiplierEntry = { value: number, expiresAt: number?, token: any, attributeName: string? }
 

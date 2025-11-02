@@ -38,14 +38,36 @@ local function findFirstChildPath(root: Instance?, parts: {string}): Instance?
 	return current
 end
 
+type SavePayload = { [string]: any }
+
+type SaveCheckpointProvider = (Player?, number, SavePayload?) -> SavePayload?
+
+type SaveServiceModule = {
+        LoadAsync: (number) -> (SavePayload?, string?),
+        SaveAsync: (number, SavePayload) -> (boolean, string?),
+        UpdateAsync: (number, (SavePayload?) -> SavePayload?) -> (SavePayload?, string?),
+        GetCached: (number) -> SavePayload?,
+        RegisterCheckpointProvider: (SaveCheckpointProvider) -> () -> (),
+}
+
 local saveServiceModule = script.Parent:FindFirstChild("SaveService")
-local SaveService = if saveServiceModule then safeRequire(saveServiceModule) else nil
-local saveServiceLoadAsync = if SaveService and typeof((SaveService :: any).LoadAsync) == "function" then (SaveService :: any).LoadAsync else nil
-local saveServiceSaveAsync = if SaveService and typeof((SaveService :: any).SaveAsync) == "function" then (SaveService :: any).SaveAsync else nil
-local saveServiceUpdateAsync = if SaveService and typeof((SaveService :: any).UpdateAsync) == "function" then (SaveService :: any).UpdateAsync else nil
-local saveServiceRegisterCheckpoint = if SaveService and typeof((SaveService :: any).RegisterCheckpointProvider) == "function"
-	then (SaveService :: any).RegisterCheckpointProvider
-	else nil
+local SaveService = if saveServiceModule then safeRequire(saveServiceModule) :: SaveServiceModule? else nil
+local saveServiceLoadAsync: ((number) -> (SavePayload?, string?))? =
+        if SaveService and typeof(SaveService.LoadAsync) == "function"
+        then SaveService.LoadAsync
+        else nil
+local saveServiceSaveAsync: ((number, SavePayload) -> (boolean, string?))? =
+        if SaveService and typeof(SaveService.SaveAsync) == "function"
+        then SaveService.SaveAsync
+        else nil
+local saveServiceUpdateAsync: ((number, (SavePayload?) -> SavePayload?) -> (SavePayload?, string?))? =
+        if SaveService and typeof(SaveService.UpdateAsync) == "function"
+        then SaveService.UpdateAsync
+        else nil
+local saveServiceRegisterCheckpoint: ((SaveCheckpointProvider) -> () -> ())? =
+        if SaveService and typeof(SaveService.RegisterCheckpointProvider) == "function"
+        then SaveService.RegisterCheckpointProvider
+        else nil
 
 local SaveSchemaModule = safeRequire(typesFolder:FindFirstChild("SaveSchema"))
 local ShopConfigModule = safeRequire(configFolder:FindFirstChild("ShopConfig"))
@@ -75,45 +97,45 @@ local paletteLookup: {[string]: string} = {}
 
 local TUTORIAL_STAT_KEY = "TutorialCompleted"
 
-type TokenCounts = { [string]: number }
-type OwnedMeleeMap = { [string]: boolean }
+export type TokenCounts = { [string]: number }
+export type OwnedMeleeMap = { [string]: boolean }
 
-type PlayerSettings = {
-	SprintToggle: boolean,
-	AimAssistWindow: number,
-	CameraShakeStrength: number,
-	ColorblindPalette: string,
-	TextScale: number,
-	Locale: string,
+export type PlayerSettings = {
+        SprintToggle: boolean,
+        AimAssistWindow: number,
+        CameraShakeStrength: number,
+        ColorblindPalette: string,
+        TextScale: number,
+        Locale: string,
 }
 
-type Inventory = {
-	MeleeLoadout: {string},
-	ActiveMelee: string?,
-	TokenCounts: TokenCounts,
-	UtilityQueue: {string},
-	OwnedMelee: OwnedMeleeMap,
+export type Inventory = {
+        MeleeLoadout: {string},
+        ActiveMelee: string?,
+        TokenCounts: TokenCounts,
+        UtilityQueue: {string},
+        OwnedMelee: OwnedMeleeMap,
 }
 
-type ProfileData = {
-	Coins: number,
-	Stats: { [string]: any },
-	Inventory: Inventory,
-	Settings: PlayerSettings,
+export type ProfileData = {
+        Coins: number,
+        Stats: { [string]: any },
+        Inventory: Inventory,
+        Settings: PlayerSettings,
 }
 
-type Profile = {
-	Player: Player,
-	UserId: number,
-	Data: ProfileData,
+export type Profile = {
+        Player: Player,
+        UserId: number,
+        Data: ProfileData,
 }
 
-type SaveContainer = {[string]: any}
+export type SaveContainer = { [string]: any }
 
 type MigrationContext = {
-	player: Player?,
-	userId: number,
-	fromVersion: number,
+        player: Player?,
+        userId: number,
+        fromVersion: number,
 	toVersion: number,
 }
 
@@ -257,15 +279,15 @@ local function resolveSerializedProfile(payload: any): ProfileData?
 	return nil
 end
 
-local function ensureSaveContainer(payload: any): {[string]: any}
+local function ensureSaveContainer(payload: any): SaveContainer
 	if type(payload) ~= "table" then
 		return {}
 	end
 
 	local cast = payload :: any
 	if type(cast.Profile) == "table" or type(cast.DailyRewards) == "table" then
-		return cast
-	end
+        return cast :: SaveContainer
+end
 
 	if hasProfileShape(payload) then
 		return { Profile = payload }
@@ -1377,10 +1399,10 @@ local function handlePlayerRemoving(player: Player)
 		end
 	end
 
-	if saveServiceUpdateAsync then
-		local ok, updatedPayload, saveErr = pcall(saveServiceUpdateAsync, userId, function(payload)
-			return upsertSerializedProfile(payload, serialized)
-		end)
+        if saveServiceUpdateAsync then
+                local ok, updatedPayload, saveErr = pcall(saveServiceUpdateAsync, userId, function(payload: SavePayload?)
+                        return upsertSerializedProfile(payload, serialized)
+                end)
 
 		if not ok then
 			warn(string.format("[ProfileServer] Update save error for %s (%d): %s", player.Name, userId, tostring(updatedPayload)))
@@ -1409,10 +1431,10 @@ for _, player in ipairs(Players:GetPlayers()) do
 end
 
 if saveServiceRegisterCheckpoint then
-	saveServiceRegisterCheckpoint(function(player: Player?, userId: number, payload: any?): any?
-		local profile: Profile? = nil
-		if player then
-			profile = profilesByPlayer[player]
+        saveServiceRegisterCheckpoint(function(player: Player?, userId: number, payload: SavePayload?): SavePayload?
+                local profile: Profile? = nil
+                if player then
+                        profile = profilesByPlayer[player]
 		end
 
 		if not profile and typeof(userId) == "number" and userId ~= 0 then
@@ -1428,8 +1450,8 @@ if saveServiceRegisterCheckpoint then
 			return payload
 		end
 
-		return upsertSerializedProfile(payload, serialized)
-	end)
+                return upsertSerializedProfile(payload, serialized)
+        end)
 end
 
 ProfileServer.SchemaVersion = CURRENT_SCHEMA_VERSION
