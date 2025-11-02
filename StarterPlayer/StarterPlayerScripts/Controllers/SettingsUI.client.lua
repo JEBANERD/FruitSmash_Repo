@@ -139,13 +139,14 @@ local currentSettings = {
 }
 
 local COLOR_CORRECTION_NAME = "FruitSmash_Colorblind"
-local colorCorrection = Lighting:FindFirstChild(COLOR_CORRECTION_NAME)
-if not colorCorrection then
-	colorCorrection = Instance.new("ColorCorrectionEffect")
-	colorCorrection.Name = COLOR_CORRECTION_NAME
-	colorCorrection.Enabled = false
-	colorCorrection.Parent = Lighting
+local colorCorrectionInstance = Lighting:FindFirstChild(COLOR_CORRECTION_NAME)
+if not colorCorrectionInstance or not colorCorrectionInstance:IsA("ColorCorrectionEffect") then
+        colorCorrectionInstance = Instance.new("ColorCorrectionEffect")
+        colorCorrectionInstance.Name = COLOR_CORRECTION_NAME
+        colorCorrectionInstance.Enabled = false
+        colorCorrectionInstance.Parent = Lighting
 end
+local colorCorrection: ColorCorrectionEffect = colorCorrectionInstance
 
 local currentTextScale = currentSettings.TextScale or 1
 local trackedTextConnections: {RBXScriptConnection} = {}
@@ -229,7 +230,7 @@ local function registerFocusable(object: GuiObject)
 	end
 
 	object.Selectable = true
-	focusCleanupConnections[object] = object.AncestryChanged:Connect(function(_, parent)
+        focusCleanupConnections[object] = object.AncestryChanged:Connect(function(_descendant: Instance, parent: Instance?)
 		if parent == nil then
 			cleanupFocusable(object)
 			rebuildFocusChain()
@@ -307,7 +308,7 @@ local function observeGuiText(container: Instance?)
 	for _, descendant in ipairs(container:GetDescendants()) do
 		applyScaleToTextObject(descendant)
 	end
-	local connection = container.DescendantAdded:Connect(function(descendant)
+        local connection = container.DescendantAdded:Connect(function(descendant: Instance)
 		applyScaleToTextObject(descendant)
 	end)
 	table.insert(trackedTextConnections, connection)
@@ -316,7 +317,7 @@ end
 disconnectTextObservers()
 observeGuiText(playerGui)
 
-localPlayer.ChildAdded:Connect(function(child)
+localPlayer.ChildAdded:Connect(function(child: Instance)
 	if child:IsA("PlayerGui") then
 		disconnectTextObservers()
 		observeGuiText(child)
@@ -324,7 +325,7 @@ localPlayer.ChildAdded:Connect(function(child)
 	end
 end)
 
-localPlayer.ChildRemoved:Connect(function(child)
+localPlayer.ChildRemoved:Connect(function(child: Instance)
 	if child:IsA("PlayerGui") then
 		task.defer(function()
 			local replacement = localPlayer:FindFirstChildOfClass("PlayerGui")
@@ -549,7 +550,7 @@ local function applySettings(settingsTable: any, skipSave: boolean?)
 end
 
 local function createScreenGui(): ScreenGui
-	local gui = Instance.new("ScreenGui")
+        local gui: ScreenGui = Instance.new("ScreenGui")
 	gui.Name = "SettingsUI"
 	gui.ResetOnSpawn = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -592,7 +593,7 @@ stroke.Thickness = 1
 stroke.Color = Color3.fromRGB(80, 80, 96)
 stroke.Parent = mainFrame
 
-local titleLabel = Instance.new("TextLabel")
+local titleLabel: TextLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
 titleLabel.BackgroundTransparency = 1
 titleLabel.Size = UDim2.new(1, -20, 0, 32)
@@ -604,7 +605,7 @@ titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Text = "Accessibility & Controls"
 titleLabel.Parent = mainFrame
 
-local closeButton = Instance.new("TextButton")
+local closeButton: TextButton = Instance.new("TextButton")
 closeButton.Name = "CloseButton"
 closeButton.Size = UDim2.new(0, 96, 0, 40)
 closeButton.Position = UDim2.new(1, -106, 0, 14)
@@ -622,7 +623,7 @@ closeCorner.Parent = closeButton
 
 registerFocusable(closeButton)
 
-local contentFrame = Instance.new("Frame")
+local contentFrame: Frame = Instance.new("Frame")
 contentFrame.Name = "Content"
 contentFrame.BackgroundTransparency = 1
 contentFrame.Position = UDim2.new(0, 12, 0, 52)
@@ -636,7 +637,7 @@ listLayout.Padding = UDim.new(0, 12)
 listLayout.Parent = contentFrame
 
 local function createSectionLabel(text: string)
-	local label = Instance.new("TextLabel")
+        local label: TextLabel = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.new(1, 0, 0, 26)
 	label.Font = Enum.Font.GothamBold
@@ -649,14 +650,14 @@ local function createSectionLabel(text: string)
 end
 
 local function createToggleRow()
-	local row = Instance.new("Frame")
+        local row: Frame = Instance.new("Frame")
 	row.Name = "SprintToggleRow"
 	row.BackgroundTransparency = 1
 	row.Size = UDim2.new(1, 0, 0, 48)
 	row.LayoutOrder = #contentFrame:GetChildren() + 1
 	row.Parent = contentFrame
 
-	local label = Instance.new("TextLabel")
+        local label: TextLabel = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.new(0.6, 0, 1, 0)
 	label.Font = Enum.Font.Gotham
@@ -667,7 +668,7 @@ local function createToggleRow()
 	label.Text = "Sprint Input"
 	label.Parent = row
 
-	local description = Instance.new("TextLabel")
+        local description: TextLabel = Instance.new("TextLabel")
 	description.BackgroundTransparency = 1
 	description.Size = UDim2.new(0.6, 0, 0, 18)
 	description.Position = UDim2.new(0, 0, 0, 26)
@@ -678,7 +679,7 @@ local function createToggleRow()
 	description.Text = "Choose between hold or toggle to sprint"
 	description.Parent = row
 
-	sprintToggleButton = Instance.new("TextButton")
+        sprintToggleButton = Instance.new("TextButton")
 	sprintToggleButton.Name = "SprintModeButton"
 	sprintToggleButton.AnchorPoint = Vector2.new(1, 0.5)
 	sprintToggleButton.Position = UDim2.new(1, 0, 0.5, 0)
@@ -705,14 +706,14 @@ local function createToggleRow()
 end
 
 local function createSliderRow(name: string, key: string, minValue: number, maxValue: number, step: number, formatter: ((number) -> string)?)
-	local row = Instance.new("Frame")
+        local row: Frame = Instance.new("Frame")
 	row.Name = key .. "Row"
 	row.BackgroundTransparency = 1
 	row.Size = UDim2.new(1, 0, 0, 70)
 	row.LayoutOrder = #contentFrame:GetChildren() + 1
 	row.Parent = contentFrame
 
-	local label = Instance.new("TextLabel")
+        local label: TextLabel = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.new(1, 0, 0, 22)
 	label.Font = Enum.Font.Gotham
@@ -722,7 +723,7 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
 	label.Text = name
 	label.Parent = row
 
-	local valueLabel = Instance.new("TextLabel")
+        local valueLabel: TextLabel = Instance.new("TextLabel")
 	valueLabel.BackgroundTransparency = 1
 	valueLabel.Size = UDim2.new(1, 0, 0, 18)
 	valueLabel.Position = UDim2.new(0, 0, 0, 24)
@@ -733,7 +734,7 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
 	valueLabel.Text = ""
 	valueLabel.Parent = row
 
-	local sliderTrack = Instance.new("TextButton")
+        local sliderTrack: TextButton = Instance.new("TextButton")
 	sliderTrack.Name = key .. "Track"
 	sliderTrack.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
 	sliderTrack.BorderSizePixel = 0
@@ -745,14 +746,14 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
 
 	registerFocusable(sliderTrack)
 
-	local fill = Instance.new("Frame")
+        local fill: Frame = Instance.new("Frame")
 	fill.BackgroundColor3 = Color3.fromRGB(120, 180, 255)
 	fill.BorderSizePixel = 0
 	fill.Size = UDim2.new(0, 0, 1, 0)
 	fill.ZIndex = sliderTrack.ZIndex + 1
 	fill.Parent = sliderTrack
 
-	local knob = Instance.new("Frame")
+        local knob: Frame = Instance.new("Frame")
 	knob.BackgroundColor3 = Color3.fromRGB(200, 220, 255)
 	knob.Size = UDim2.new(0, 18, 0, 18)
 	knob.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -825,12 +826,12 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
 		commit(target, true)
 	end
 
-	sliderTrack.InputBegan:Connect(function(input)
+        sliderTrack.InputBegan:Connect(function(input: InputObject)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
 			updateFromInput(input.Position.X)
 			local endedConnection
-			endedConnection = input.Changed:Connect(function()
+                        endedConnection = input.Changed:Connect(function()
 				if input.UserInputState == Enum.UserInputState.End or input.UserInputState == Enum.UserInputState.Cancel then
 					dragging = false
 					if endedConnection then
@@ -847,7 +848,7 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
 		end
 	end)
 
-	sliderTrack.InputChanged:Connect(function(input)
+        sliderTrack.InputChanged:Connect(function(input: InputObject)
 		if dragging then
 			if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 				updateFromInput(input.Position.X)
@@ -875,7 +876,7 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
 		end
 	end)
 
-	knob.InputBegan:Connect(function(input)
+        knob.InputBegan:Connect(function(input: InputObject)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
 			local endedConnection
@@ -890,7 +891,7 @@ local function createSliderRow(name: string, key: string, minValue: number, maxV
 		end
 	end)
 
-	UserInputService.InputChanged:Connect(function(input)
+        UserInputService.InputChanged:Connect(function(input: InputObject)
 		if not dragging then
 			return
 		end
@@ -944,14 +945,14 @@ local function selectLocaleByOffset(delta: number)
 end
 
 local function createLocaleRow()
-	local row = Instance.new("Frame")
+        local row: Frame = Instance.new("Frame")
 	row.Name = "LocaleRow"
 	row.BackgroundTransparency = 1
 	row.Size = UDim2.new(1, 0, 0, 72)
 	row.LayoutOrder = #contentFrame:GetChildren() + 1
 	row.Parent = contentFrame
 
-	local localeLabel = Instance.new("TextLabel")
+        local localeLabel: TextLabel = Instance.new("TextLabel")
 	localeLabel.BackgroundTransparency = 1
 	localeLabel.Size = UDim2.new(1, -120, 0, 22)
 	localeLabel.Font = Enum.Font.Gotham
@@ -960,7 +961,7 @@ local function createLocaleRow()
 	localeLabel.TextXAlignment = Enum.TextXAlignment.Left
 	localeLabel.Parent = row
 
-	local localeDescriptionLabel = Instance.new("TextLabel")
+        local localeDescriptionLabel: TextLabel = Instance.new("TextLabel")
 	localeDescriptionLabel.BackgroundTransparency = 1
 	localeDescriptionLabel.Size = UDim2.new(1, -120, 0, 18)
 	localeDescriptionLabel.Position = UDim2.new(0, 0, 0, 24)
@@ -971,7 +972,7 @@ local function createLocaleRow()
 	localeDescriptionLabel.TextWrapped = true
 	localeDescriptionLabel.Parent = row
 
-	local localeValueLabel = Instance.new("TextLabel")
+        local localeValueLabel: TextLabel = Instance.new("TextLabel")
 	localeValueLabel.BackgroundTransparency = 1
 	localeValueLabel.Size = UDim2.new(0.6, 0, 0, 22)
 	localeValueLabel.Position = UDim2.new(0, 0, 0, 46)
@@ -981,7 +982,7 @@ local function createLocaleRow()
 	localeValueLabel.TextXAlignment = Enum.TextXAlignment.Left
 	localeValueLabel.Parent = row
 
-	local localePreviousButton = Instance.new("TextButton")
+        local localePreviousButton: TextButton = Instance.new("TextButton")
 	localePreviousButton.Size = UDim2.new(0, 36, 0, 32)
 	localePreviousButton.Position = UDim2.new(0.72, 0, 0, 40)
 	localePreviousButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
@@ -992,7 +993,7 @@ local function createLocaleRow()
 	localePreviousButton.TextSize = 16
 	localePreviousButton.Parent = row
 
-	local localeNextButton = Instance.new("TextButton")
+        local localeNextButton: TextButton = Instance.new("TextButton")
 	localeNextButton.Size = UDim2.new(0, 36, 0, 32)
 	localeNextButton.Position = UDim2.new(0.85, 0, 0, 40)
 	localeNextButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
@@ -1027,14 +1028,14 @@ local function createLocaleRow()
 end
 
 local function createPaletteRow()
-	local row = Instance.new("Frame")
+        local row: Frame = Instance.new("Frame")
 	row.Name = "PaletteRow"
 	row.BackgroundTransparency = 1
 	row.Size = UDim2.new(1, 0, 0, 60)
 	row.LayoutOrder = #contentFrame:GetChildren() + 1
 	row.Parent = contentFrame
 
-	local paletteValueLabel = Instance.new("TextButton")
+        local paletteValueLabel: TextButton = Instance.new("TextButton")
 	paletteValueLabel.Name = "PaletteValue"
 	paletteValueLabel.BackgroundTransparency = 1
 	paletteValueLabel.AutoButtonColor = false
@@ -1048,7 +1049,7 @@ local function createPaletteRow()
 
 	registerFocusable(paletteValueLabel)
 
-	local previousButton = Instance.new("TextButton")
+        local previousButton: TextButton = Instance.new("TextButton")
 	previousButton.Size = UDim2.new(0, 44, 0, 44)
 	previousButton.Position = UDim2.new(0.72, 0, 0, 8)
 	previousButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
@@ -1060,7 +1061,7 @@ local function createPaletteRow()
 	previousButton.Selectable = false
 	previousButton.Parent = row
 
-	local nextButton = Instance.new("TextButton")
+        local nextButton: TextButton = Instance.new("TextButton")
 	nextButton.Size = UDim2.new(0, 44, 0, 44)
 	nextButton.Position = UDim2.new(0.85, 0, 0, 8)
 	nextButton.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
@@ -1101,7 +1102,7 @@ local function createPaletteRow()
 		selectByOffset(1)
 	end)
 
-	paletteValueLabel.InputBegan:Connect(function(input)
+        paletteValueLabel.InputBegan:Connect(function(input: InputObject)
 		if input.UserInputType == Enum.UserInputType.Gamepad1 then
 			if input.KeyCode == Enum.KeyCode.DPadLeft then
 				selectByOffset(-1)
@@ -1111,7 +1112,7 @@ local function createPaletteRow()
 		end
 	end)
 
-	paletteValueLabel.InputChanged:Connect(function(input)
+        paletteValueLabel.InputChanged:Connect(function(input: InputObject)
 		if input.UserInputType ~= Enum.UserInputType.Gamepad1 or input.KeyCode ~= Enum.KeyCode.Thumbstick1 then
 			return
 		end
@@ -1142,14 +1143,14 @@ local function createPaletteRow()
 end
 
 local function createTutorialResetRow()
-	local row = Instance.new("Frame")
+        local row: Frame = Instance.new("Frame")
 	row.Name = "TutorialResetRow"
 	row.BackgroundTransparency = 1
 	row.Size = UDim2.new(1, 0, 0, 78)
 	row.LayoutOrder = #contentFrame:GetChildren() + 1
 	row.Parent = contentFrame
 
-	local title = Instance.new("TextLabel")
+        local title: TextLabel = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
 	title.Size = UDim2.new(1, -150, 0, 22)
 	title.Font = Enum.Font.Gotham
@@ -1159,7 +1160,7 @@ local function createTutorialResetRow()
 	title.Text = "Tutorial"
 	title.Parent = row
 
-	local description = Instance.new("TextLabel")
+        local description: TextLabel = Instance.new("TextLabel")
 	description.BackgroundTransparency = 1
 	description.Size = UDim2.new(1, -160, 0, 44)
 	description.Position = UDim2.new(0, 0, 0, 26)
@@ -1172,7 +1173,7 @@ local function createTutorialResetRow()
 	description.Text = "Replay the onboarding tips the next time you join."
 	description.Parent = row
 
-	local button = Instance.new("TextButton")
+        local button: TextButton = Instance.new("TextButton")
 	button.Name = "ResetTutorialButton"
 	button.AnchorPoint = Vector2.new(1, 0)
 	button.Position = UDim2.new(1, 0, 0, 30)
@@ -1308,7 +1309,7 @@ createSliderRow("Text Scale", "TextScale", clampValue("TextScale", 0.8, 0.8), cl
 createSectionLabel("Onboarding")
 createTutorialResetRow()
 
-trackControllerConnection(UserInputService.LastInputTypeChanged:Connect(function(newType)
+trackControllerConnection(UserInputService.LastInputTypeChanged:Connect(function(newType: Enum.UserInputType)
 	if isGamepadInputType(newType) then
 		setGamepadPreferred(true)
 	elseif not UserInputService.GamepadEnabled then
@@ -1316,16 +1317,16 @@ trackControllerConnection(UserInputService.LastInputTypeChanged:Connect(function
 	end
 end))
 
-trackControllerConnection(UserInputService.GamepadConnected:Connect(function()
-	setGamepadPreferred(true)
+trackControllerConnection(UserInputService.GamepadConnected:Connect(function(_gamepad: number)
+        setGamepadPreferred(true)
 end))
 
-trackControllerConnection(UserInputService.GamepadDisconnected:Connect(function()
-	if not UserInputService.GamepadEnabled then
-		setGamepadPreferred(false)
-	else
-		setGamepadPreferred(isGamepadInputType(UserInputService:GetLastInputType()))
-	end
+trackControllerConnection(UserInputService.GamepadDisconnected:Connect(function(_gamepad: number)
+        if not UserInputService.GamepadEnabled then
+                setGamepadPreferred(false)
+        else
+                setGamepadPreferred(isGamepadInputType(UserInputService:GetLastInputType()))
+        end
 end))
 
 do
@@ -1372,11 +1373,11 @@ local function requestInitialSettings()
 end
 
 if pushRemote then
-	pushRemote.OnClientEvent:Connect(function(payload)
-		if typeof(payload) == "table" then
-			applySettings(payload, true)
-		end
-	end)
+        pushRemote.OnClientEvent:Connect(function(payload: any)
+                if typeof(payload) == "table" then
+                        applySettings(payload, true)
+                end
+        end)
 end
 
 requestInitialSettings()

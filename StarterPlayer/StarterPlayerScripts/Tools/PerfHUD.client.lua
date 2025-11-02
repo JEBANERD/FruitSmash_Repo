@@ -5,12 +5,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
-local playerGui = localPlayer:WaitForChild("PlayerGui")
+local playerGui: PlayerGui = localPlayer:WaitForChild("PlayerGui")
 
 local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
 local perfEvent = remotesFolder:WaitForChild("PerfHarnessUpdate") :: RemoteEvent
 
-local hud = Instance.new("ScreenGui")
+local hud: ScreenGui = Instance.new("ScreenGui")
 hud.Name = "PerfHUD"
 hud.DisplayOrder = 9999
 hud.ResetOnSpawn = false
@@ -18,7 +18,7 @@ hud.IgnoreGuiInset = false
 hud.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 hud.Parent = playerGui
 
-local container = Instance.new("Frame")
+local container: Frame = Instance.new("Frame")
 container.Name = "PerfContainer"
 container.AnchorPoint = Vector2.new(0, 0)
 container.Position = UDim2.new(0, 12, 0, 12)
@@ -28,7 +28,7 @@ container.BackgroundTransparency = 0.35
 container.BorderSizePixel = 0
 container.Parent = hud
 
-local titleLabel = Instance.new("TextLabel")
+local titleLabel: TextLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
 titleLabel.BackgroundTransparency = 1
 titleLabel.Position = UDim2.new(0, 8, 0, 6)
@@ -40,7 +40,7 @@ titleLabel.TextSize = 16
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = container
 
-local metricsLabel = Instance.new("TextLabel")
+local metricsLabel: TextLabel = Instance.new("TextLabel")
 metricsLabel.Name = "Metrics"
 metricsLabel.BackgroundTransparency = 1
 metricsLabel.Position = UDim2.new(0, 8, 0, 28)
@@ -54,7 +54,7 @@ metricsLabel.TextYAlignment = Enum.TextYAlignment.Top
 metricsLabel.TextWrapped = true
 metricsLabel.Parent = container
 
-local warningLabel = Instance.new("TextLabel")
+local warningLabel: TextLabel = Instance.new("TextLabel")
 warningLabel.Name = "Warnings"
 warningLabel.BackgroundTransparency = 1
 warningLabel.Position = UDim2.new(0, 8, 0, 112)

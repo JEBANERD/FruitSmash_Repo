@@ -21,15 +21,15 @@ local function waitForChildOfClass(parent: Instance, childName: string, classNam
         if child and className and not child:IsA(className) then
                 return nil
         end
-        return 
+        return child
 end
 
-local remotesFolder = waitForChildOfClass(ReplicatedStorage, "Remotes", "Folder", 5)
+local remotesFolder = waitForChildOfClass(ReplicatedStorage, "Remotes", "Folder", 5) :: Folder?
 if not remotesFolder then
         return
 end
 
-local remote = waitForChildOfClass(remotesFolder, "RF_QAAdminCommand", "RemoteFunction", 5)
+local remote = waitForChildOfClass(remotesFolder, "RF_QAAdminCommand", "RemoteFunction", 5) :: RemoteFunction?
 if not remote then
         return
 end
@@ -77,14 +77,14 @@ end
 
 local PlayerGui = LOCAL_PLAYER:WaitForChild("PlayerGui")
 
-local screenGui = Instance.new("ScreenGui")
+local screenGui: ScreenGui = Instance.new("ScreenGui")
 screenGui.Name = "QAAdminPanel"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Enabled = true
 screenGui.Parent = PlayerGui
 
-local panelFrame = Instance.new("Frame")
+local panelFrame: Frame = Instance.new("Frame")
 panelFrame.Name = "Panel"
 panelFrame.Size = UDim2.fromOffset(280, 0)
 panelFrame.AutomaticSize = Enum.AutomaticSize.Y
@@ -120,7 +120,7 @@ stroke.Color = Color3.fromRGB(90, 95, 120)
 stroke.Parent = panelFrame
 
 local function createLabel(text: string, textSize: number?, bold: boolean?): TextLabel
-        local label = Instance.new("TextLabel")
+        local label: TextLabel = Instance.new("TextLabel")
         label.BackgroundTransparency = 1
         label.Size = UDim2.new(1, 0, 0, 0)
         label.AutomaticSize = Enum.AutomaticSize.Y
@@ -149,7 +149,7 @@ local messageLabel = createLabel("", nil, false)
 messageLabel.TextColor3 = Color3.fromRGB(180, 255, 180)
 
 local function createRow(): Frame
-        local frame = Instance.new("Frame")
+        local frame: Frame = Instance.new("Frame")
         frame.BackgroundTransparency = 1
         frame.Size = UDim2.new(1, 0, 0, 0)
         frame.AutomaticSize = Enum.AutomaticSize.Y
@@ -165,7 +165,7 @@ local function createRow(): Frame
 end
 
 local function createTextButton(parent: Instance, text: string): TextButton
-        local button = Instance.new("TextButton")
+        local button: TextButton = Instance.new("TextButton")
         button.AutoButtonColor = true
         button.BackgroundColor3 = Color3.fromRGB(52, 62, 92)
         button.Size = UDim2.new(0, 0, 0, 32)
@@ -182,7 +182,7 @@ local function createTextButton(parent: Instance, text: string): TextButton
 end
 
 local function createTextBox(parent: Instance, placeholder: string, defaultText: string?): TextBox
-        local box = Instance.new("TextBox")
+        local box: TextBox = Instance.new("TextBox")
         box.BackgroundColor3 = Color3.fromRGB(36, 42, 60)
         box.Size = UDim2.new(0, 90, 0, 32)
         box.Font = Enum.Font.Gotham
@@ -442,7 +442,7 @@ local function setPanelVisible(visible: boolean)
         end
 end
 
-UserInputService.InputBegan:Connect(function(input, processed)
+UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
         if processed then
                 return
         end
