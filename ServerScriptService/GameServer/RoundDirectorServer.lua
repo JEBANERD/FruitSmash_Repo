@@ -183,8 +183,43 @@ local ROSTER_BANDS = {
 	},
 }
 
+type RoundPhase = "Prep" | "Wave" | "Shop" | "LevelComplete" | "Defeat" | "Aborted"
+
+type WaveOutcome =
+        { status: "success", metadata: { [string]: any }? }
+        | { status: "failure", reason: any, metadata: { [string]: any }? }
+
+type ArenaRoundState = {
+        arenaId: any,
+        level: number,
+        wave: number,
+        phase: RoundPhase,
+        running: boolean,
+        prepEndTime: number?,
+        arenaState: { [string]: any }?,
+        defeat: boolean?,
+        aborted: boolean?,
+        currentLevelSummary: { [string]: any }?,
+        waveOutcome: WaveOutcome?,
+        waveStartedAt: number?,
+        waveDeadline: number?,
+        defeatReason: any,
+        startedAt: number?,
+        finalOutcome: string?,
+        activeLaneCount: number?,
+        lanePenaltyData: { [string]: any }?,
+        currentRateMultiplier: number?,
+        fruitRosterIds: { any }?,
+        fruitWeights: { [string]: number }?,
+        activeRosterBand: { [string]: any }?,
+        obstaclesEnabled: boolean?,
+        options: { [string]: any }?,
+        dependencies: { [string]: any }?,
+        [string]: any,
+}
+
 local RoundDirectorServer = {}
-local activeStates = {}
+local activeStates: { [any]: ArenaRoundState } = {}
 
 local obstaclesFlagEnabled = resolveObstaclesFlag()
 
@@ -511,21 +546,19 @@ local function applyObstaclesFlag(isEnabled: boolean)
 		return
 	end
 
-	for arenaId, state in pairs(activeStates) do
-		if typeof(state) == "table" then
-			local context = {
-				level = state.level,
-				phase = state.phase,
-				wave = state.wave,
-			}
+        for arenaId, state in pairs(activeStates) do
+                local context = {
+                        level = state.level,
+                        phase = state.phase,
+                        wave = state.wave,
+                }
 
-			if state.phase == "Wave" then
-				callSawblade("Start", arenaId, context)
-			else
-				callSawblade("UpdateRoundState", arenaId, context)
-			end
-		end
-	end
+                if state.phase == "Wave" then
+                        callSawblade("Start", arenaId, context)
+                else
+                        callSawblade("UpdateRoundState", arenaId, context)
+                end
+        end
 end
 
 if FlagsModule and typeof((FlagsModule :: any).OnChanged) == "function" then
@@ -1006,7 +1039,7 @@ local function handleLevelCompletePhase(state)
 		return
 	end
 
-	state.phase = "LevelComplete"
+        state.phase = "LevelComplete" :: RoundPhase
 	state.wave = 0
 	updateArenaStateSnapshot(state)
 	logPhase(state)
@@ -1076,7 +1109,7 @@ local function triggerDefeat(state, reason)
 	state.defeat = true
 	state.defeatReason = reason or state.defeatReason
 	state.running = false
-	state.phase = "Defeat"
+        state.phase = "Defeat" :: RoundPhase
 	state.finalOutcome = "defeat"
 
 	state.waveOutcome = { status = "failure", reason = state.defeatReason }
@@ -1227,8 +1260,8 @@ local function scheduleWave(state)
 	end
 end
 
-local function runPrep(state)
-	state.phase = "Prep"
+local function runPrep(state: ArenaRoundState)
+        state.phase = "Prep" :: RoundPhase
 	state.wave = 0
 	state.prepEndTime = os.clock() + DEFAULT_PREP_SECONDS
 
@@ -1256,7 +1289,7 @@ local function runPrep(state)
 	return true
 end
 
-local function runInterWave(state)
+local function runInterWave(state: ArenaRoundState)
 	if INTER_WAVE_SECONDS <= 0 then
 		return state.running
 	end
@@ -1270,8 +1303,8 @@ local function runInterWave(state)
 	return state.running
 end
 
-local function runWave(state, waveNumber)
-	state.phase = "Wave"
+local function runWave(state: ArenaRoundState, waveNumber)
+        state.phase = "Wave" :: RoundPhase
 	state.wave = waveNumber
 	state.waveOutcome = nil
 	state.waveStartedAt = os.clock()
@@ -1343,8 +1376,8 @@ local function runWave(state, waveNumber)
 	return state.running
 end
 
-local function runShop(state)
-	state.phase = "Shop"
+local function runShop(state: ArenaRoundState)
+        state.phase = "Shop" :: RoundPhase
 	state.wave = 0
 
 	updateArenaStateSnapshot(state)
@@ -1499,22 +1532,22 @@ function RoundDirectorServer.Start(arenaId, options)
 		startLevel = math.max(1, math.floor(options.StartLevel))
 	end
 
-	if arenaState then
-		arenaState.level = startLevel
-		arenaState.wave = 0
-		arenaState.phase = "Prep"
-	end
+        if arenaState then
+                arenaState.level = startLevel
+                arenaState.wave = 0
+                arenaState.phase = "Prep"
+        end
 
-	local state = {
-		arenaId = arenaId,
-		level = startLevel,
-		wave = 0,
-		phase = "Prep",
-		running = true,
-		prepEndTime = nil,
-		arenaState = arenaState,
-		defeat = false,
-		aborted = false,
+        local state: ArenaRoundState = {
+                arenaId = arenaId,
+                level = startLevel,
+                wave = 0,
+                phase = "Prep" :: RoundPhase,
+                running = true,
+                prepEndTime = nil,
+                arenaState = arenaState,
+                defeat = false,
+                aborted = false,
 		currentLevelSummary = nil,
 		waveOutcome = nil,
 		waveStartedAt = nil,
@@ -1589,7 +1622,7 @@ function RoundDirectorServer.Abort(arenaId)
 		end
 	end
 
-	state.phase = "Aborted"
+        state.phase = "Aborted" :: RoundPhase
 	updateArenaStateSnapshot(state)
 	broadcastWaveChange(state)
 	callSawblade("UpdateRoundState", arenaId, {
@@ -1713,24 +1746,94 @@ function RoundDirectorServer.ReportWaveComplete(arenaId, metadata)
 end
 
 function RoundDirectorServer.ReportWaveFailed(arenaId, reason)
-	local state = activeStates[arenaId]
-	if not state or not state.running or state.phase ~= "Wave" then
-		return false
-	end
+        local state = activeStates[arenaId]
+        if not state or not state.running or state.phase ~= "Wave" then
+                return false
+        end
 
-	state.waveOutcome = {
-		status = "failure",
-		reason = shallowCopy(reason) or reason,
-	}
+        state.waveOutcome = {
+                status = "failure",
+                reason = shallowCopy(reason) or reason,
+        }
 
-	return true
+        return true
+end
+
+local function getActiveWaveState(arenaId: any): ArenaRoundState?
+        local state = activeStates[arenaId]
+        if not state or not state.running or state.phase ~= "Wave" then
+                return nil
+        end
+
+        return state
+end
+
+function RoundDirectorServer.GetWaveStartTime(arenaId: any): number?
+        local state = getActiveWaveState(arenaId)
+        if not state then
+                return nil
+        end
+
+        local startedAt = state.waveStartedAt
+        if typeof(startedAt) ~= "number" then
+                return nil
+        end
+
+        return startedAt
+end
+
+function RoundDirectorServer.GetWaveDeadline(arenaId: any): number?
+        local state = getActiveWaveState(arenaId)
+        if not state then
+                return nil
+        end
+
+        local deadline = state.waveDeadline
+        if typeof(deadline) ~= "number" then
+                return nil
+        end
+
+        return deadline
+end
+
+function RoundDirectorServer.GetWaveDurationSeconds(arenaId: any): number?
+        local startTime = RoundDirectorServer.GetWaveStartTime(arenaId)
+        local deadline = RoundDirectorServer.GetWaveDeadline(arenaId)
+
+        if startTime and deadline then
+                return math.max(0, deadline - startTime)
+        end
+
+        if WAVE_DURATION_SECONDS > 0 then
+                return WAVE_DURATION_SECONDS
+        end
+
+        return nil
+end
+
+function RoundDirectorServer.GetWaveTimeRemaining(arenaId: any): number?
+        local deadline = RoundDirectorServer.GetWaveDeadline(arenaId)
+        if not deadline then
+                return nil
+        end
+
+        return math.max(0, deadline - os.clock())
+end
+
+function RoundDirectorServer.GetWaveTimeElapsed(arenaId: any): number?
+        local startTime = RoundDirectorServer.GetWaveStartTime(arenaId)
+        if not startTime then
+                return nil
+        end
+
+        return math.max(0, os.clock() - startTime)
 end
 
 function RoundDirectorServer.GetState(arenaId)
-	local state = activeStates[arenaId]
-	if not state then
-		return nil
-	end
+        local state = activeStates[arenaId]
+        if not state then
+                return nil
+        end
 
 	local rosterCopy
 	if typeof(state.fruitRosterIds) == "table" then
