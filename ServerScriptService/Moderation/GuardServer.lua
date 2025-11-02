@@ -718,8 +718,67 @@ local function auditSwing(player: Player)
 		swingState.windowStart = now
 	end
 
-	swingState.lastAt = now
+        swingState.lastAt = now
 end
+
+type EnemyTarget = BasePart | Model
+
+type EnemyBehaviorPayload = {
+        fruit: EnemyTarget,
+        fruitId: string?,
+        position: Vector3?,
+        hitPosition: Vector3?,
+}
+
+type EnemyHeuristic = (player: Player, payload: EnemyBehaviorPayload, rawArgs: { any }?) -> ()
+
+local function toEnemyBehaviorPayload(value: any): EnemyBehaviorPayload?
+        if typeof(value) ~= "table" then
+                return nil
+        end
+
+        local data = value :: { [string]: any }
+        local fruitCandidate = data.fruit
+        if typeof(fruitCandidate) ~= "Instance" then
+                return nil
+        end
+
+        local fruit: EnemyTarget?
+        if fruitCandidate:IsA("BasePart") then
+                fruit = fruitCandidate
+        elseif fruitCandidate:IsA("Model") then
+                fruit = fruitCandidate
+        else
+                return nil
+        end
+
+        local positionValue = data.position
+        local hitPositionValue = data.hitPosition
+        local normalizedPosition = if typeof(positionValue) == "Vector3" then positionValue
+                elseif typeof(hitPositionValue) == "Vector3" then hitPositionValue
+                else nil
+        local normalizedHit = if typeof(hitPositionValue) == "Vector3" then hitPositionValue
+                elseif typeof(positionValue) == "Vector3" then positionValue
+                else nil
+
+        local fruitIdValue = data.fruitId
+        local fruitId = if typeof(fruitIdValue) == "string" and fruitIdValue ~= "" then fruitIdValue else nil
+
+        return {
+                fruit = fruit :: EnemyTarget,
+                fruitId = fruitId,
+                position = normalizedPosition,
+                hitPosition = normalizedHit,
+        }
+end
+
+local enemyBehaviorHeuristics: { [string]: EnemyHeuristic } = {
+        RE_MeleeHitAttempt = function(player: Player, _payload: EnemyBehaviorPayload, _rawArgs: { any }?)
+                auditSwing(player)
+        end,
+}
+
+table.freeze(enemyBehaviorHeuristics)
 
 local function auditTeleport(player: Player, state: PlayerAuditState, now: number)
 	if not isValidPlayer(player) then
@@ -807,14 +866,17 @@ local function observePlayer(player: Player)
 	end
 end
 
-local swingRemoteNames = {
-	RE_MeleeHitAttempt = true,
-}
-
 local function runRemoteHeuristics(remoteName: string, player: Player, sanitized: any, rawArgs: { any }?)
-	if swingRemoteNames[remoteName] then
-		auditSwing(player)
-	end
+        local enemyHeuristic = enemyBehaviorHeuristics[remoteName]
+        if enemyHeuristic then
+                local payload = toEnemyBehaviorPayload(sanitized)
+                if not payload then
+                        recordViolation(player, "EnemyPayloadInvalid", { remote = remoteName })
+                        return
+                end
+
+                enemyHeuristic(player, payload, rawArgs)
+        end
 end
 
 function Guard.Configure(options: { [string]: any }?)
